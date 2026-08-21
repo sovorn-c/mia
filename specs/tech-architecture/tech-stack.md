@@ -12,8 +12,8 @@
 graph TD
     User["Developer Terminal"] -->|Keyboard Input| REPL["MiaREPL (src/mia_cli/repl.py)"]
     
-    subgraph "Interactive Layer (Zero-Flicker & Clean)"
-        REPL --> Reader["PromptReader: Readline + History (~/.mia/history)"]
+    subgraph "Interactive Layer (Stream-First REPL)"
+        REPL --> PromptEngine["PromptEngine: prompt_toolkit (Floating Menu, History, Multi-line)"]
         REPL --> Selector["InteractiveMenu: Arrow / Number Select with 🥕 Pointer"]
         REPL --> Commands["SlashCommandDispatcher: 12 Essential Commands"]
         REPL --> StreamView["StreamRenderer: Rich Monokai Diffs, 💭 Thinking, Tools"]
@@ -33,6 +33,27 @@ graph TD
         Harness --> SessionStore["JsonlSessionStore & ContextCompactor"]
     end
 ```
+
+---
+
+## 2. Terminal UI Architecture & Paradigm Comparison
+
+### A. The 3 Terminal Paradigms
+
+1. **Paradigm 1: Stream-First Inline REPL (Mia Target / Claude Code / Pi / Aider style)**
+   * **Input:** `prompt_toolkit` (`PromptSession`, floating autocompletion menu on `/`, multi-line editing, persistent history search `Ctrl+R`).
+   * **Output:** `Rich` (streaming tokens, thought blocks `💭`, single-line tool execution cards, Monokai syntax git diffs).
+   * **UX:** Direct native terminal stream. Full trackpad/mouse scrollback, native click-and-drag text copying, zero screen hijacking.
+2. **Paradigm 2: Full-Screen Virtual TUI (`Textual` / Ratatui)**
+   * Takes over terminal in alternate screen buffer (`altscreen`). Good for dashboards, but breaks native scrollback and friction with copy-pasting.
+3. **Paradigm 3: Standalone GUI (Tauri / Webview)**
+   * External window; not a lightweight terminal harness.
+
+### B. Terminal Input Mechanics (prompt_toolkit)
+* Replaces raw manual `termios`/`readline` with `prompt_toolkit.PromptSession`.
+* Instant floating completion dropdown on `/` that dynamically filters live as characters are typed (e.g. `/l` → `/login`, `/logout`).
+* Complete clean screen teardown on submit with zero ghost popup artifacts.
+
 
 ---
 
