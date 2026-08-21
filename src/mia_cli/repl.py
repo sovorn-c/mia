@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
@@ -933,7 +934,7 @@ class MiaREPL:
                 )
                 if res.returncode != 0:
                     error = res.stderr.strip() or f"git diff exited with status {res.returncode}"
-                    self.console.print(f"[red]Git diff failed: {error}[/red]\n")
+                    self.console.print(f"[red]Git diff failed: {escape(error)}[/red]\n")
                 else:
                     diff_text = res.stdout.strip()
                     if not diff_text:
