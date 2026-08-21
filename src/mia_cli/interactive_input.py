@@ -10,9 +10,12 @@ from typing import Any
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import CompleteEvent, Completer, Completion
 from prompt_toolkit.document import Document
+from prompt_toolkit.filters import is_done
 from prompt_toolkit.formatted_text import HTML, AnyFormattedText
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
+from prompt_toolkit.layout.containers import ConditionalContainer, HSplit, Window
+from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.shortcuts import CompleteStyle
 from prompt_toolkit.styles import Style
 
@@ -139,6 +142,18 @@ class LivePromptSession:
             reserve_space_for_menu=0,
         )
 
+        if self.toolbar_callback and isinstance(self.session.layout.container, HSplit):
+            status_container = ConditionalContainer(
+                Window(
+                    FormattedTextControl(self.toolbar_callback),
+                    dont_extend_height=True,
+                    height=1,
+                ),
+                filter=~is_done,
+            )
+            # Insert status container at index 1 (immediately below the main input buffer)
+            self.session.layout.container.children.insert(1, status_container)
+
     def _create_keybindings(self) -> KeyBindings:
         kb = KeyBindings()
 
@@ -186,20 +201,18 @@ class LivePromptSession:
         prompt_prefix: str = "› ",
         bottom_toolbar: Any = None,
     ) -> str:
-        """Async prompt user with floating slash completions, bracketed paste, and adjusted bottom info."""
+        """Async prompt user with floating slash completions, bracketed paste, and inline status info immediately below."""
         if not sys.stdin.isatty():
             try:
                 return input(prompt_prefix).strip()
             except EOFError:
                 raise
 
-        toolbar_val = bottom_toolbar or (self.toolbar_callback() if self.toolbar_callback else None)
         formatted_prompt: AnyFormattedText = [("class:prompt", prompt_prefix)]
 
         try:
             result = await self.session.prompt_async(
                 formatted_prompt,
-                bottom_toolbar=toolbar_val,
                 reserve_space_for_menu=0,
             )
             return result.strip()
@@ -214,20 +227,18 @@ class LivePromptSession:
         prompt_prefix: str = "› ",
         bottom_toolbar: Any = None,
     ) -> str:
-        """Prompt user with floating slash completions, bracketed paste, and adjusted bottom info."""
+        """Prompt user with floating slash completions, bracketed paste, and inline status info immediately below."""
         if not sys.stdin.isatty():
             try:
                 return input(prompt_prefix).strip()
             except EOFError:
                 raise
 
-        toolbar_val = bottom_toolbar or (self.toolbar_callback() if self.toolbar_callback else None)
         formatted_prompt: AnyFormattedText = [("class:prompt", prompt_prefix)]
 
         try:
             result = self.session.prompt(
                 formatted_prompt,
-                bottom_toolbar=toolbar_val,
                 reserve_space_for_menu=0,
             )
             return result.strip()
