@@ -257,7 +257,7 @@ def list_sessions_command(
 def tui_command(
     model: Annotated[str | None, typer.Option("--model", "-m", help="Default model")] = None,
 ) -> None:
-    """Launch the modern full-screen Mia Textual TUI."""
+    """Launch the full-screen Mia Textual TUI."""
     from mia_cli.tui.app import MiaApp
 
     config_mgr = ConfigManager()
@@ -270,12 +270,11 @@ def tui_command(
 def main_callback(
     ctx: typer.Context,
     model: Annotated[str | None, typer.Option("--model", "-m", help="Default model")] = None,
+    profile: Annotated[str, typer.Option("--profile", "-p", help="Agent profile")] = "coding",
 ) -> None:
-    """Default callback: launch Mia TUI if no subcommand was provided."""
+    """Default callback: launch interactive Mia REPL harness."""
     if ctx.invoked_subcommand is None:
-        from mia_cli.tui.app import MiaApp
+        from mia_cli.repl import MiaREPL
 
-        config_mgr = ConfigManager()
-        target_model = model or config_mgr.config.default_model
-        tui_app = MiaApp(model_name=target_model)
-        tui_app.run()
+        repl = MiaREPL(model=model, profile=profile)
+        repl.run()
