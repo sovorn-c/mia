@@ -7,7 +7,7 @@ commands:
   - command: "uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py"
     outcome: "25 passed"
   - command: "uv run --offline pytest tests/test_agent_loop.py tests/test_profiles.py tests/test_sessions.py tests/test_e2e_scenarios.py"
-    outcome: "20 passed"
+    outcome: "19 passed"
   - command: "uv run --offline ruff format --check ."
     outcome: "78 files already formatted"
   - command: "uv run --offline ruff check ."
