@@ -29,6 +29,12 @@ def test_cli_help() -> None:
     assert "Mia" in result.stdout or "Usage" in result.stdout
 
 
+def test_cli_run_exposes_mode_selection() -> None:
+    result = runner.invoke(app, ["run", "--help"])
+    assert result.exit_code == 0
+    assert "--mode" in result.stdout
+
+
 def test_cli_profile_list() -> None:
     result = runner.invoke(app, ["profile", "list"])
     assert result.exit_code == 0
