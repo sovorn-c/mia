@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from prompt_toolkit.document import Document
 
+from mia_agent.orchestration import OrchestrationErrorEvent, OrchestrationEventEnvelope
+from mia_agent.session.entries import MessageEntry
+from mia_agent.session.jsonl import JsonlSessionStore
 from mia_ai.providers.mock import MockProvider
 from mia_ai.types import ToolCall
 from mia_cli.interactive_input import (
@@ -62,6 +66,23 @@ def test_carrot_bounce_spinner() -> None:
     assert "Thinking (1.5s)..." in frame1
 
 
+def test_double_escape_opens_tree_only_on_second_press() -> None:
+    session = LivePromptSession()
+    buffer = MagicMock()
+    buffer.complete_state = None
+    buffer.text = ""
+    event = MagicMock()
+    event.current_buffer = buffer
+
+    with patch("mia_cli.interactive_input.time.monotonic", side_effect=[10.0, 10.2]):
+        session._handle_escape(event)
+        buffer.validate_and_handle.assert_not_called()
+        session._handle_escape(event)
+
+    assert buffer.text == "/tree"
+    buffer.validate_and_handle.assert_called_once_with()
+
+
 def test_repl_slash_commands_suite(tmp_path: Path) -> None:
     mock = MockProvider()
     repl = MiaREPL(cwd=tmp_path, custom_provider=mock)
@@ -70,12 +91,18 @@ def test_repl_slash_commands_suite(tmp_path: Path) -> None:
     assert repl.handle_slash_command("/?") is True
     assert repl.handle_slash_command("/help") is True
     assert repl.handle_slash_command("/profile") is True
+    assert repl.handle_slash_command("/mode") is True
+    assert repl.handle_slash_command("/mode research") is True
+    assert repl.mode_name == "research"
+    assert repl.handle_slash_command("/mode single") is True
+    assert repl.mode_name == "single"
     assert repl.handle_slash_command("/cost") is True
     assert repl.handle_slash_command("/stats") is True
     assert repl.handle_slash_command("/diff") is True
     assert repl.handle_slash_command("/init") is True
     assert repl.handle_slash_command("/compact") is True
     assert repl.handle_slash_command("/sessions") is True
+    assert repl.handle_slash_command("/resume") is True
     assert repl.handle_slash_command("/tree") is True
     assert repl.handle_slash_command("/inspect") is True
     assert repl.handle_slash_command("/thinking") is True
@@ -89,6 +116,42 @@ def test_repl_slash_commands_suite(tmp_path: Path) -> None:
     assert repl.handle_slash_command("/profile architect") is True
     assert repl.profile_name == "architect"
     assert repl.handle_slash_command("/quit") is False
+
+
+def test_repl_mode_selection_and_invalid_mode(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+
+    assert repl.handle_slash_command("/mode") is True
+    assert repl.mode_name == "single"
+    assert repl.handle_slash_command("/mode research") is True
+    assert repl.mode_name == "research"
+    assert repl.handle_slash_command("/mode single") is True
+    assert repl.mode_name == "single"
+    assert repl.handle_slash_command("/mode unknown") is True
+    assert repl.mode_name == "single"
+
+
+@pytest.mark.asyncio
+async def test_repl_stops_status_on_orchestration_error(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+
+    async def error_events() -> AsyncIterator[OrchestrationEventEnvelope]:
+        yield OrchestrationEventEnvelope(
+            mode="research",
+            run_id="run-error",
+            task_id="specialist",
+            agent_id="specialist",
+            profile="architect",
+            event=OrchestrationErrorEvent(stage="specialist", error="specialist unavailable"),
+        )
+
+    with (
+        patch.object(repl.mode_runtime, "prompt", return_value=error_events()),
+        patch.object(repl.stream_renderer, "_stop_status") as stop_status,
+    ):
+        await repl.execute_turn("research this repository")
+
+    stop_status.assert_called_once()
 
 
 def test_repl_pi_style_auth_and_model_scoper(tmp_path: Path) -> None:
@@ -134,6 +197,52 @@ def test_repl_scoped_model_picker(tmp_path: Path) -> None:
         repl.interactive_model_picker()
 
     assert repl.model_name == "deepseek-chat"
+
+
+@pytest.mark.asyncio
+async def test_repl_resume_and_tree_fork(tmp_path: Path) -> None:
+    session_dir = tmp_path / "sessions"
+    mock = MockProvider()
+    repl = MiaREPL(cwd=tmp_path, custom_provider=mock)
+
+    with patch.object(repl.profile_mgr, "get_session_dir", return_value=session_dir):
+        repl.session_id = "saved-session"
+        repl._init_harness()
+        assert repl.harness is not None
+        mock.queue_text_response("Root answer")
+        await repl.execute_turn("Root question")
+        mock.queue_text_response("Second answer")
+        await repl.execute_turn("Second question")
+
+        entries = JsonlSessionStore(session_dir / "saved-session.jsonl").load_entries()
+        first_user = next(entry for entry in entries if isinstance(entry, MessageEntry))
+
+        repl.session_id = "new-session"
+        repl._init_harness()
+        with patch("mia_cli.repl.interactive_select", return_value="saved-session"):
+            assert repl.handle_slash_command("/resume") is True
+        assert repl.session_id == "saved-session"
+        assert repl.harness is not None
+        assert [message.content for message in repl.harness.messages] == [
+            "Root question",
+            "Root answer",
+            "Second question",
+            "Second answer",
+        ]
+
+        with patch("mia_cli.repl.interactive_select", return_value=first_user.id):
+            assert repl.handle_slash_command("/tree") is True
+        assert [message.content for message in repl.harness.messages] == ["Root question"]
+
+        mock.queue_text_response("Fork answer")
+        await repl.execute_turn("Fork question")
+        assert repl.harness.messages[-1].content == "Fork answer"
+
+        (session_dir / "old-session.jsonl").write_text("", encoding="utf-8")
+        repl.delete_session("old-session")
+        assert not (session_dir / "old-session.jsonl").exists()
+        with pytest.raises(ValueError, match="active session"):
+            repl.delete_session("saved-session")
 
 
 @pytest.mark.asyncio

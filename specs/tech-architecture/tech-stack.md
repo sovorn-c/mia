@@ -1,4 +1,4 @@
-# Architecture & Technical Specification: Mia Minimalist Stream REPL
+# Architecture & Technical Specification: Mia Native Orchestration Runtime
 
 > **Architecture Style:** Minimalist Inline Stream REPL (Pi / Tau / Claude Code inspired)  
 > **Key Accent:** Carrot Orange (`#FF7A00` / `\x1b[38;2;255;122;0m`)  
@@ -10,31 +10,27 @@
 
 ```mermaid
 graph TD
-    User["Developer Terminal"] -->|Keyboard Input| REPL["MiaREPL (src/mia_cli/repl.py)"]
-    
-    subgraph "Interactive Layer (Stream-First REPL)"
-        REPL --> PromptEngine["PromptEngine: prompt_toolkit (Floating Menu, History, Multi-line)"]
-        REPL --> Selector["InteractiveMenu: Arrow / Number Select with 🥕 Pointer"]
-        REPL --> Commands["SlashCommandDispatcher: 12 Essential Commands"]
-        REPL --> StreamView["StreamRenderer: Rich Monokai Diffs, 💭 Thinking, Tools"]
-    end
-    
-    subgraph "Auth & Configuration Layer (Tau-Style)"
-        Commands --> AuthMgr["ConfigManager & FileCredentialStore (~/.mia/credentials.json)"]
-        AuthMgr --> KeyProbe["validate_api_key (1-token lightweight chat probe)"]
-        AuthMgr --> OAuth["OpenAIOAuthManager (PKCE / Token Handler)"]
-    end
-    
-    subgraph "Core Agent Brain (Headless Async Harness)"
-        REPL --> Harness["AgentHarness (src/mia_agent/harness.py)"]
-        Harness --> LLMProvider["Multi-Provider Stream Client (src/mia_ai/)"]
-        Harness --> Middleware["Onion Pipeline (Security, Audit, Cost)"]
-        Harness --> Tools["Coding Tools (read, write, edit, bash)"]
-        Harness --> SessionStore["JsonlSessionStore & ContextCompactor"]
-    end
-```
+    User["Developer Terminal"] --> REPL["MiaREPL"]
+    User --> CLI["mia run --mode <name>"]
+    REPL --> Mode["ModeRuntime"]
+    CLI --> Mode
+    Mode --> Factory["AgentRuntimeFactory"]
+    Factory --> Harness["AgentHarness (one agent)"]
+    Mode --> Envelope["OrchestrationEventEnvelope"]
+    Envelope --> Views["Rich inline / optional Textual adapters"]
+    Harness --> Provider["Multi-Provider Stream Client"]
+    Harness --> Middleware["ToolPipeline: Security, Audit, Cost"]
+    Harness --> Tools["Profile-filtered coding tools"]
+    Harness --> Sessions["JSONL session tree + compaction"]
+    Mode -->|research: specialist then coordinator| Child["Task-local architect session"]
+    Child --> Factory
+``
 
 ---
+
+The canonical composition invariant is: **Mode composes; Profile configures; Workflow coordinates; Agent executes; Plugin extends.**
+
+`ModeRuntime` is the shared headless execution seam for both `mia` and `mia run`. It resolves explicit `single` or `research` workflows, delegates construction to `AgentRuntimeFactory`, and emits `OrchestrationEventEnvelope` values that retain the inner `AgentEvent`. `AgentRuntimeFactory` owns provider, profile, tools, middleware, session restoration, compaction, and lineage metadata. `AgentHarness` remains a one-agent executor with no terminal UI dependency. Research children are task-local and durable, but not continuable.
 
 ## 2. Terminal UI Architecture & Paradigm Comparison
 
@@ -91,22 +87,24 @@ Previous versions attempted character-by-character raw POSIX input (`setcbreak`)
 
 ---
 
-## 4. The 12 Essential Slash Commands Suite
+## 4. Essential Slash Commands Suite
 
 1. **`/help`** (`/?`): Compact table of commands, shortcuts, and tool permissions.
 2. **`/login`** (`/auth`): 2-option login wizard (API Key vs OpenAI Auth) with live probe.
 3. **`/logout`** (`/signout`, `/disconnect`): Wipe stored credentials for one or all providers.
 4. **`/model`** (`/llm`): Scoped model switcher showing authenticated providers + custom entry.
-5. **`/profile`** (`/role`, `/persona`): Switch agent persona (`coding`, `architect`, `minimal`, `code_mode`).
+5. **`/mode`**: Show or select the explicit `single` or `research` orchestration mode.
+6. **`/profile`** (`/role`, `/persona`): Select the coordinator role (`coding`, `architect`, `minimal`, `code_mode`).
 6. **`/diff`** (`/changes`): Display syntax-highlighted git diff of modifications.
 7. **`/cost`** (`/tokens`, `/stats`): Display real-time session tokens and estimated USD cost.
 8. **`/compact`** (`/compress`): Check token usage against context window and trigger compaction.
 9. **`/sessions`** (`/history`): List saved JSONL conversation trees.
-10. **`/tree`** (`/branch`): Interactive tree navigator to jump to previous turn checkpoints and fork branches.
-11. **`/stop`** (`/abort`): Immediately halt and cancel an active running agent turn.
-12. **`/init`** (`/bootstrap`): Scan repository architecture and verify `AGENTS.md`.
-13. **`/clear`** (`/cls`): Clear screen and redraw clean single-line header banner.
-14. **`/quit`** (`/exit`): Save session and exit cleanly.
+10. **`/resume`**: Pick or directly restore a saved session and its active branch; use `Ctrl+D`/`d`, then Enter to delete a selected non-active session.
+11. **`/tree`** (`/branch`): Interactive tree navigator to jump to previous checkpoints and fork branches.
+12. **`/stop`** (`/abort`): Immediately halt and cancel an active running agent turn.
+13. **`/init`** (`/bootstrap`): Scan repository architecture and verify `AGENTS.md`.
+14. **`/clear`** (`/cls`): Clear screen and redraw clean single-line header banner.
+15. **`/quit`** (`/exit`): Save session and exit cleanly.
 
 ---
 
@@ -169,7 +167,8 @@ Mia uses a profile-driven execution model enforced via the `SecurityGuardMiddlew
 | **`Ctrl+D`** | Exit Session | Saves session JSONL tree and terminates cleanly |
 | **`Ctrl+O`** | Expand/Collapse Logs | Toggles detailed audit view of tool arguments and file diffs |
 | **`Ctrl+T`** | Toggle Thinking Trace | Toggles live visibility of model reasoning tokens |
-| **`Esc` (or `/tree`)** | Session Tree Fork | Opens interactive tree browser to jump to previous turn or fork branch |
+| **`Esc Esc` (or `/tree`)** | Session Tree Fork | On an empty prompt, double-Esc within 500 ms opens the tree browser to jump to a checkpoint or fork |
+| **`Ctrl+D` / `d` in `/resume`** | Delete Session | Asks for Enter confirmation; Esc cancels. The active session cannot be deleted. |
 | **`/stop`** | Abort Turn | Halts the active LLM stream or running tool subprocess |
 
 ---
@@ -184,7 +183,7 @@ Mia uses a profile-driven execution model enforced via the `SecurityGuardMiddlew
 * Pinned directly below the `prompt_toolkit` input prompt line:
   ```
   ──────────────────────────────────────────────────────────────────────────
-  📁 <workspace>  •  🧠 <model>  •  ⚡ <tokens>/<window> (<pct>%)  •  Esc: Tree  •  Ctrl+O: Logs
+  📁 <workspace>  •  🧠 <model>  •  ⚡ <tokens>/<window> (<pct>%)  •  Esc Esc: Tree  •  Ctrl+O: Logs
   ```
 * Dynamically updates tokens and context window percentage as turns execute.
 

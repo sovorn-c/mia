@@ -1,66 +1,65 @@
-# specs/product/SCOPE_LATEST.yaml — Bounded PRD for Mia Stream REPL & Auth
-core_value: "Ultra-fast, zero-flicker, minimalist inline stream REPL with rock-solid provider auth and Pi-style model switching."
+# specs/product/SCOPE_LATEST.yaml — Bounded PRD for Mia Native Orchestration Vertical Slice
+core_value: >
+  Make orchestration Mia's single execution architecture: every prompt enters a mode runtime,
+  while the default one-node mode preserves today's fast Pi/Tau-style behavior and an explicit
+  research mode proves deterministic one-shot specialist delegation end to end.
 
 summary: >
-  Mia is re-architected into a clean, minimalist inline stream REPL inspired by Pi, Tau, and Claude Code.
-  It completely replaces fragile, flickering character-by-character ANSI cursor loops with a resilient
-  line-editing engine. It establishes a robust provider credential model with direct chat completion
-  validation probes (eliminating brittle GET /models assumptions), a clean scoped model switcher (/model),
-  and a focused suite of 12 essential slash commands with seamless stream rendering.
+  This slice establishes the canonical separation "Mode composes; Profile configures; Workflow
+  coordinates; Agent executes; Plugin extends." It inserts a headless mode runtime above the
+  existing AgentHarness without changing AgentHarness into a multi-agent manager. The existing
+  interactive and headless CLIs use the same runtime. A built-in single mode remains the default;
+  a built-in research mode runs one task-local architect specialist followed by the selected
+  coordinator profile. Typed envelopes make every event attributable to its mode, run, task, and
+  agent. The legacy src/mia_agent/herd implementation is not an architectural input.
 
 in_scope:
-  - id: "e01s01"
-    name: "Rock-Solid Terminal Input & Navigation"
-    description: "Stable line-editing prompt with history (~/.mia/history), arrow recall, Tab autocomplete, and zero-flicker selection menu."
-  - id: "e01s02"
-    name: "Pi/Tau Provider Auth & Connection Probe"
-    description: "Multi-provider authentication for OpenCode, OpenRouter, Gemini, OpenAI, Anthropic, DeepSeek, and Custom with lightweight 1-token probe."
-  - id: "e01s03"
-    name: "Scoped Model Switcher & Essential Slash Commands"
-    description: "Interactive /model switcher dynamically scoped to authenticated providers, plus full suite of 12 essential slash commands."
-  - id: "e01s04"
-    name: "Minimalist Stream Rendering & Live Tool Diffs"
-    description: "Clean inline stream output with subtle thinking indicators (💭), single-line tool cards, and Monokai syntax-highlighted git diffs."
-  - id: "e02s01"
-    name: "prompt_toolkit Integration & Floating Slash Autocomplete"
-    description: "Production prompt_toolkit PromptSession with live floating dropdown on '/', bracketed paste multi-line editor, and pinned status footer."
-  - id: "e02s02"
-    name: "Minimalist Working Stream & carrot_bounce Animation"
-    description: "Signature carrot_bounce animated working spinner, single-line in-place tool status badges, and memory-buffered raw reasoning tokens."
-  - id: "e02s03"
-    name: "Post-Turn Inspection & JSONL Tree Navigator"
-    description: "Ctrl+O (/inspect) detailed audit viewer and Esc (/tree) conversation branch navigator and turn forking."
-  - id: "e02s04"
-    name: "Pi/Tau Keybindings & Context Bootstrap"
-    description: "Ctrl+C input buffer clearing, Ctrl+D clean exit, /stop turn abort, and auto-discovery of AGENTS.md / git status."
+  - id: "e03s01"
+    name: "Native Orchestration Mode Vertical Slice"
+    description: >
+      Add validated mode/workflow definitions, one shared AgentHarness factory, an orchestration
+      event envelope, a one-node compatibility path, a deterministic research workflow with a
+      task-local specialist, durable child lineage, and explicit /mode and --mode selection.
 
 out_of_scope:
   - id: "oos-01"
-    name: "Heavy full-screen Textual TUI canvas"
-    rationale: "Full-screen TUI widgets cause layout thrashing and terminal conflicts; user specifically requested a minimalist inline REPL."
+    name: "Continuable child agents"
+    rationale: "Restart recovery and later follow-up messages require lifecycle semantics beyond the first vertical slice."
   - id: "oos-02"
-    name: "Multi-agent sidebar tabs in terminal"
-    rationale: "Multi-agent interactions are streamlined into inline @mention prompt routing."
+    name: "Durable team mailbox and shared task DAG"
+    rationale: "The first slice proves deterministic one-shot delegation before introducing team coordination state."
   - id: "oos-03"
-    name: "Hardcoded /undo command"
-    rationale: "Replaced with JSONL branch tree navigation (/tree) which guarantees safe checkpoints without untracked git assumptions."
+    name: "Automatic mode or workflow inference"
+    rationale: "Mode selection remains explicit until behavior, cost, and latency are measurable."
+  - id: "oos-04"
+    name: "User plugin loading and built-in memory service"
+    rationale: "Plugin and memory contracts remain architectural terms but are not implemented in this story."
+  - id: "oos-05"
+    name: "Full-screen multi-agent UI"
+    rationale: "Both current terminal adapters consume the headless runtime; orchestration correctness precedes new presentation work."
+  - id: "oos-06"
+    name: "Legacy Herd migration"
+    rationale: "src/mia_agent/herd and its Textual path are experimental/legacy and do not constrain the native runtime design."
 
 constraints:
-  - "Runtime: Python 3.12+ (strictly typed with Mypy, Ruff-formatted)."
-  - "Zero raw ANSI cursor manipulation loops that break terminal wrapping or physical line counts."
-  - "Key validation must never falsely block local/Ollama, Gemini, or OpenCode endpoints."
+  - "Runtime: Python 3.12+ with strict Mypy and Ruff formatting."
+  - "AgentHarness remains the executor for exactly one agent and imports no terminal UI."
+  - "AgentProfile remains configuration for one role; it does not absorb mode, workflow, memory, or plugin responsibilities."
+  - "Every tool visible to an agent is filtered by that agent's profile and executed through ToolPipeline."
+  - "Root and child transcripts remain append-only JSONL session trees."
+  - "No new runtime dependency is introduced; PyYAML is a development-only prerequisite for repository planning gates."
+  - "Existing uncommitted user changes must be preserved."
 
 success_criteria:
-  - "uv run mia launches instantly with a clean single-line header banner without screen flickering."
-  - "/login allows pasting API keys or authenticating OpenAI OAuth, verifies connection with a 1-token test, and saves to ~/.mia/credentials.json."
-  - "/model displays only authenticated providers and their models, with clean arrow/numeric selection."
-  - "Typing '/' immediately renders a sleek floating dropdown that dynamically filters keystrokes (/l -> /login, /logout) with zero ghost popup trails."
-  - "Active agent turns display signature carrot_bounce (🥕 ) spinner and in-place tool status without dumping 500-line raw outputs."
-  - "Pressing Ctrl+O (/inspect) expands full tool execution logs and diffs, Esc (/tree) navigates conversation branches, and Ctrl+C clears prompt line."
-  - "All automated tests in tests/ pass with 100% strict type-checking (uv run mypy src)."
+  - "Both `mia` and `mia run` submit prompts through the native mode runtime."
+  - "Default single mode preserves current AgentEvent order, profile tool filtering, middleware, session resume/tree behavior, token accounting, and Rich rendering."
+  - "`/mode` and `--mode` explicitly list or select validated modes; unknown modes fail with an actionable error."
+  - "Research mode runs one task-local architect specialist before coordinator synthesis, using separate AgentHarness instances and sessions."
+  - "Every runtime event identifies mode, workflow run, task, agent, and profile while retaining the original typed AgentEvent payload."
+  - "Specialist failure or cancellation prevents later stages and emits a typed terminal error."
+  - "Focused orchestration tests, the existing suite, Ruff, and strict Mypy pass offline."
 
 references:
-  - "specs/old_plan/mia_harness.md"
-  - "specs/old_plan/mia_tui_harness.md"
+  - "specs/IMPACT_LATEST.md"
   - "specs/tech-architecture/tech-stack.md"
-
+  - "specs/old_plan/mia_harness.md"

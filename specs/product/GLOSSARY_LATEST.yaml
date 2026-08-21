@@ -1,0 +1,43 @@
+# specs/product/GLOSSARY_LATEST.yaml — Mia orchestration ubiquitous language
+terms:
+  - term: "Mode"
+    definition: "User-selected orchestration composition that chooses a coordinator profile, workflow, policies, and enabled capabilities."
+    responsibility: "Composes"
+    avoid: ["persona", "agent preset", "profile"]
+
+  - term: "Profile"
+    definition: "Reusable declarative configuration for one agent role, including prompt, model defaults, tools, permissions, middleware, and limits."
+    responsibility: "Configures"
+    avoid: ["mode", "workflow", "agent instance"]
+
+  - term: "Workflow"
+    definition: "Validated task graph or ordered procedure executed within a mode."
+    responsibility: "Coordinates"
+    avoid: ["profile", "prompt template"]
+
+  - term: "Agent instance"
+    definition: "One running AgentHarness with its own identity, profile, context, and session."
+    responsibility: "Executes"
+    avoid: ["profile", "mode"]
+
+  - term: "Plugin"
+    definition: "Installable extension that contributes tools, memory, providers, workflows, profiles, or other capabilities without owning orchestration."
+    responsibility: "Extends"
+    avoid: ["mode runtime", "agent instance"]
+
+  - term: "Mode runtime"
+    definition: "Headless execution module through which every user prompt enters Mia; it runs a one-node or multi-stage workflow and emits attributable events."
+    responsibility: "Runs modes"
+    avoid: ["HerdManager", "terminal UI"]
+
+  - term: "One-shot specialist"
+    definition: "Task-local child agent instance that returns one result and then terminates; its transcript remains durable but it cannot accept follow-ups."
+    responsibility: "Executes one delegated task"
+    avoid: ["continuable child", "persistent teammate"]
+
+  - term: "Continuable child"
+    definition: "Durable child agent that can accept later prompts and be reconstructed after process restart."
+    responsibility: "Deferred beyond e03s01"
+    avoid: ["one-shot specialist"]
+
+invariant: "Mode composes; Profile configures; Workflow coordinates; Agent executes; Plugin extends."

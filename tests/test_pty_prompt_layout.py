@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.input import create_pipe_input
-from prompt_toolkit.layout.containers import FloatContainer, HSplit
 from prompt_toolkit.output import DummyOutput
 
 from mia_cli.interactive_input import LivePromptSession, format_status_toolbar
@@ -27,23 +25,12 @@ def test_format_status_toolbar_output() -> None:
     assert "/help" in tb.value
 
 
-def test_prompt_layout_inline_container_structure() -> None:
-    """Verify that status_container is mounted directly inside main_input_container HSplit."""
-    session = LivePromptSession(
-        toolbar_callback=lambda: HTML("  📁 test_ws │ 🧠 test_model │ ⚡ 0/128k │ /help")
-    )
-
-    # Root container is HSplit
-    assert isinstance(session.session.layout.container, HSplit)
-
-    # Child 0 contains main_input_container FloatContainer
-    c0 = session.session.layout.container.children[0]
-    main_input = getattr(c0, "alternative_content", None) or getattr(c0, "content", None)
-    assert isinstance(main_input, FloatContainer)
-    assert isinstance(main_input.content, HSplit)
-
-    # Verify main_input.content has 3+ children (prompt_1, buffer, status)
-    assert len(main_input.content.children) >= 3
+def test_prompt_session_initialization() -> None:
+    """Verify that LivePromptSession initializes with visible completion space."""
+    session = LivePromptSession()
+    assert session.completer is not None
+    assert session.session is not None
+    assert session.session.reserve_space_for_menu == 8
 
 
 @pytest.mark.asyncio
@@ -51,11 +38,10 @@ async def test_prompt_execution_with_pipe_input() -> None:
     """Verify that prompt execution completes cleanly without history errors."""
     with create_pipe_input() as pipe:
         session = LivePromptSession(
-            toolbar_callback=lambda: HTML("  📁 test_ws │ 🧠 test_model │ ⚡ 0/128k │ /help"),
             input=pipe,
             output=DummyOutput(),
         )
 
         pipe.send_text("hello prompt\r")
-        result = await session.session.prompt_async("› ")
+        result = await session.read_prompt_async("› ")
         assert result == "hello prompt"
