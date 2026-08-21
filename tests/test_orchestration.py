@@ -11,6 +11,7 @@ from mia_agent.events import TurnStartEvent
 from mia_agent.orchestration import (
     AgentRuntimeFactory,
     Mode,
+    ModeRuntime,
     OrchestrationEventEnvelope,
     RuntimeIdentity,
     Workflow,
@@ -141,3 +142,39 @@ def test_factory_resumes_messages_from_active_session(tmp_path) -> None:
     )
 
     assert [message.content for message in runtime.harness.messages] == ["existing prompt"]
+
+
+@pytest.mark.asyncio
+async def test_single_mode_runtime_preserves_one_agent_event_stream(tmp_path) -> None:
+    provider = MockProvider()
+    provider.queue_text_response("one coordinator answer")
+    profiles = ProfileManager(sessions_base_dir=tmp_path / "sessions")
+    factory = AgentRuntimeFactory(
+        profile_manager=profiles,
+        config_manager=ConfigManager(
+            config_path=tmp_path / "config.json",
+            credential_store=FileCredentialStore(path=tmp_path / "credentials.json"),
+        ),
+    )
+    runtime = ModeRuntime(factory=factory, profile_manager=profiles)
+
+    events = [
+        event
+        async for event in runtime.prompt(
+            "one coordinator prompt",
+            profile_name="coding",
+            provider=provider,
+            cwd=tmp_path,
+        )
+    ]
+
+    assert len(provider.recorded_calls) == 1
+    assert [event.event.type for event in events] == [
+        "turn_start",
+        "step_start",
+        "assistant_chunk",
+        "step_end",
+        "turn_complete",
+    ]
+    assert all(event.mode == "single" for event in events)
+    assert {event.profile for event in events} == {"coding"}
