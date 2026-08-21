@@ -188,6 +188,25 @@ Mia uses a profile-driven execution model enforced via the `SecurityGuardMiddlew
   ```
 * Dynamically updates tokens and context window percentage as turns execute.
 
+---
+
+## 9. Context Bootstrap & Automatic Compaction (Tau / Pi Standard)
+
+### A. Repository Context Auto-Discovery
+* **Automatic Ingestion:** Upon session startup in a workspace, Mia automatically discovers:
+  - `AGENTS.md`, `CLAUDE.md`, or `README.md` in the project root.
+  - Git repository status (active branch, modified working tree status via `git status --short`).
+  - System environment (OS, Python runtime, workspace path).
+* **Inspection (`/init`):** Developers can inspect the dynamically compiled system prompt context at any time.
+
+### B. Automatic Context Compaction (`/compact`)
+* **Threshold (Default: 80% of window or configurable):**
+  - When cumulative token count exceeds 80% of the active model's context window:
+  - Mia automatically summarizes early conversation turns into a structured summary checkpoint node in the session JSONL tree.
+  - Emits a clean notification: `⚡ Context compacted: 86k → 14k tokens (-83%)`.
+  - Can also be triggered manually anytime via **`/compact`**.
+
+
 
 
 
