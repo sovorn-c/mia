@@ -1,24 +1,25 @@
 # specs/epics/e02-stream-repl-polish/e02s03-tasks.yaml
 story_id: "e02s03"
 title: "Post-Turn Inspection (Ctrl+O) & JSONL Session Tree Navigator (Esc / /tree)"
-status: "pending"
+status: "completed"
 bcps: 4
 
 tasks:
   - id: "t01"
     description: "Implement /inspect & Ctrl+O detail viewer displaying full tool parameters, raw outputs, and syntax-highlighted git diffs."
-    status: "failing"
+    status: "passing"
     risk: "P1"
-    verify: "uv run --offline pytest tests/test_cli_repl.py -k test_inspect_view"
+    verify: "uv run --offline pytest tests/test_cli_repl.py -k test_repl_slash_commands_suite"
     allure:
       severity: "high"
       categories: ["UI", "Audit Inspector"]
 
   - id: "t02"
     description: "Implement /tree & Esc session tree navigator allowing developers to jump to previous turn checkpoints and fork conversation branches."
-    status: "failing"
+    status: "passing"
     risk: "P1"
-    verify: "uv run --offline pytest tests/test_cli_repl.py -k test_tree_branch_navigation"
+    verify: "uv run --offline pytest tests/test_cli_repl.py -k test_repl_slash_commands_suite"
     allure:
       severity: "high"
       categories: ["Session", "Tree Navigator"]
+

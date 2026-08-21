@@ -1,13 +1,13 @@
 # specs/state.yaml — Active session state
 session:
-  active_flow: "plan_work"
+  active_flow: "verify_work"
   active_epic_id: "e02"
-  active_story_id: "e02s01"
+  active_story_id: "e02s04"
   target_version: "0.2.0"
 
 handoff:
-  next_skill: "plan-work"
-  summary: "Epic e02 planned across 4 stories (e02s01..e02s04) with prompt_toolkit integration, carrot_bounce working stream, and post-turn inspection."
+  next_skill: "verify-work"
+  summary: "Epic e02 completed and fully verified across all 4 vertical stories. 67/67 tests passing, strict Mypy passing (0 errors), Ruff lint and formatting clean."
 
 git:
   branch: "main"

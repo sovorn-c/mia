@@ -1,10 +1,19 @@
-"""Clean, modern terminal input engine with real-time inline slash command hints (Pi & Tau inspired)."""
+"""Production-grade terminal input engine with prompt_toolkit, floating slash autocomplete & pinned status toolbar."""
 
 from __future__ import annotations
 
-import readline
 import sys
+from collections.abc import Callable, Iterable
 from pathlib import Path
+from typing import Any
+
+from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import CompleteEvent, Completer, Completion
+from prompt_toolkit.document import Document
+from prompt_toolkit.formatted_text import HTML, AnyFormattedText
+from prompt_toolkit.history import FileHistory
+from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
+from prompt_toolkit.styles import Style
 
 COMMAND_HINTS: list[tuple[str, str]] = [
     ("/help", "Show command menu, shortcuts & tools (alias: /?)"),
@@ -16,24 +25,175 @@ COMMAND_HINTS: list[tuple[str, str]] = [
     ("/cost", "Show session tokens & USD cost (alias: /stats, /tokens)"),
     ("/compact", "Trigger context window compaction (alias: /compress)"),
     ("/sessions", "List saved session trees (alias: /history)"),
+    ("/tree", "Explore and fork session conversation branch (alias: /branch)"),
+    ("/stop", "Halt the active running agent turn (alias: /abort)"),
     ("/init", "Inspect repository context & AGENTS.md (alias: /bootstrap)"),
-    ("/undo", "Revert latest file change made during session (alias: /revert)"),
     ("/clear", "Clear terminal screen and redraw banner (alias: /cls)"),
     ("/quit", "Save session tree and exit cleanly (alias: /exit)"),
 ]
 
+MIA_STYLE = Style.from_dict(
+    {
+        "prompt": "bold #FF7A00",
+        "completion-menu": "bg:#1E222A #E5E7EB",
+        "completion-menu.completion": "bg:#1E222A #E5E7EB",
+        "completion-menu.completion.current": "bold bg:#FF7A00 #000000",
+        "completion-menu.meta": "bg:#1E222A #9CA3AF italic",
+        "bottom-toolbar": "bg:#161922 #9CA3AF",
+        "bottom-toolbar.accent": "bold #FF7A00",
+        "bottom-toolbar.dim": "#6B7280",
+    }
+)
 
-class REPLCompleter:
-    """Readline tab-completion handler for slash commands."""
 
-    def __init__(self, commands: list[str]) -> None:
-        self.commands = sorted(commands)
+class SlashCompleter(Completer):
+    """Dynamic floating completer for slash commands in prompt_toolkit."""
 
-    def complete(self, text: str, state: int) -> str | None:
-        options = [cmd for cmd in self.commands if cmd.startswith(text)]
-        if state < len(options):
-            return options[state] + " "
-        return None
+    def __init__(self, commands: list[tuple[str, str]] | None = None) -> None:
+        self.commands = commands or COMMAND_HINTS
+
+    def get_completions(
+        self, document: Document, complete_event: CompleteEvent
+    ) -> Iterable[Completion]:
+        text = document.text_before_cursor.lstrip()
+        if not text.startswith("/"):
+            return
+
+        query = text.split()[0].lower()
+        for cmd, desc in self.commands:
+            if cmd.lower().startswith(query):
+                yield Completion(
+                    cmd,
+                    start_position=-len(text),
+                    display=cmd,
+                    display_meta=desc,
+                )
+
+
+def format_status_toolbar(
+    workspace_name: str = "mia",
+    model_name: str = "mimo-v2.5",
+    tokens: int = 0,
+    window_tokens: int = 128000,
+    thinking_enabled: bool = False,
+) -> HTML:
+    """Render a clean, 1-line pinned status toolbar below the prompt."""
+    pct = (tokens / max(1, window_tokens)) * 100
+    pct_str = f"{pct:.1f}%" if tokens > 0 else "0%"
+    tokens_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(tokens)
+    window_str = f"{window_tokens // 1000}k" if window_tokens >= 1000 else str(window_tokens)
+
+    thinking_badge = (
+        " <style fg='#FF7A00'>[💭 thinking: on]</style>"
+        if thinking_enabled
+        else " <style fg='#6B7280'>[💭 thinking: off]</style>"
+    )
+
+    return HTML(
+        f"<b>📁 {workspace_name}</b> │ "
+        f"<b>🧠 {model_name}</b> │ "
+        f"⚡ {tokens_str}/{window_str} ({pct_str}){thinking_badge} │ "
+        f"<style fg='#9CA3AF'><b>Esc:</b> Tree • <b>Ctrl+O:</b> Logs • <b>/help</b></style>"
+    )
+
+
+class LivePromptSession:
+    """Production prompt_toolkit session managing floating slash autocompletion, keybindings, and persistent history."""
+
+    def __init__(
+        self,
+        history_file: Path | None = None,
+        toolbar_callback: Callable[[], AnyFormattedText] | None = None,
+    ) -> None:
+        self.history_file = history_file or (Path.home() / ".mia" / "history")
+        self.history_file.parent.mkdir(parents=True, exist_ok=True)
+        self.history = FileHistory(str(self.history_file))
+        self.toolbar_callback = toolbar_callback
+        self.completer = SlashCompleter()
+        self.bindings = self._create_keybindings()
+        self.session: PromptSession[str] = PromptSession(
+            history=self.history,
+            completer=self.completer,
+            key_bindings=self.bindings,
+            style=MIA_STYLE,
+            complete_while_typing=True,
+            enable_history_search=True,
+        )
+
+    def _create_keybindings(self) -> KeyBindings:
+        kb = KeyBindings()
+
+        # Ctrl+C: Clear active input buffer without killing session
+        @kb.add("c-c")
+        def _clear_buffer(event: KeyPressEvent) -> None:
+            event.current_buffer.reset()
+
+        # Ctrl+J / Alt+Enter: Insert newline for multi-line prompts
+        @kb.add("c-j")
+        def _insert_newline(event: KeyPressEvent) -> None:
+            event.current_buffer.insert_text("\n")
+
+        @kb.add("escape", "enter")
+        def _insert_newline_alt(event: KeyPressEvent) -> None:
+            event.current_buffer.insert_text("\n")
+
+        # Esc: Session tree navigator shortcut
+        @kb.add("escape")
+        def _tree_shortcut(event: KeyPressEvent) -> None:
+            event.current_buffer.text = "/tree"
+            event.current_buffer.validate_and_handle()
+
+        # Ctrl+O: Post-turn detail audit inspector shortcut
+        @kb.add("c-o")
+        def _inspect_shortcut(event: KeyPressEvent) -> None:
+            event.current_buffer.text = "/inspect"
+            event.current_buffer.validate_and_handle()
+
+        # Ctrl+T: Toggle thinking trace shortcut
+        @kb.add("c-t")
+        def _thinking_shortcut(event: KeyPressEvent) -> None:
+            event.current_buffer.text = "/thinking"
+            event.current_buffer.validate_and_handle()
+
+        return kb
+
+    def read_prompt(
+        self,
+        prompt_prefix: str = "🥕 mia › ",
+        bottom_toolbar: Any = None,
+    ) -> str:
+        """Prompt user with floating slash completions, bracketed paste, and pinned bottom toolbar."""
+        if not sys.stdin.isatty():
+            try:
+                return input(prompt_prefix).strip()
+            except EOFError:
+                raise
+
+        toolbar = bottom_toolbar or (self.toolbar_callback() if self.toolbar_callback else None)
+        formatted_prompt: AnyFormattedText = [("class:prompt", prompt_prefix)]
+
+        try:
+            result = self.session.prompt(
+                formatted_prompt,
+                bottom_toolbar=toolbar,
+                reserve_space_for_menu=6,
+            )
+            return result.strip()
+        except KeyboardInterrupt:
+            # Handle empty Ctrl+C
+            return ""
+        except EOFError:
+            raise
+
+
+class LiveInteractivePrompt:
+    """Backward-compatible adapter for LivePromptSession."""
+
+    def __init__(self, history_file: Path | None = None) -> None:
+        self._session = LivePromptSession(history_file=history_file)
+
+    def read_prompt(self, prompt_prefix: str = "🥕 mia › ") -> str:
+        return self._session.read_prompt(prompt_prefix)
 
 
 def interactive_select(
@@ -137,201 +297,3 @@ def interactive_select(
 
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-
-
-class LiveInteractivePrompt:
-    """Rock-solid interactive prompt with real-time inline slash command filtering and history."""
-
-    def __init__(self, history_file: Path | None = None) -> None:
-        self.history_file = history_file or (Path.home() / ".mia" / "history")
-        self.history: list[str] = self._load_history()
-        self._history_idx: int = -1
-        self._setup_readline()
-
-    def _setup_readline(self) -> None:
-        """Configure readline with history and Tab-completion across platforms."""
-        try:
-            self.history_file.parent.mkdir(parents=True, exist_ok=True)
-            if self.history_file.exists():
-                readline.read_history_file(str(self.history_file))
-
-            commands = [cmd for cmd, _ in COMMAND_HINTS]
-            delims = readline.get_completer_delims().replace("/", "").replace("-", "")
-            readline.set_completer_delims(delims)
-            readline.set_completer(REPLCompleter(commands).complete)
-
-            doc = getattr(readline, "__doc__", "") or ""
-            if "libedit" in doc:
-                readline.parse_and_bind("bind ^I rl_complete")
-                readline.parse_and_bind("bind ^I complete")
-            else:
-                readline.parse_and_bind("tab: complete")
-
-            readline.set_history_length(1000)
-        except Exception:
-            pass
-
-    def _load_history(self) -> list[str]:
-        if self.history_file and self.history_file.exists():
-            try:
-                lines = self.history_file.read_text(encoding="utf-8").splitlines()
-                return [line.strip() for line in lines if line.strip()][-200:]
-            except Exception:
-                return []
-        return []
-
-    def _save_history(self) -> None:
-        if self.history_file:
-            try:
-                self.history_file.parent.mkdir(parents=True, exist_ok=True)
-                if self.history:
-                    self.history_file.write_text(
-                        "\n".join(self.history[-200:]) + "\n", encoding="utf-8"
-                    )
-                readline.write_history_file(str(self.history_file))
-            except Exception:
-                pass
-
-    def read_prompt(self, prompt_prefix: str = "🥕 mia › ") -> str:
-        """Read a prompt line with real-time inline slash command hints that filter as you type."""
-        if not sys.stdin.isatty():
-            try:
-                return input(prompt_prefix).strip()
-            except EOFError:
-                raise
-
-        import termios
-        import tty
-
-        fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
-
-        buffer = ""
-        cursor_pos = 0
-        self._history_idx = -1
-
-        def redraw_line() -> None:
-            colored_pfx = f"\x1b[1;38;2;255;122;0m{prompt_prefix}\x1b[0m"
-
-            # Compute real-time inline matching hints if typing slash command
-            hint_str = ""
-            if buffer.startswith("/"):
-                query = buffer.split()[0].lower()
-                matches = [cmd for cmd, _ in COMMAND_HINTS if cmd.startswith(query)]
-                if matches:
-                    if len(matches) <= 4:
-                        hint_str = f" \x1b[2;37m({', '.join(matches)})\x1b[0m"
-                    else:
-                        top_matches = ", ".join(matches[:4])
-                        hint_str = f" \x1b[2;37m({top_matches}, ...)\x1b[0m"
-
-            sys.stdout.write(f"\r\x1b[2K{colored_pfx}{buffer}{hint_str}")
-            # Restore cursor to exact position in user's typed buffer
-            pfx_len = len(prompt_prefix)
-            col = pfx_len + cursor_pos + 1
-            sys.stdout.write(f"\x1b[{col}G")
-            sys.stdout.flush()
-
-        try:
-            tty.setcbreak(fd)
-            redraw_line()
-
-            while True:
-                char = sys.stdin.read(1)
-
-                # Ctrl+C
-                if char == "\x03":
-                    sys.stdout.write("\n")
-                    sys.stdout.flush()
-                    raise KeyboardInterrupt
-
-                # Ctrl+D
-                if char == "\x04" and not buffer:
-                    sys.stdout.write("\n")
-                    sys.stdout.flush()
-                    raise EOFError
-
-                # Enter (\r or \n)
-                if char in ("\r", "\n"):
-                    colored_pfx = f"\x1b[1;38;2;255;122;0m{prompt_prefix}\x1b[0m"
-                    sys.stdout.write(f"\r\x1b[2K{colored_pfx}{buffer}\n")
-                    sys.stdout.flush()
-                    line = buffer.strip()
-                    if line and (not self.history or self.history[-1] != line):
-                        self.history.append(line)
-                        self._save_history()
-                    return line
-
-                # Backspace (\x7f or \x08)
-                if char in ("\x7f", "\x08"):
-                    if cursor_pos > 0:
-                        buffer = buffer[: cursor_pos - 1] + buffer[cursor_pos:]
-                        cursor_pos -= 1
-                        redraw_line()
-                    continue
-
-                # Tab (\t) -> Autocomplete matching slash command
-                elif char == "\t":
-                    if buffer.startswith("/"):
-                        query = buffer.split()[0].lower()
-                        matches = [cmd for cmd, _ in COMMAND_HINTS if cmd.startswith(query)]
-                        if len(matches) == 1:
-                            buffer = matches[0] + " "
-                            cursor_pos = len(buffer)
-                            redraw_line()
-                        elif len(matches) > 1:
-                            # Complete common prefix
-                            prefix = matches[0]
-                            for m in matches[1:]:
-                                while not m.startswith(prefix) and prefix:
-                                    prefix = prefix[:-1]
-                            if len(prefix) > len(buffer):
-                                buffer = prefix
-                                cursor_pos = len(buffer)
-                            redraw_line()
-                    continue
-
-                # ANSI Escape Sequences (Arrows)
-                elif char == "\x1b":
-                    seq1 = sys.stdin.read(1)
-                    if seq1 == "[":
-                        seq2 = sys.stdin.read(1)
-                        # Up arrow -> History prev
-                        if seq2 == "A":
-                            if self.history:
-                                if self._history_idx == -1:
-                                    self._history_idx = len(self.history) - 1
-                                elif self._history_idx > 0:
-                                    self._history_idx -= 1
-                                buffer = self.history[self._history_idx]
-                                cursor_pos = len(buffer)
-                                redraw_line()
-                        # Down arrow -> History next
-                        elif seq2 == "B":
-                            if self._history_idx != -1:
-                                if self._history_idx < len(self.history) - 1:
-                                    self._history_idx += 1
-                                    buffer = self.history[self._history_idx]
-                                else:
-                                    self._history_idx = -1
-                                    buffer = ""
-                                cursor_pos = len(buffer)
-                                redraw_line()
-                        # Left arrow
-                        elif seq2 == "D" and cursor_pos > 0:
-                            cursor_pos -= 1
-                            redraw_line()
-                        # Right arrow
-                        elif seq2 == "C" and cursor_pos < len(buffer):
-                            cursor_pos += 1
-                            redraw_line()
-                    continue
-
-                # Normal printable characters
-                elif char.isprintable():
-                    buffer = buffer[:cursor_pos] + char + buffer[cursor_pos:]
-                    cursor_pos += 1
-                    redraw_line()
-
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)

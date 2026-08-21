@@ -1,48 +1,71 @@
-"""Unit and scenario tests for MiaREPL interactive stream harness with Pi-style Auth and Model Scoper."""
+"""Unit and scenario tests for MiaREPL interactive stream harness with prompt_toolkit & Pi-style Auth and Model Scoper."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+from prompt_toolkit.document import Document
 
 from mia_ai.providers.mock import MockProvider
 from mia_ai.types import ToolCall
-from mia_cli.repl import MiaREPL, REPLCompleter
+from mia_cli.interactive_input import (
+    LiveInteractivePrompt,
+    LivePromptSession,
+    SlashCompleter,
+    format_status_toolbar,
+    interactive_select,
+)
+from mia_cli.renderers.rich_stream import CarrotBounceSpinner
+from mia_cli.repl import MiaREPL
 
 
-def test_repl_completer_and_slash_menu(tmp_path: Path) -> None:
-    completer = REPLCompleter(
-        [
-            "/help",
-            "/login",
-            "/model",
-            "/profile",
-            "/diff",
-            "/cost",
-            "/compact",
-            "/sessions",
-            "/init",
-            "/undo",
-            "/clear",
-            "/quit",
-        ]
+def test_slash_completer_and_menu() -> None:
+    completer = SlashCompleter()
+
+    # When text is "/l"
+    doc_l = Document(text="/l", cursor_position=2)
+    completions = list(completer.get_completions(doc_l, complete_event=MagicMock()))
+    cmd_names = [c.text for c in completions]
+    assert "/login" in cmd_names
+    assert "/logout" in cmd_names
+    assert "/model" not in cmd_names
+
+    # When text is not starting with /
+    doc_text = Document(text="hello", cursor_position=5)
+    completions_empty = list(completer.get_completions(doc_text, complete_event=MagicMock()))
+    assert len(completions_empty) == 0
+
+
+def test_format_status_toolbar() -> None:
+    toolbar_html = format_status_toolbar(
+        workspace_name="mia",
+        model_name="mimo-v2.5",
+        tokens=12500,
+        window_tokens=128000,
+        thinking_enabled=True,
     )
+    assert "mia" in toolbar_html.value
+    assert "mimo-v2.5" in toolbar_html.value
+    assert "12.5k/128k" in toolbar_html.value
+    assert "thinking: on" in toolbar_html.value
 
-    # Test prefix matching
-    assert completer.complete("/l", 0) == "/login"
-    assert completer.complete("/m", 0) == "/model"
-    assert completer.complete("/p", 0) == "/profile"
-    assert completer.complete("/d", 0) == "/diff"
-    assert completer.complete("/c", 0) == "/cost"
-    assert completer.complete("/c", 1) == "/compact"
-    assert completer.complete("/c", 2) == "/clear"
 
+def test_carrot_bounce_spinner() -> None:
+    frame0 = CarrotBounceSpinner.render_frame(0.0)
+    assert "🥕" in frame0
+    assert "Thinking (0.0s)..." in frame0
+
+    frame1 = CarrotBounceSpinner.render_frame(1.5)
+    assert "🥕" in frame1
+    assert "Thinking (1.5s)..." in frame1
+
+
+def test_repl_slash_commands_suite(tmp_path: Path) -> None:
     mock = MockProvider()
     repl = MiaREPL(cwd=tmp_path, custom_provider=mock)
 
-    # Test '/' prints menu
     assert repl.handle_slash_command("/") is True
     assert repl.handle_slash_command("/?") is True
     assert repl.handle_slash_command("/help") is True
@@ -51,7 +74,15 @@ def test_repl_completer_and_slash_menu(tmp_path: Path) -> None:
     assert repl.handle_slash_command("/stats") is True
     assert repl.handle_slash_command("/diff") is True
     assert repl.handle_slash_command("/init") is True
-    assert repl.handle_slash_command("/undo") is True
+    assert repl.handle_slash_command("/compact") is True
+    assert repl.handle_slash_command("/sessions") is True
+    assert repl.handle_slash_command("/tree") is True
+    assert repl.handle_slash_command("/inspect") is True
+    assert repl.handle_slash_command("/thinking") is True
+    assert repl.show_thinking_trace is True
+    assert repl.handle_slash_command("/thinking") is True
+    assert repl.show_thinking_trace is False
+    assert repl.handle_slash_command("/stop") is True
     assert repl.handle_slash_command("/clear") is True
     assert repl.handle_slash_command("/model mock-model") is True
     assert repl.model_name == "mock-model"
@@ -69,7 +100,6 @@ def test_repl_pi_style_auth_and_model_scoper(tmp_path: Path) -> None:
     repl.cred_store.path = cred_file
     repl.config_mgr.config_path = cfg_file
 
-    # Simulate: Pick Method (api_key), Pick Provider (opencode-go), Enter API Key
     with (
         patch("builtins.input", side_effect=["api_key", "opencode-go"]),
         patch("getpass.getpass", return_value="sk-test-opencode-key-123"),
@@ -127,12 +157,12 @@ async def test_repl_execute_turn_with_tools(tmp_path: Path) -> None:
     assert (tmp_path / "hello.py").exists()
     assert (tmp_path / "hello.py").read_text() == "print('hello world')\n"
     assert repl.total_tokens > 0
+    assert len(repl.stream_renderer.turn_audit_log) == 1
+    assert repl.stream_renderer.turn_audit_log[0]["tool_name"] == "write_file"
 
 
 def test_live_interactive_prompt_non_tty(tmp_path: Path) -> None:
     """Verify LiveInteractivePrompt correctly reads input in non-tty/test mode."""
-    from mia_cli.interactive_input import LiveInteractivePrompt
-
     history_file = tmp_path / "history"
     prompt_reader = LiveInteractivePrompt(history_file=history_file)
 
@@ -141,10 +171,18 @@ def test_live_interactive_prompt_non_tty(tmp_path: Path) -> None:
         assert res == "/help"
 
 
+def test_live_prompt_session_non_tty(tmp_path: Path) -> None:
+    """Verify LivePromptSession correctly reads input in non-tty/test mode."""
+    history_file = tmp_path / "history"
+    session = LivePromptSession(history_file=history_file)
+
+    with patch("builtins.input", return_value="hello mia"):
+        res = session.read_prompt()
+        assert res == "hello mia"
+
+
 def test_interactive_select_non_tty() -> None:
     """Verify interactive_select selects by index or id in non-tty mode."""
-    from mia_cli.interactive_input import interactive_select
-
     options = [
         ("opt_1", "Option One", "First item"),
         ("opt_2", "Option Two", "Second item"),
@@ -160,8 +198,6 @@ def test_interactive_select_non_tty() -> None:
 
 def test_validate_api_key_rejection(tmp_path: Path) -> None:
     """Verify validate_api_key detects 401 Unauthorized responses."""
-    from unittest.mock import MagicMock
-
     from mia_agent.auth.config import validate_api_key
 
     with patch("httpx.post") as mock_post:
@@ -187,7 +223,6 @@ def test_login_rejects_invalid_api_key(tmp_path: Path) -> None:
     ):
         repl.interactive_login()
 
-    # Credential should NOT be saved
     saved_key = repl.cred_store.get_api_key("opencode-go")
     assert saved_key is None
 
@@ -211,8 +246,6 @@ def test_logout_command(tmp_path: Path) -> None:
 
 def test_openai_oauth_save_direct_token(tmp_path: Path) -> None:
     """Verify OpenAIOAuthManager saves valid token."""
-    from unittest.mock import MagicMock
-
     from mia_agent.auth.credentials import FileCredentialStore
     from mia_agent.auth.openai_auth import OpenAIOAuthManager
 

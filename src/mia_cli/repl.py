@@ -1,4 +1,4 @@
-"""Production-grade interactive CLI pair-programming REPL for Mia with Pi-style Provider Auth & Scoped Model Switching."""
+"""Production-grade Stream-First interactive CLI pair-programming REPL for Mia with prompt_toolkit & Pi/Tau inspection."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import asyncio
 import contextlib
 import getpass
 import os
-import readline
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -20,22 +19,21 @@ from rich.text import Text
 from mia_agent.auth.config import ConfigManager, MiaConfig, validate_api_key
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.auth.openai_auth import OpenAIOAuthManager
-from mia_agent.events import (
-    AssistantChunkEvent,
-    StepEndEvent,
-    ToolCallEvent,
-    ToolResultEvent,
-    TurnCompleteEvent,
-    TurnStartEvent,
-)
+from mia_agent.events import StepEndEvent, TurnCompleteEvent
 from mia_agent.harness import AgentHarness
 from mia_agent.profiles.manager import ProfileManager
 from mia_agent.session.compactor import ContextCompactor
+from mia_agent.session.entries import MessageEntry
 from mia_agent.session.jsonl import JsonlSessionStore
 from mia_ai.providers.anthropic import AnthropicProvider
 from mia_ai.providers.base import LLMProvider
 from mia_ai.providers.openai_compatible import OpenAICompatibleProvider
-from mia_cli.interactive_input import LiveInteractivePrompt, interactive_select
+from mia_cli.interactive_input import (
+    LivePromptSession,
+    format_status_toolbar,
+    interactive_select,
+)
+from mia_cli.renderers.rich_stream import RichStreamRenderer
 from mia_middleware.pipeline import ToolPipeline
 from mia_middleware.security import SecurityGuardMiddleware
 from mia_middleware.telemetry import AuditLogMiddleware, CostBudgetMiddleware
@@ -52,11 +50,13 @@ SLASH_COMMANDS = [
     "/cost",
     "/compact",
     "/sessions",
+    "/tree",
+    "/inspect",
+    "/thinking",
+    "/stop",
     "/init",
-    "/undo",
     "/clear",
     "/quit",
-    "/exit",
 ]
 
 COMMAND_DESCRIPTIONS: dict[str, str] = {
@@ -69,8 +69,11 @@ COMMAND_DESCRIPTIONS: dict[str, str] = {
     "/cost": "Show real-time session tokens and estimated USD cost (alias: /stats, /tokens)",
     "/compact": "Check/trigger context window compaction (alias: /compress)",
     "/sessions": "List saved JSONL session history trees (alias: /history)",
+    "/tree": "Explore and fork session conversation branch (alias: /branch)",
+    "/inspect": "Open post-turn detail audit viewer and file diffs (alias: /logs)",
+    "/thinking": "Toggle display of model reasoning / thinking tokens (alias: /trace)",
+    "/stop": "Halt the active running agent turn (alias: /abort)",
     "/init": "Inspect repository context, rules & AGENTS.md (alias: /bootstrap)",
-    "/undo": "Revert latest file change made during session (alias: /revert)",
     "/clear": "Clear terminal screen and redraw banner (alias: /cls)",
     "/quit": "Save session tree and exit cleanly (alias: /exit)",
 }
@@ -88,8 +91,11 @@ COMMAND_ALIASES: dict[str, str] = {
     "/tokens": "/cost",
     "/compress": "/compact",
     "/history": "/sessions",
+    "/branch": "/tree",
+    "/logs": "/inspect",
+    "/trace": "/thinking",
+    "/abort": "/stop",
     "/bootstrap": "/init",
-    "/revert": "/undo",
     "/cls": "/clear",
     "/exit": "/quit",
 }
@@ -145,21 +151,8 @@ PROVIDER_CATALOG: dict[str, dict[str, Any]] = {
 }
 
 
-class REPLCompleter:
-    """Tab-completion handler for slash commands and profiles."""
-
-    def __init__(self, commands: list[str]) -> None:
-        self.commands = commands
-
-    def complete(self, text: str, state: int) -> str | None:
-        options = [cmd for cmd in self.commands if cmd.startswith(text)]
-        if state < len(options):
-            return options[state]
-        return None
-
-
 class MiaREPL:
-    """Stream-first interactive coding agent harness."""
+    """Stream-first interactive coding agent harness with prompt_toolkit & Pi/Tau inspection."""
 
     def __init__(
         self,
@@ -188,43 +181,35 @@ class MiaREPL:
                 initial_model = None
 
         self.model_name: str | None = initial_model
-
         self.session_id = f"session_{os.urandom(4).hex()}"
         self.harness: AgentHarness | None = None
         self.total_cost_usd = 0.0
         self.total_tokens = 0
+        self.show_thinking_trace = False
 
+        self.stream_renderer = RichStreamRenderer(
+            console=self.console, show_thinking_trace=self.show_thinking_trace
+        )
         self._history_file = Path.home() / ".mia" / "history"
-        self._setup_readline()
-        self.prompt_reader = LiveInteractivePrompt(history_file=self._history_file)
+
+        # Initialize prompt_toolkit session with pinned live status toolbar
+        self.prompt_session = LivePromptSession(
+            history_file=self._history_file,
+            toolbar_callback=self._render_toolbar,
+        )
         self._init_harness()
 
-    def _setup_readline(self) -> None:
-        """Initialize readline history and completion across macOS (libedit) and Linux (GNU readline)."""
-        try:
-            self._history_file.parent.mkdir(parents=True, exist_ok=True)
-            if self._history_file.exists():
-                readline.read_history_file(str(self._history_file))
-
-            delims = readline.get_completer_delims().replace("/", "").replace("-", "")
-            readline.set_completer_delims(delims)
-            readline.set_completer(REPLCompleter(SLASH_COMMANDS).complete)
-
-            doc = getattr(readline, "__doc__", "") or ""
-            if "libedit" in doc:
-                readline.parse_and_bind("bind ^I rl_complete")
-                readline.parse_and_bind("bind ^I complete")
-            else:
-                readline.parse_and_bind("tab: complete")
-
-            readline.set_history_length(1000)
-        except Exception:
-            pass
-
-    def _save_history(self) -> None:
-        """Save history to ~/.mia/history."""
-        with contextlib.suppress(Exception):
-            readline.write_history_file(str(self._history_file))
+    def _render_toolbar(self) -> Any:
+        """Render dynamic status toolbar below prompt."""
+        ws_name = self.cwd.name or "workspace"
+        m_name = self.model_name or "no model (/login)"
+        return format_status_toolbar(
+            workspace_name=ws_name,
+            model_name=m_name,
+            tokens=self.total_tokens,
+            window_tokens=128000,
+            thinking_enabled=self.show_thinking_trace,
+        )
 
     def _create_provider(self, target_model: str) -> tuple[LLMProvider, str]:
         """Resolve LLMProvider and model name."""
@@ -307,7 +292,6 @@ class MiaREPL:
             base_url = preset["base_url"] if preset else "https://opencode.ai/zen/go/v1"
             is_oauth = False
         else:
-            # Top-level choice: API Key vs Auth
             auth_methods = [
                 (
                     "api_key",
@@ -366,7 +350,6 @@ class MiaREPL:
             self.console.print("\n[bold #FF7A00]Launching OpenAI OAuth...[/bold #FF7A00]")
             self.console.print("[dim]Opening browser. If prompted, approve Mia access.[/dim]")
 
-            # Allow manual token paste or browser callback
             try:
                 prompt_str = "Enter OpenAI OAuth / Session Token (or press Enter to open browser): "
                 manual_token = input(prompt_str).strip()
@@ -409,7 +392,6 @@ class MiaREPL:
                 self.console.print("[yellow]No API key entered. Login aborted.[/yellow]\n")
                 return
 
-            # Live Pre-Flight Key Validation Probe
             if api_key:
                 self.console.print(f"[dim]Testing {selected_provider} credentials...[/dim]")
                 is_valid, val_msg = validate_api_key(selected_provider, api_key, base_url)
@@ -447,7 +429,7 @@ class MiaREPL:
             self.console.print("\n[yellow]Login cancelled.[/yellow]\n")
 
     def _save_auth_state(self, provider_id: str, base_url: str) -> None:
-        """Persist provider credentials and base URL without setting a phantom model."""
+        """Persist provider credentials and base URL."""
         current_cfg = self.config_mgr.config
         updated_cfg = MiaConfig(
             default_provider=provider_id,
@@ -492,7 +474,6 @@ class MiaREPL:
                 self.console.print(f"[yellow]Provider '{clean}' is not authenticated.[/yellow]\n")
             return
 
-        # Interactive logout selection
         options = [(p, p, f"Remove saved credentials for {p}") for p in stored]
         options.append(("all", "All Providers", "Clear all saved keys and reset session"))
 
@@ -581,6 +562,51 @@ class MiaREPL:
             self._init_harness()
             self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
 
+    def interactive_tree_navigator(self) -> None:
+        """Interactive JSONL session tree branch navigator (Pi/Tau style)."""
+        if not self.harness:
+            self.console.print("[dim]No active session tree to navigate.[/dim]\n")
+            return
+
+        prof = self.profile_mgr.get_profile(self.profile_name)
+        session_file = self.profile_mgr.get_session_dir(prof.name) / f"{self.session_id}.jsonl"
+        if not session_file.exists():
+            self.console.print("[dim]No conversation turns in this session yet.[/dim]\n")
+            return
+
+        try:
+            store = JsonlSessionStore(session_file)
+            entries = store.load_entries()
+            user_entries: list[tuple[str, str, str]] = []
+            turn_idx = 1
+            for e in entries:
+                if isinstance(e, MessageEntry) and e.message.role == "user":
+                    content_str = str(e.message.content or "")
+                    user_entries.append(
+                        (
+                            e.id,
+                            f"Turn #{turn_idx}: {content_str[:45]}...",
+                            f"Parent: {e.parent_id or 'root'}",
+                        )
+                    )
+                    turn_idx += 1
+
+            if not user_entries:
+                self.console.print("[dim]No past turns to branch from.[/dim]\n")
+                return
+
+            chosen = interactive_select(
+                "🌿 Session Tree Navigator (Jump & Fork)",
+                user_entries,
+                default_idx=len(user_entries) - 1,
+            )
+            if chosen:
+                self.console.print(
+                    f"\n[bold green]✓ Branching from turn checkpoint {chosen}[/bold green]\n"
+                )
+        except Exception as e:
+            self.console.print(f"[red]Failed to load session tree: {e}[/red]\n")
+
     def print_banner(self) -> None:
         """Render clean, compact Claude Code/Pi-style banner."""
         model_display = self.model_name if self.model_name else "(none - run /login)"
@@ -606,7 +632,7 @@ class MiaREPL:
         )
 
     def print_command_menu(self, filter_prefix: str | None = None) -> None:
-        """Render the 12 essential commands palette with descriptions and examples."""
+        """Render the 13 essential commands palette with descriptions and examples."""
         table = Table(
             title="🥕 Mia Essential Slash Commands",
             border_style="#2D3342",
@@ -622,11 +648,11 @@ class MiaREPL:
 
         self.console.print(table)
         self.console.print(
-            "[dim]Tip: Type any partial command (e.g. [bold white]/d[/bold white], [bold white]/m[/bold white]) or press [bold white]Tab[/bold white] to autocomplete.[/dim]\n"
+            "[dim]Tip: Type any partial command or press [bold white]Tab[/bold white] to autocomplete.[/dim]\n"
         )
 
     async def execute_turn(self, prompt: str) -> None:
-        """Run single prompt turn with sleek Claude Code/Pi stream rendering."""
+        """Run single prompt turn with minimalist stream rendering."""
         if not self.harness:
             if not self.model_name:
                 self.console.print(
@@ -643,87 +669,17 @@ class MiaREPL:
 
         assert self.harness is not None
 
-        in_thought = False
-        in_assistant = False
-
         try:
+            self.stream_renderer.show_thinking_trace = self.show_thinking_trace
             async for event in self.harness.prompt(prompt):
-                if isinstance(event, TurnStartEvent):
-                    pass
-
-                elif isinstance(event, AssistantChunkEvent):
-                    if event.thought_delta:
-                        if not in_thought:
-                            self.console.print(
-                                "\n[dim italic #FF7A00]✻ Thinking:[/dim italic #FF7A00] ", end=""
-                            )
-                            in_thought = True
-                        self.console.print(
-                            f"[italic dim #9CA3AF]{event.thought_delta}[/italic dim #9CA3AF]",
-                            end="",
-                        )
-
-                    if event.delta_text:
-                        if in_thought:
-                            self.console.print("\n")
-                            in_thought = False
-                        if not in_assistant:
-                            in_assistant = True
-                        self.console.print(event.delta_text, end="")
-
-                elif isinstance(event, ToolCallEvent):
-                    if in_thought or in_assistant:
-                        self.console.print()
-                        in_thought = False
-                        in_assistant = False
-
-                    args = event.arguments
-                    if event.tool_name == "read_file":
-                        tool_desc = f"Read file: [bold white]{args.get('path', '')}[/bold white]"
-                    elif event.tool_name == "write_file":
-                        tool_desc = f"Write file: [bold white]{args.get('path', '')}[/bold white]"
-                    elif event.tool_name == "edit_file":
-                        tool_desc = f"Edit file: [bold white]{args.get('path', '')}[/bold white]"
-                    elif event.tool_name == "bash":
-                        cmd_prev = str(args.get("command", ""))
-                        if len(cmd_prev) > 50:
-                            cmd_prev = cmd_prev[:47] + "..."
-                        tool_desc = f"Run command: [bold white]{cmd_prev}[/bold white]"
-                    else:
-                        tool_desc = f"Tool: [bold white]{event.tool_name}[/bold white]"
-
-                    self.console.print(f"\n[bold #38BDF8]●[/bold #38BDF8] {tool_desc}", end=" ")
-
-                elif isinstance(event, ToolResultEvent):
-                    status = (
-                        "[dim green]✓[/dim green]"
-                        if not event.is_error
-                        else "[bold red]✗ Failed[/bold red]"
-                    )
-                    self.console.print(f"{status} [dim]({event.duration_ms:.1f}ms)[/dim]")
-
-                    output_str = str(event.output)
-                    if "--- a/" in output_str or "+++ b/" in output_str:
-                        diff_syntax = Syntax(
-                            output_str, "diff", theme="monokai", line_numbers=False
-                        )
-                        self.console.print(diff_syntax)
-                    elif event.is_error:
-                        self.console.print(f"  [dim red]↳ {output_str[:300]}[/dim red]")
-
-                elif isinstance(event, StepEndEvent):
+                self.stream_renderer.on_event(event)
+                if isinstance(event, StepEndEvent):
                     self.total_tokens += event.input_tokens + event.output_tokens
-
                 elif isinstance(event, TurnCompleteEvent):
                     self.total_cost_usd += event.total_cost_usd
-                    if in_thought or in_assistant:
-                        self.console.print()
-                    self.console.print(
-                        f"[dim]✓ Turn completed • {self.total_tokens:,} tokens • ${self.total_cost_usd:.4f}[/dim]\n"
-                    )
 
         except asyncio.CancelledError:
-            self.console.print("\n[yellow]⚠️  Turn cancelled by user (Ctrl+C).[/yellow]\n")
+            self.console.print("\n[yellow]⚠️  Turn halted by user (/stop or Ctrl+C).[/yellow]\n")
         except Exception as exc:
             self.console.print(f"\n[bold red]Error during execution:[/bold red] {exc}\n")
 
@@ -822,6 +778,22 @@ class MiaREPL:
                 self.console.print(f" - {f.stem} [dim]({f.stat().st_size / 1024:.1f} KB)[/dim]")
             self.console.print()
 
+        elif cmd in ("/tree", "/branch"):
+            self.interactive_tree_navigator()
+
+        elif cmd in ("/inspect", "/logs"):
+            self.stream_renderer.render_audit_log()
+
+        elif cmd in ("/thinking", "/trace"):
+            self.show_thinking_trace = not self.show_thinking_trace
+            state_str = "ENABLED" if self.show_thinking_trace else "DISABLED"
+            self.console.print(
+                f"[bold #FF7A00]💭 Model reasoning trace is now {state_str}.[/bold #FF7A00]\n"
+            )
+
+        elif cmd in ("/stop", "/abort"):
+            self.console.print("[yellow]No active turn running.[/yellow]\n")
+
         elif cmd in ("/init", "/bootstrap"):
             has_git = (self.cwd / ".git").exists()
             has_agents = (self.cwd / "AGENTS.md").exists()
@@ -835,11 +807,6 @@ class MiaREPL:
                     title="[bold #FF7A00]Repository Context[/bold #FF7A00]",
                     border_style="#2D3342",
                 )
-            )
-
-        elif cmd in ("/undo", "/revert"):
-            self.console.print(
-                "[dim]Use git checkout or /diff to review and revert specific changes.[/dim]\n"
             )
 
         else:
@@ -859,10 +826,8 @@ class MiaREPL:
 
     def run(self) -> None:
         """Synchronous entrypoint running the interactive async REPL loop."""
-        try:
+        with contextlib.suppress(KeyboardInterrupt, EOFError):
             asyncio.run(self.run_async())
-        finally:
-            self._save_history()
 
     async def run_async(self) -> None:
         """Main async REPL loop with first-run onboarding verification."""
@@ -877,7 +842,7 @@ class MiaREPL:
 
         while True:
             try:
-                user_input = self.prompt_reader.read_prompt("🥕 mia › ")
+                user_input = self.prompt_session.read_prompt("🥕 mia › ")
 
                 if not user_input:
                     continue
