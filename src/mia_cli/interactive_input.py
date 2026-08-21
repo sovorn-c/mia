@@ -1,4 +1,4 @@
-"""Minimalist, rock-solid interactive prompt with instant slash command hints and dual-mode picker."""
+"""Minimalist, rock-solid interactive prompt with dynamic live-filtering slash command dropdown."""
 
 from __future__ import annotations
 
@@ -142,7 +142,7 @@ def interactive_select(
 
 
 class LiveInteractivePrompt:
-    """Interactive line reader with instant slash-command hints on '/' and history support."""
+    """Interactive line reader with dynamic live-filtering slash command dropdown."""
 
     def __init__(self, history_file: Path | None = None) -> None:
         self.console = Console()
@@ -195,22 +195,51 @@ class LiveInteractivePrompt:
             except Exception:
                 pass
 
-    def print_quick_commands(self) -> None:
-        """Render a clean commands palette above the prompt without screen-destroying cursor hacks."""
-        sys.stdout.write(
-            "\n\x1b[38;2;45;51;66m╭── \x1b[1;38;2;255;122;0m🥕 Essential Commands\x1b[0m \x1b[38;2;107;114;128m(Tab to autocomplete)\x1b[0m "
-            + "─" * 26
-            + "╮\x1b[0m\n"
-        )
-        for cmd, desc in COMMAND_HINTS:
-            cmd_col = f"\x1b[1;38;2;255;122;0m{cmd:<10}\x1b[0m"
-            desc_col = f"\x1b[38;2;156;163;175m{desc[:52]}\x1b[0m"
-            sys.stdout.write(f"\x1b[38;2;45;51;66m│\x1b[0m {cmd_col} \x1b[2m│\x1b[0m {desc_col}\n")
-        sys.stdout.write("\x1b[38;2;45;51;66m╰" + "─" * 68 + "╯\x1b[0m\n\n")
+    def _clear_dropdown(self, count: int) -> None:
+        """Erase dropdown lines rendered below the prompt."""
+        if count > 0:
+            sys.stdout.write("\x1b[s")  # Save cursor
+            for _ in range(count):
+                sys.stdout.write("\n\x1b[2K")
+            sys.stdout.write("\x1b[u")  # Restore cursor
+            sys.stdout.flush()
+
+    def _render_state(
+        self,
+        prompt_prefix: str,
+        buffer: str,
+        cursor_pos: int,
+        prev_dropdown_count: int,
+    ) -> int:
+        """Render prompt and dynamic live-filtered slash command dropdown below."""
+        self._clear_dropdown(prev_dropdown_count)
+
+        colored_pfx = f"\x1b[1;38;2;255;122;0m{prompt_prefix}\x1b[0m"
+        sys.stdout.write(f"\r\x1b[2K{colored_pfx}{buffer}")
+
+        dropdown_count = 0
+        if buffer.startswith("/"):
+            query = buffer.split()[0].lower()
+            matches = [item for item in COMMAND_HINTS if item[0].startswith(query)]
+            if matches:
+                dropdown_count = min(len(matches), 5)
+                sys.stdout.write("\x1b[s")  # Save cursor at prompt line
+                for i, (cmd, desc) in enumerate(matches[:5]):
+                    pointer = "🥕 " if i == 0 else "   "
+                    cmd_col = f"\x1b[1;38;2;255;122;0m{cmd:<10}\x1b[0m"
+                    desc_col = f"\x1b[38;2;156;163;175m{desc[:48]}\x1b[0m"
+                    sys.stdout.write(f"\n\x1b[2K  {pointer}{cmd_col} \x1b[2m│\x1b[0m {desc_col}")
+                sys.stdout.write("\x1b[u")  # Restore cursor back to prompt line
+
+        # Set cursor to correct column
+        pfx_len = len(prompt_prefix)
+        col = pfx_len + cursor_pos + 1
+        sys.stdout.write(f"\x1b[{col}G")
         sys.stdout.flush()
+        return dropdown_count
 
     def read_prompt(self, prompt_prefix: str = "🥕 mia › ") -> str:
-        """Read prompt with instant slash hints when '/' is typed and full history navigation."""
+        """Read prompt with real-time character-by-character slash filtering and tab autocomplete."""
         if not sys.stdin.isatty():
             try:
                 line = input(prompt_prefix).strip()
@@ -227,37 +256,32 @@ class LiveInteractivePrompt:
         buffer = ""
         cursor_pos = 0
         self._history_idx = -1
-
-        def redraw_line() -> None:
-            colored_pfx = f"\x1b[1;38;2;255;122;0m{prompt_prefix}\x1b[0m"
-            sys.stdout.write(f"\r\x1b[K{colored_pfx}{buffer}")
-            # Move cursor to proper column
-            pfx_len = len(prompt_prefix)
-            target_col = pfx_len + cursor_pos + 1
-            sys.stdout.write(f"\r\x1b[{target_col}C")
-            sys.stdout.flush()
+        dropdown_count = 0
 
         try:
             tty.setcbreak(fd)
-            redraw_line()
+            dropdown_count = self._render_state(prompt_prefix, buffer, cursor_pos, dropdown_count)
 
             while True:
                 char = sys.stdin.read(1)
 
                 # Ctrl+C
                 if char == "\x03":
+                    self._clear_dropdown(dropdown_count)
                     sys.stdout.write("\n")
                     sys.stdout.flush()
                     raise KeyboardInterrupt
 
                 # Ctrl+D
                 if char == "\x04" and not buffer:
+                    self._clear_dropdown(dropdown_count)
                     sys.stdout.write("\n")
                     sys.stdout.flush()
                     raise EOFError
 
                 # Enter (\r or \n)
                 if char in ("\r", "\n"):
+                    self._clear_dropdown(dropdown_count)
                     sys.stdout.write("\n")
                     sys.stdout.flush()
                     line = buffer.strip()
@@ -266,37 +290,39 @@ class LiveInteractivePrompt:
                         self._save_history()
                     return line
 
-                # Instant Slash Hint: when user types '/' as the first character
-                if char == "/" and not buffer:
-                    buffer = "/"
-                    cursor_pos = 1
-                    self.print_quick_commands()
-                    redraw_line()
-                    continue
-
                 # Backspace (\x7f or \x08)
                 if char in ("\x7f", "\x08"):
                     if cursor_pos > 0:
                         buffer = buffer[: cursor_pos - 1] + buffer[cursor_pos:]
                         cursor_pos -= 1
-                        redraw_line()
+                        dropdown_count = self._render_state(
+                            prompt_prefix, buffer, cursor_pos, dropdown_count
+                        )
                     continue
 
                 # Tab (\t) -> Autocomplete matching slash command
                 if char == "\t":
                     if buffer.startswith("/"):
-                        matches = [cmd for cmd, _ in COMMAND_HINTS if cmd.startswith(buffer)]
+                        query = buffer.split()[0].lower()
+                        matches = [cmd for cmd, _ in COMMAND_HINTS if cmd.startswith(query)]
                         if len(matches) == 1:
                             buffer = matches[0] + " "
                             cursor_pos = len(buffer)
-                            redraw_line()
-                        elif len(matches) > 1:
-                            sys.stdout.write(
-                                "\n"
-                                + "  ".join(f"\x1b[1;38;2;255;122;0m{m}\x1b[0m" for m in matches)
-                                + "\n"
+                            dropdown_count = self._render_state(
+                                prompt_prefix, buffer, cursor_pos, dropdown_count
                             )
-                            redraw_line()
+                        elif len(matches) > 1:
+                            # Complete common prefix
+                            prefix = matches[0]
+                            for m in matches[1:]:
+                                while not m.startswith(prefix) and prefix:
+                                    prefix = prefix[:-1]
+                            if len(prefix) > len(buffer):
+                                buffer = prefix
+                                cursor_pos = len(buffer)
+                            dropdown_count = self._render_state(
+                                prompt_prefix, buffer, cursor_pos, dropdown_count
+                            )
                     continue
 
                 # ANSI Escape Sequences (Arrows)
@@ -313,7 +339,9 @@ class LiveInteractivePrompt:
                                     self._history_idx -= 1
                                 buffer = self.history[self._history_idx]
                                 cursor_pos = len(buffer)
-                                redraw_line()
+                                dropdown_count = self._render_state(
+                                    prompt_prefix, buffer, cursor_pos, dropdown_count
+                                )
                         # Down arrow -> History next
                         elif seq2 == "B":
                             if self._history_idx != -1:
@@ -324,22 +352,30 @@ class LiveInteractivePrompt:
                                     self._history_idx = -1
                                     buffer = ""
                                 cursor_pos = len(buffer)
-                                redraw_line()
+                                dropdown_count = self._render_state(
+                                    prompt_prefix, buffer, cursor_pos, dropdown_count
+                                )
                         # Left arrow
                         elif seq2 == "D" and cursor_pos > 0:
                             cursor_pos -= 1
-                            redraw_line()
+                            dropdown_count = self._render_state(
+                                prompt_prefix, buffer, cursor_pos, dropdown_count
+                            )
                         # Right arrow
                         elif seq2 == "C" and cursor_pos < len(buffer):
                             cursor_pos += 1
-                            redraw_line()
+                            dropdown_count = self._render_state(
+                                prompt_prefix, buffer, cursor_pos, dropdown_count
+                            )
                     continue
 
                 # Normal printable characters
                 if char.isprintable():
                     buffer = buffer[:cursor_pos] + char + buffer[cursor_pos:]
                     cursor_pos += 1
-                    redraw_line()
+                    dropdown_count = self._render_state(
+                        prompt_prefix, buffer, cursor_pos, dropdown_count
+                    )
 
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
