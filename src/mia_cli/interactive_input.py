@@ -85,29 +85,34 @@ class SlashCompleter(Completer):
                 )
 
 
-def format_status_info(
+def format_status_toolbar(
     workspace_name: str = "mia",
     model_name: str = "mimo-v2.5",
     tokens: int = 0,
     window_tokens: int = 128000,
     thinking_enabled: bool = False,
 ) -> HTML:
-    """Render clean inline status info badge directly on the prompt line (rprompt)."""
+    """Render clean status info line below the prompt, adjusted with zero background."""
     pct = (tokens / max(1, window_tokens)) * 100
     pct_str = f"{pct:.1f}%" if tokens > 0 else "0%"
     tokens_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(tokens)
     window_str = f"{window_tokens // 1000}k" if window_tokens >= 1000 else str(window_tokens)
 
-    thinking_badge = " <style fg='#FF7A00'>[💭 on]</style>" if thinking_enabled else ""
+    thinking_badge = (
+        " <style fg='#FF7A00'>[💭 on]</style>"
+        if thinking_enabled
+        else " <style fg='#6B7280'>[💭 off]</style>"
+    )
 
     return HTML(
-        f"<style fg='#6B7280'>📁 <b>{workspace_name}</b> │ "
-        f"🧠 <b>{model_name}</b> │ "
-        f"⚡ {tokens_str}/{window_str} ({pct_str}){thinking_badge}</style>"
+        f"<style fg='#9CA3AF'><b>📁 {workspace_name}</b> │ "
+        f"<b>🧠 {model_name}</b> │ "
+        f"⚡ {tokens_str}/{window_str} ({pct_str}){thinking_badge} │ "
+        f"<b>Esc:</b> Cancel/Tree • <b>Ctrl+O:</b> Logs • <b>/help</b></style>"
     )
 
 
-format_status_toolbar = format_status_info
+format_status_info = format_status_toolbar
 
 
 class LivePromptSession:
@@ -117,13 +122,11 @@ class LivePromptSession:
         self,
         history_file: Path | None = None,
         toolbar_callback: Callable[[], AnyFormattedText] | None = None,
-        rprompt_callback: Callable[[], AnyFormattedText] | None = None,
     ) -> None:
         self.history_file = history_file or (Path.home() / ".mia" / "history")
         self.history_file.parent.mkdir(parents=True, exist_ok=True)
         self.history = FileHistory(str(self.history_file))
-        self.rprompt_callback = rprompt_callback or toolbar_callback
-        self.toolbar_callback = None
+        self.toolbar_callback = toolbar_callback
         self.completer = SlashCompleter()
         self.bindings = self._create_keybindings()
         self.session: PromptSession[str] = PromptSession(
@@ -181,24 +184,21 @@ class LivePromptSession:
     async def read_prompt_async(
         self,
         prompt_prefix: str = "› ",
-        rprompt: Any = None,
         bottom_toolbar: Any = None,
     ) -> str:
-        """Async prompt user with floating slash completions, inline rprompt info, and bracketed paste."""
+        """Async prompt user with floating slash completions, bracketed paste, and adjusted bottom info."""
         if not sys.stdin.isatty():
             try:
                 return input(prompt_prefix).strip()
             except EOFError:
                 raise
 
-        rprompt_val = rprompt or (self.rprompt_callback() if self.rprompt_callback else None)
         toolbar_val = bottom_toolbar or (self.toolbar_callback() if self.toolbar_callback else None)
         formatted_prompt: AnyFormattedText = [("class:prompt", prompt_prefix)]
 
         try:
             result = await self.session.prompt_async(
                 formatted_prompt,
-                rprompt=rprompt_val,
                 bottom_toolbar=toolbar_val,
                 reserve_space_for_menu=6,
             )
@@ -212,24 +212,21 @@ class LivePromptSession:
     def read_prompt(
         self,
         prompt_prefix: str = "› ",
-        rprompt: Any = None,
         bottom_toolbar: Any = None,
     ) -> str:
-        """Prompt user with floating slash completions, inline rprompt info, and bracketed paste."""
+        """Prompt user with floating slash completions, bracketed paste, and adjusted bottom info."""
         if not sys.stdin.isatty():
             try:
                 return input(prompt_prefix).strip()
             except EOFError:
                 raise
 
-        rprompt_val = rprompt or (self.rprompt_callback() if self.rprompt_callback else None)
         toolbar_val = bottom_toolbar or (self.toolbar_callback() if self.toolbar_callback else None)
         formatted_prompt: AnyFormattedText = [("class:prompt", prompt_prefix)]
 
         try:
             result = self.session.prompt(
                 formatted_prompt,
-                rprompt=rprompt_val,
                 bottom_toolbar=toolbar_val,
                 reserve_space_for_menu=6,
             )

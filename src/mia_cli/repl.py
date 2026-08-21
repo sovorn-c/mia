@@ -35,7 +35,7 @@ from mia_ai.providers.base import LLMProvider
 from mia_ai.providers.openai_compatible import OpenAICompatibleProvider
 from mia_cli.interactive_input import (
     LivePromptSession,
-    format_status_info,
+    format_status_toolbar,
     interactive_select,
 )
 from mia_cli.renderers.rich_stream import RichStreamRenderer
@@ -197,18 +197,18 @@ class MiaREPL:
         )
         self._history_file = Path.home() / ".mia" / "history"
 
-        # Initialize prompt_toolkit session with inline rprompt info (on the prompt line)
+        # Initialize prompt_toolkit session with adjusted live status toolbar below prompt
         self.prompt_session = LivePromptSession(
             history_file=self._history_file,
-            rprompt_callback=self._render_status_info,
+            toolbar_callback=self._render_toolbar,
         )
         self._init_harness()
 
-    def _render_status_info(self) -> Any:
-        """Render clean inline status badge next to the prompt on the same line (rprompt)."""
+    def _render_toolbar(self) -> Any:
+        """Render clean status info below prompt, adjusted with 0 background."""
         ws_name = self.cwd.name or "workspace"
         m_name = self.model_name or "no model (/login)"
-        return format_status_info(
+        return format_status_toolbar(
             workspace_name=ws_name,
             model_name=m_name,
             tokens=self.total_tokens,
