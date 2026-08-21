@@ -38,12 +38,16 @@ COMMAND_HINTS: list[tuple[str, str]] = [
 MIA_STYLE = Style.from_dict(
     {
         "prompt": "bold #FF7A00",
-        "completion-menu": "bg:#282C34 #E5E7EB",
-        "completion-menu.completion": "bg:#282C34 #E5E7EB",
-        "completion-menu.completion.current": "bold bg:#FF7A00 #000000",
-        "completion-menu.meta": "bg:#21252B #9CA3AF italic",
-        "completion-menu.meta.completion.current": "bold bg:#FF7A00 #202020",
-        "bottom-toolbar": "bg:#161922 #9CA3AF",
+        "completion-menu": "noinherit",
+        "completion-menu.completion": "noinherit #E5E7EB",
+        "completion-menu.completion.current": "bold #FF7A00",
+        "completion-menu.meta": "noinherit #6B7280 italic",
+        "completion-menu.meta.completion.current": "bold #FF7A00 italic",
+        "completion-menu.multi-column-meta": "noinherit #6B7280",
+        "scrollbar": "noinherit",
+        "scrollbar.background": "noinherit",
+        "scrollbar.button": "noinherit #FF7A00",
+        "bottom-toolbar": "noinherit #9CA3AF",
         "bottom-toolbar.accent": "bold #FF7A00",
         "bottom-toolbar.dim": "#6B7280",
     }
@@ -86,7 +90,7 @@ def format_status_toolbar(
     window_tokens: int = 128000,
     thinking_enabled: bool = False,
 ) -> HTML:
-    """Render a clean, 1-line pinned status toolbar below the prompt."""
+    """Render a clean, 1-line pinned status toolbar below the prompt with zero background."""
     pct = (tokens / max(1, window_tokens)) * 100
     pct_str = f"{pct:.1f}%" if tokens > 0 else "0%"
     tokens_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(tokens)
@@ -99,10 +103,10 @@ def format_status_toolbar(
     )
 
     return HTML(
-        f"<b>📁 {workspace_name}</b> │ "
+        f"<style fg='#9CA3AF'><b>📁 {workspace_name}</b> │ "
         f"<b>🧠 {model_name}</b> │ "
         f"⚡ {tokens_str}/{window_str} ({pct_str}){thinking_badge} │ "
-        f"<style fg='#9CA3AF'><b>Esc:</b> Tree • <b>Ctrl+O:</b> Logs • <b>/help</b></style>"
+        f"<b>Esc:</b> Cancel/Tree • <b>Ctrl+O:</b> Logs • <b>/help</b></style>"
     )
 
 
@@ -147,11 +151,16 @@ class LivePromptSession:
         def _insert_newline_alt(event: KeyPressEvent) -> None:
             event.current_buffer.insert_text("\n")
 
-        # Esc: Session tree navigator shortcut
+        # Esc: Cancel completion, or clear buffer, or open /tree if empty
         @kb.add("escape")
-        def _tree_shortcut(event: KeyPressEvent) -> None:
-            event.current_buffer.text = "/tree"
-            event.current_buffer.validate_and_handle()
+        def _escape_handler(event: KeyPressEvent) -> None:
+            if event.current_buffer.complete_state:
+                event.current_buffer.cancel_completion()
+            elif event.current_buffer.text:
+                event.current_buffer.reset()
+            else:
+                event.current_buffer.text = "/tree"
+                event.current_buffer.validate_and_handle()
 
         # Ctrl+O: Post-turn detail audit inspector shortcut
         @kb.add("c-o")
@@ -322,19 +331,30 @@ def interactive_select(
                     sys.stdout.flush()
                     return options[current_idx][0]
 
-            # ANSI Arrow Navigation
+            # ANSI Arrow Navigation or Standalone Escape (Esc to cancel/go back)
             if char == "\x1b":
+                import select
+
+                r, _, _ = select.select([sys.stdin], [], [], 0.05)
+                if not r:
+                    # Standalone Esc pressed -> cancel selection cleanly
+                    sys.stdout.write("\n\x1b[2;37m(Selection cancelled)\x1b[0m\n\n")
+                    sys.stdout.flush()
+                    return None
+
                 seq1 = sys.stdin.read(1)
                 if seq1 == "[":
-                    seq2 = sys.stdin.read(1)
-                    if seq2 == "A":  # Up Arrow
-                        current_idx = (current_idx - 1) % num_options
-                        sys.stdout.write(f"\x1b[{num_options}A")
-                        render_all(current_idx)
-                    elif seq2 == "B":  # Down Arrow
-                        current_idx = (current_idx + 1) % num_options
-                        sys.stdout.write(f"\x1b[{num_options}A")
-                        render_all(current_idx)
+                    r2, _, _ = select.select([sys.stdin], [], [], 0.05)
+                    if r2:
+                        seq2 = sys.stdin.read(1)
+                        if seq2 == "A":  # Up Arrow
+                            current_idx = (current_idx - 1) % num_options
+                            sys.stdout.write(f"\x1b[{num_options}A")
+                            render_all(current_idx)
+                        elif seq2 == "B":  # Down Arrow
+                            current_idx = (current_idx + 1) % num_options
+                            sys.stdout.write(f"\x1b[{num_options}A")
+                            render_all(current_idx)
 
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
