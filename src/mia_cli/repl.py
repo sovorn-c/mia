@@ -99,14 +99,12 @@ PROVIDER_CATALOG: dict[str, dict[str, Any]] = {
         "id": "opencode-go",
         "name": "OpenCode Zen (OpenCode-Go API)",
         "base_url": "https://opencode.ai/zen/go/v1",
-        "default_model": "mimo-v2.5",
         "models": ["mimo-v2.5", "qwen2.5-coder-32b-instruct", "deepseek-v3"],
     },
     "2": {
         "id": "openrouter",
         "name": "OpenRouter (Multi-Model Gateway)",
         "base_url": "https://openrouter.ai/api/v1",
-        "default_model": "anthropic/claude-3.7-sonnet",
         "models": [
             "anthropic/claude-3.7-sonnet",
             "deepseek/deepseek-r1",
@@ -118,35 +116,30 @@ PROVIDER_CATALOG: dict[str, dict[str, Any]] = {
         "id": "gemini",
         "name": "Google Gemini (Gemini API)",
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "default_model": "gemini-2.5-flash",
         "models": ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
     },
     "4": {
         "id": "openai",
         "name": "OpenAI (GPT-4o / o1 / o3-mini)",
         "base_url": "https://api.openai.com/v1",
-        "default_model": "gpt-4o",
         "models": ["gpt-4o", "gpt-4o-mini", "o3-mini", "o1"],
     },
     "5": {
         "id": "anthropic",
         "name": "Anthropic (Claude 3.5 / 3.7 Sonnet)",
         "base_url": "https://api.anthropic.com/v1",
-        "default_model": "claude-3-7-sonnet",
         "models": ["claude-3-7-sonnet", "claude-3-5-sonnet-20241022", "claude-3-5-haiku"],
     },
     "6": {
         "id": "deepseek",
         "name": "DeepSeek (DeepSeek-V3 / DeepSeek-R1)",
         "base_url": "https://api.deepseek.com/v1",
-        "default_model": "deepseek-chat",
         "models": ["deepseek-chat", "deepseek-reasoner"],
     },
     "7": {
         "id": "custom",
         "name": "Custom OpenAI-Compatible / Local (Ollama, vLLM, local)",
         "base_url": "http://localhost:11434/v1",
-        "default_model": "custom-model",
         "models": [],
     },
 }
@@ -312,7 +305,6 @@ class MiaREPL:
                 None,
             )
             base_url = preset["base_url"] if preset else "https://opencode.ai/zen/go/v1"
-            chosen_model = preset["default_model"] if preset else "mimo-v2.5"
             is_oauth = False
         else:
             # Top-level choice: API Key vs Auth
@@ -338,7 +330,6 @@ class MiaREPL:
                 selected_provider = "openai"
                 preset = next((p for p in PROVIDER_CATALOG.values() if p["id"] == "openai"), None)
                 base_url = preset["base_url"] if preset else "https://api.openai.com/v1"
-                chosen_model = preset["default_model"] if preset else "gpt-4o"
             else:
                 is_oauth = False
                 provider_options = [
@@ -359,7 +350,6 @@ class MiaREPL:
                     (p for p in PROVIDER_CATALOG.values() if p["id"] == selected_provider), None
                 )
                 base_url = preset["base_url"] if preset else "https://opencode.ai/zen/go/v1"
-                chosen_model = preset["default_model"] if preset else "mimo-v2.5"
 
         if selected_provider == "custom":
             try:
@@ -394,9 +384,12 @@ class MiaREPL:
                 self.console.print("\n[yellow]OAuth cancelled.[/yellow]\n")
                 return
 
-            self._save_auth_state(selected_provider, chosen_model, base_url)
+            self._save_auth_state(selected_provider, base_url)
             self.console.print(
-                f"[bold green]✓ Validated & Authenticated {selected_provider} via Auth. Saved to ~/.mia/credentials.json[/bold green]\n"
+                f"[bold green]✓ Validated & Authenticated {selected_provider} via Auth. Saved to ~/.mia/credentials.json[/bold green]"
+            )
+            self.console.print(
+                "[dim]Next: Use [bold white]/model[/bold white] to choose your active model.[/dim]\n"
             )
             return
 
@@ -429,21 +422,23 @@ class MiaREPL:
 
                 self.cred_store.set_api_key(selected_provider, api_key)
 
-            self._save_auth_state(selected_provider, chosen_model, base_url)
+            self._save_auth_state(selected_provider, base_url)
             self.console.print(
-                f"[bold green]✓ Validated & Authenticated {selected_provider}. Saved to ~/.mia/credentials.json[/bold green]\n"
+                f"[bold green]✓ Validated & Authenticated {selected_provider}. Saved to ~/.mia/credentials.json[/bold green]"
+            )
+            self.console.print(
+                "[dim]Next: Use [bold white]/model[/bold white] to choose your active model.[/dim]\n"
             )
 
         except (KeyboardInterrupt, EOFError):
             self.console.print("\n[yellow]Login cancelled.[/yellow]\n")
 
-    def _save_auth_state(self, provider_id: str, default_model: str, base_url: str) -> None:
-        """Persist default provider and model to config and reinitialize harness."""
+    def _save_auth_state(self, provider_id: str, base_url: str) -> None:
+        """Persist provider credentials and base URL without setting a phantom model."""
         current_cfg = self.config_mgr.config
-        target_model = self.model_name or default_model
         updated_cfg = MiaConfig(
             default_provider=provider_id,
-            default_model=target_model,
+            default_model=self.model_name or "",
             base_urls={**current_cfg.base_urls, provider_id: base_url},
             max_steps_per_turn=current_cfg.max_steps_per_turn,
             temperature=current_cfg.temperature,
@@ -452,8 +447,6 @@ class MiaREPL:
             keep_recent_tokens=current_cfg.keep_recent_tokens,
         )
         self.config_mgr.save_config(updated_cfg)
-        self.model_name = target_model
-        self.config_mgr = ConfigManager()
         self._init_harness()
 
     def handle_logout(self, target_provider: str | None = None) -> None:

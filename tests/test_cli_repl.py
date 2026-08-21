@@ -78,6 +78,11 @@ def test_repl_pi_style_auth_and_model_scoper(tmp_path: Path) -> None:
 
     saved_key = repl.cred_store.get_api_key("opencode-go")
     assert saved_key == "sk-test-opencode-key-123"
+    assert repl.model_name is None
+
+    # Now pick model with /model
+    with patch("builtins.input", return_value="1"):
+        repl.interactive_model_picker()
     assert repl.model_name == "mimo-v2.5"
 
 
