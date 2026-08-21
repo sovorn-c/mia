@@ -911,13 +911,18 @@ class MiaREPL:
                     "[dim]To switch: /profile <name> (e.g. /profile architect)[/dim]\n"
                 )
             else:
-                self.profile_name = args
-                self._init_harness()
-                self.console.print(
-                    f"[bold green]✓ Switched profile to {self.profile_name}[/bold green]\n"
-                )
+                try:
+                    profile = self.profile_mgr.get_profile(args)
+                except ValueError as exc:
+                    self.console.print(f"[yellow]{exc}[/yellow]\n")
+                else:
+                    self.profile_name = profile.name
+                    self._init_harness()
+                    self.console.print(
+                        f"[bold green]✓ Switched profile to {self.profile_name}[/bold green]\n"
+                    )
 
-        elif cmd in ("/diff", "/changes"):
+        elif cmd in ("/diff", "/changes"): 
             try:
                 res = subprocess.run(
                     ["git", "diff"],
