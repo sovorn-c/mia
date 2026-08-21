@@ -251,3 +251,31 @@ def list_sessions_command(
         table.add_row(sf.stem, f"{size_kb:.1f} KB", str(sf))
 
     console.print(table)
+
+
+@app.command(name="tui")
+def tui_command(
+    model: Annotated[str | None, typer.Option("--model", "-m", help="Default model")] = None,
+) -> None:
+    """Launch the modern full-screen Mia Herd Textual TUI."""
+    from mia_cli.tui.app import MiaHerdApp
+
+    config_mgr = ConfigManager()
+    target_model = model or config_mgr.config.default_model
+    tui_app = MiaHerdApp(model_name=target_model)
+    tui_app.run()
+
+
+@app.callback(invoke_without_command=True)
+def main_callback(
+    ctx: typer.Context,
+    model: Annotated[str | None, typer.Option("--model", "-m", help="Default model")] = None,
+) -> None:
+    """Default callback: launch Mia Herd TUI if no subcommand was provided."""
+    if ctx.invoked_subcommand is None:
+        from mia_cli.tui.app import MiaHerdApp
+
+        config_mgr = ConfigManager()
+        target_model = model or config_mgr.config.default_model
+        tui_app = MiaHerdApp(model_name=target_model)
+        tui_app.run()
