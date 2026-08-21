@@ -51,8 +51,8 @@ def test_command_discovery_has_one_truthful_canonical_list() -> None:
     assert len(canonical) == 17
     assert "/mode" in canonical
     assert "/stop" not in canonical
-    assert SLASH_COMMANDS == canonical
-    assert list(COMMAND_DESCRIPTIONS) == canonical
+    assert canonical == SLASH_COMMANDS
+    assert canonical == list(COMMAND_DESCRIPTIONS)
     assert "/abort" not in COMMAND_ALIASES
 
 

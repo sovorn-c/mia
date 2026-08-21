@@ -38,53 +38,11 @@ from mia_agent.session.entries import LeafEntry, MessageEntry, SessionInfoEntry
 from mia_agent.session.jsonl import JsonlSessionStore
 from mia_agent.session.tree import SessionTree
 from mia_ai.providers.base import LLMProvider
-from mia_cli.interactive_input import (
-    LivePromptSession,
-    interactive_select,
-)
+from mia_cli.interactive_input import COMMAND_HINTS, LivePromptSession, interactive_select
 from mia_cli.renderers.rich_stream import RichStreamRenderer
 
-SLASH_COMMANDS = [
-    "/help",
-    "/login",
-    "/logout",
-    "/mode",
-    "/model",
-    "/profile",
-    "/diff",
-    "/cost",
-    "/compact",
-    "/sessions",
-    "/resume",
-    "/tree",
-    "/inspect",
-    "/thinking",
-    "/stop",
-    "/init",
-    "/clear",
-    "/quit",
-]
-
-COMMAND_DESCRIPTIONS: dict[str, str] = {
-    "/help": "Show complete command menu, shortcuts & tools (alias: /?)",
-    "/login": "Authenticate AI provider via API key or OpenAI Auth (alias: /auth)",
-    "/logout": "Remove stored credentials & sign out of providers (alias: /signout)",
-    "/mode": "Show or select the orchestration mode used for prompts",
-    "/model": "Interactive model picker & switcher scoped to authenticated providers (alias: /llm)",
-    "/profile": "View or switch agent persona (alias: /role, /persona)",
-    "/diff": "View git diff of session modifications with Monokai syntax (alias: /changes)",
-    "/cost": "Show real-time session tokens and estimated USD cost (alias: /stats, /tokens)",
-    "/compact": "Check/trigger context window compaction (alias: /compress)",
-    "/sessions": "List saved JSONL session history trees (alias: /history)",
-    "/resume": "Resume a saved session; Ctrl+D/d deletes the selected saved session",
-    "/tree": "Explore and fork session conversation branch (alias: /branch)",
-    "/inspect": "Open post-turn detail audit viewer and file diffs (alias: /logs)",
-    "/thinking": "Toggle display of model reasoning / thinking tokens (alias: /trace)",
-    "/stop": "Halt the active running agent turn (alias: /abort)",
-    "/init": "Inspect repository context, rules & AGENTS.md (alias: /bootstrap)",
-    "/clear": "Clear terminal screen and redraw banner (alias: /cls)",
-    "/quit": "Save session tree and exit cleanly (alias: /exit)",
-}
+SLASH_COMMANDS = [command for command, _ in COMMAND_HINTS]
+COMMAND_DESCRIPTIONS: dict[str, str] = dict(COMMAND_HINTS)
 
 COMMAND_ALIASES: dict[str, str] = {
     "/?": "/help",
@@ -102,7 +60,6 @@ COMMAND_ALIASES: dict[str, str] = {
     "/branch": "/tree",
     "/logs": "/inspect",
     "/trace": "/thinking",
-    "/abort": "/stop",
     "/bootstrap": "/init",
     "/cls": "/clear",
     "/exit": "/quit",
@@ -811,7 +768,7 @@ class MiaREPL:
         )
 
     def print_command_menu(self, filter_prefix: str | None = None) -> None:
-        """Render the 13 essential commands palette with descriptions and examples."""
+        """Render the 17 canonical commands with descriptions and aliases."""
         table = Table(
             title="🥕 Mia Essential Slash Commands",
             border_style="#2D3342",
@@ -880,7 +837,7 @@ class MiaREPL:
 
         except asyncio.CancelledError:
             self.stream_renderer._stop_status()
-            self.console.print("\n[yellow]⚠️  Turn halted by user (/stop or Ctrl+C).[/yellow]\n")
+            self.console.print("\n[yellow]⚠️  Turn halted by user (Ctrl+C).[/yellow]\n")
         except Exception as exc:
             self.stream_renderer._stop_status()
             self.console.print(f"\n[bold red]Error during execution:[/bold red] {exc}\n")
@@ -1017,9 +974,6 @@ class MiaREPL:
             self.console.print(
                 f"[bold #FF7A00]💭 Model reasoning trace is now {state_str}.[/bold #FF7A00]\n"
             )
-
-        elif cmd in ("/stop", "/abort"):
-            self.console.print("[yellow]No active turn running.[/yellow]\n")
 
         elif cmd in ("/init", "/bootstrap"):
             has_git = (self.cwd / ".git").exists()
