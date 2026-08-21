@@ -1,4 +1,4 @@
-"""Active agent transcript pane container managing cards and live stream rendering."""
+"""Active agent transcript pane container with Pi-style minimal cards and auto-scroll."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from mia_agent.events import (
     AssistantChunkEvent,
     ToolCallEvent,
     ToolResultEvent,
+    TurnCompleteEvent,
     TurnStartEvent,
 )
 from mia_cli.tui.widgets.message_card import AssistantMessageCard, UserMessageCard
@@ -22,7 +23,7 @@ from mia_cli.tui.widgets.tool_card import ToolCallCard
 
 
 class AgentTranscriptView(VerticalScroll):
-    """Scrollable transcript for a single agent."""
+    """Scrollable transcript for a single agent with smart scroll-pinning."""
 
     def __init__(self, agent_id: str, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -32,7 +33,7 @@ class AgentTranscriptView(VerticalScroll):
         self._active_tool_cards: dict[str, ToolCallCard] = {}
 
     def add_user_message(self, prompt: str) -> None:
-        """Add user prompt card."""
+        """Add user prompt card and scroll to bottom."""
         self._current_assistant_card = None
         self._current_thought_drawer = None
         card = UserMessageCard(prompt=prompt, target_agent=self.agent_id)
@@ -59,7 +60,7 @@ class AgentTranscriptView(VerticalScroll):
 
             if event.delta_text:
                 if self._current_thought_drawer and not self._current_thought_drawer.is_collapsed:
-                    # Auto-collapse thought drawer when real response starts
+                    # Auto-collapse thought drawer when real response begins
                     self._current_thought_drawer.toggle_collapse()
 
                 if not self._current_assistant_card:
@@ -72,6 +73,9 @@ class AgentTranscriptView(VerticalScroll):
                 self.scroll_end(animate=False)
 
         elif isinstance(event, ToolCallEvent):
+            if self._current_thought_drawer and not self._current_thought_drawer.is_collapsed:
+                self._current_thought_drawer.toggle_collapse()
+
             self._current_assistant_card = None
             self._current_thought_drawer = None
             card = ToolCallCard(
@@ -93,9 +97,14 @@ class AgentTranscriptView(VerticalScroll):
                 )
             self.scroll_end(animate=False)
 
+        elif isinstance(event, TurnCompleteEvent):
+            if self._current_thought_drawer:
+                self._current_thought_drawer.complete()
+            self.scroll_end(animate=False)
+
 
 class AgentPaneContainer(Vertical):
-    """Container holding active transcript panes for all agents and switching visibility."""
+    """Container managing active and background agent transcript views."""
 
     def __init__(self, active_agent_id: str = "lead", **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -115,7 +124,8 @@ class AgentPaneContainer(Vertical):
         self.header_title.update(
             Text.assemble(
                 ("🥕 Active Stream: ", "bold #FF7A00"),
-                (f"@{agent_id}", "bold #38BDF8"),
+                (f"@{agent_id}  ", "bold #38BDF8"),
+                ("│  (Background agents continue running)", "dim #6B7280"),
             )
         )
 

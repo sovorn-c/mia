@@ -1,24 +1,24 @@
-"""Main Textual Application for Mia AI Coding Agent."""
+"""Main Textual Application for Mia AI Coding Agent with managed async workers."""
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from typing import Any
 
 from rich.text import Text
+from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal
 from textual.widgets import Static
 
 from mia_agent.events import AssistantChunkEvent
 from mia_agent.herd.manager import HerdManager
 from mia_agent.herd.models import AgentEventEnvelope, HerdEvent
-from mia_cli.tui.input import PromptInputBar
 from mia_cli.tui.panes import AgentPaneContainer
 from mia_cli.tui.sidebar import AgentSidebar
 from mia_cli.tui.theme import MIA_THEME_CSS
+from mia_cli.tui.widgets.prompt_editor import MiaPromptEditor
 
 
 class MiaHeader(Static):
@@ -97,7 +97,7 @@ class MiaApp(App[None]):
         self.header_widget = MiaHeader(model_name=self.model_name)
         self.sidebar_widget = AgentSidebar(agents=[], active_id=self.active_agent_id)
         self.pane_container = AgentPaneContainer(active_agent_id=self.active_agent_id)
-        self.input_bar = PromptInputBar(default_target=self.active_agent_id)
+        self.prompt_editor = MiaPromptEditor(default_target=self.active_agent_id)
         self.footer_widget = MiaFooter()
 
     def compose(self) -> ComposeResult:
@@ -105,8 +105,7 @@ class MiaApp(App[None]):
         with Horizontal(id="main-layout"):
             yield self.sidebar_widget
             yield self.pane_container
-        with Vertical(id="input-container"):
-            yield self.input_bar
+        yield self.prompt_editor
         yield self.footer_widget
 
     def on_mount(self) -> None:
@@ -151,19 +150,19 @@ class MiaApp(App[None]):
         """User selected an agent from the sidebar."""
         self.active_agent_id = message.agent_id
         self.pane_container.switch_to_agent(self.active_agent_id)
-        self.input_bar.set_target(self.active_agent_id)
+        self.prompt_editor.set_target(self.active_agent_id)
 
-    def on_prompt_input_bar_slash_command_triggered(
-        self, message: PromptInputBar.SlashCommandTriggered
+    def on_mia_prompt_editor_slash_command_triggered(
+        self, message: MiaPromptEditor.SlashCommandTriggered
     ) -> None:
-        """Handle slash commands (/help, /model, /profile, /clear, /quit)."""
+        """Handle slash commands (/help, /model, /clear, /quit)."""
         cmd = message.command
         args = message.args
 
         if cmd == "help":
             help_msg = (
                 "**🥕 Mia Commands & Shortcuts:**\n\n"
-                "- `@<agent> <prompt>`: Send message to specific agent (e.g. `@coder fix test`)\n"
+                "- `@<agent> <prompt>`: Send message to specific agent (e.g. `@coder fix tests`)\n"
                 "- `/model <name>`: Switch active model (e.g. `/model mimo-v2.5`)\n"
                 "- `/clear`: Clear active agent transcript\n"
                 "- `Alt+1..9`: Switch between active agents\n"
@@ -189,7 +188,9 @@ class MiaApp(App[None]):
         elif cmd == "quit":
             self.exit()
 
-    def on_prompt_input_bar_prompt_submitted(self, message: PromptInputBar.PromptSubmitted) -> None:
+    def on_mia_prompt_editor_prompt_submitted(
+        self, message: MiaPromptEditor.PromptSubmitted
+    ) -> None:
         """User submitted a prompt for an agent."""
         target_id = message.target_agent
         prompt_text = message.prompt_text
@@ -209,13 +210,14 @@ class MiaApp(App[None]):
         )
         self.pane_container.switch_to_agent(self.active_agent_id)
         self.pane_container.add_user_message(self.active_agent_id, prompt_text)
-        self.input_bar.set_target(self.active_agent_id)
+        self.prompt_editor.set_target(self.active_agent_id)
 
-        # Launch agent turn in background
-        asyncio.create_task(self._run_agent_turn(target_id, prompt_text))
+        # Launch managed background agent worker
+        self.run_agent_turn_worker(target_id, prompt_text)
 
-    async def _run_agent_turn(self, agent_id: str, prompt_text: str) -> None:
-        """Execute agent turn asynchronously in background task."""
+    @work(exclusive=False, thread=False)
+    async def run_agent_turn_worker(self, agent_id: str, prompt_text: str) -> None:
+        """Execute agent turn within Textual's managed async worker framework."""
         try:
             async for _ in self.herd_manager.run_agent(agent_id, prompt_text):
                 pass
@@ -230,7 +232,7 @@ class MiaApp(App[None]):
             self.active_agent_id = target.id
             self.sidebar_widget.update_agent_list(agents, active_id=self.active_agent_id)
             self.pane_container.switch_to_agent(self.active_agent_id)
-            self.input_bar.set_target(self.active_agent_id)
+            self.prompt_editor.set_target(self.active_agent_id)
 
     def action_spawn_new_agent(self) -> None:
         """Spawn a new worker agent via Ctrl+N."""
