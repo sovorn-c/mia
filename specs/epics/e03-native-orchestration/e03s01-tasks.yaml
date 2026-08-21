@@ -52,7 +52,7 @@ tasks:
     verify: "uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py -k mode"
     risk: "P1"
     security: "low"
-    status: "failing"
+    status: "passing"
     allure:
       severity: "high"
       categories: ["CLI", "REPL", "Rendering", "integration"]
