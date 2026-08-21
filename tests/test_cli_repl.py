@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -13,10 +14,21 @@ from mia_cli.repl import MiaREPL, REPLCompleter
 
 def test_repl_completer_and_slash_menu(tmp_path: Path) -> None:
     completer = REPLCompleter(
-        ["/help", "/model", "/profile", "/compact", "/cost", "/sessions", "/clear", "/quit"]
+        [
+            "/help",
+            "/login",
+            "/model",
+            "/profile",
+            "/compact",
+            "/cost",
+            "/sessions",
+            "/clear",
+            "/quit",
+        ]
     )
 
     # Test prefix matching
+    assert completer.complete("/l", 0) == "/login"
     assert completer.complete("/m", 0) == "/model"
     assert completer.complete("/p", 0) == "/profile"
     assert completer.complete("/c", 0) == "/compact"
@@ -39,6 +51,24 @@ def test_repl_completer_and_slash_menu(tmp_path: Path) -> None:
     assert repl.handle_slash_command("/profile architect") is True
     assert repl.profile_name == "architect"
     assert repl.handle_slash_command("/quit") is False
+
+
+def test_repl_interactive_login_wizard(tmp_path: Path) -> None:
+    """Test interactive login wizard saves credentials and updates model."""
+    cred_file = tmp_path / "credentials.json"
+    mock = MockProvider()
+    repl = MiaREPL(cwd=tmp_path, custom_provider=mock)
+    repl.cred_store.path = cred_file
+
+    with (
+        patch("builtins.input", side_effect=["1"]),
+        patch("getpass.getpass", return_value="sk-test-opencode-key-123"),
+    ):
+        repl.interactive_login()
+
+    saved_key = repl.cred_store.get_api_key("opencode-go")
+    assert saved_key == "sk-test-opencode-key-123"
+    assert repl.model_name == "mimo-v2.5"
 
 
 @pytest.mark.asyncio

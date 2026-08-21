@@ -1,93 +1,87 @@
-# Master Specification: Mia Interactive Stream Harness & Developer CLI
+# Master Specification: Mia Production Developer Harness & Interactive CLI
 
-A permanent, version-controlled specification for the **Mia Interactive Coding Agent Harness**, designed for high-performance, stream-first terminal pair programming inspired by **Claude Code**, **Pi**, and **Aider**.
+A permanent, version-controlled specification for **Mia (Modular Intelligent Agent)**, following the Solo-Developer SDLC engineering standard.
 
 ---
 
-## 1. Architectural Blueprint & Philosophy
+## 1. Domain Architecture & Ubiquitous Language
 
-```mermaid
-graph TD
-    subgraph "Terminal Shell (Stream-First REPL Interface)"
-        Banner["MiaBanner: Working directory, model, profile, context tokens"]
-        PromptEngine["MiaREPL: Readline history, autocomplete, Ctrl+C interrupt handling"]
-        CommandPalette["Slash Command Router: /model, /profile, /compact, /cost, /sessions, /quit"]
-        ApprovalHandler["Interactive Security Approver: Inline [y/N/edit] for sensitive bash tools"]
-    end
+| Term | Canonical Definition | Role in Mia |
+|---|---|---|
+| **`MiaREPL`** | The interactive stream-first terminal pair-programming harness. | Primary developer interface (`mia`) |
+| **`FileCredentialStore`** | Persistent JSON store under `~/.mia/credentials.json`. | Multi-provider API key storage |
+| **`AuthSetupWizard`** | Guided interactive prompt to select provider and save API keys. | In-session `/login` and first-run onboarding |
+| **`AgentHarness`** | Deterministic headless async brain executing multi-turn turns. | Execution loop in `src/mia_agent/harness.py` |
+| **`RichStreamRenderer`** | Unified terminal renderer for thoughts, tool calls, diffs, and markdown. | Live visual streaming in `src/mia_cli/repl.py` |
+| **`ToolPipeline`** | Onion middleware wrapping tool execution with security and telemetry. | Guardrails in `src/mia_middleware/pipeline.py` |
 
-    subgraph "Stream Rendering Engine (RichStreamRenderer)"
-        ThoughtStream["Live Thought Streamer: 💭 Thinking (real-time delta updates)"]
-        ToolCardStream["Tool Execution Streamer: ▶ Tool: name(...) [✓ 1.2ms]"]
-        DiffStream["Monokai Syntax Diff Viewer (+ green / - red with line numbers)"]
-        ResponseStream["Markdown Response Stream with Pygments code fences"]
-    end
+---
 
-    subgraph "Deterministic Core Brain (mia_agent.harness)"
-        Harness["AgentHarness: Async event generator coordinating LLM & tools"]
-        Pipeline["ToolPipeline: SecurityGuard, AuditLog, CostBudget middlewares"]
-        SessionTree["JsonlSessionStore: Durable append-only parent_id tree"]
-        Compactor["ContextCompactor: Configurable token compaction with summary checkpoints"]
-    end
+## 2. Interaction Specification: The Production-Grade Standard
 
-    PromptEngine --> Harness
-    Harness --> ThoughtStream & ToolCardStream & DiffStream & ResponseStream
-    Pipeline --> ApprovalHandler
-    Harness --> SessionTree & Compactor
+```
+╭─ 🥕 Mia v0.2.0 (mimo-v2.5) ─────────────────────────────────────────────────────────────╮
+│ Directory: /Users/sovorn/dev/harness/mia                                                │
+│ Model:     mimo-v2.5  │  Profile: coding  │  Session: session_a8f12c9e                  │
+│ Commands:  Type / for menu (/login, /model, /profile, /compact, /cost, /sessions, /quit)│
+╰─────────────────────────────────────────────────────────────────────────────────────────╯
+
+🥕 mia > /login
+
+╭─ 🔑 Mia Authentication Setup ───────────────────────────────────────────────────────────╮
+│ Select an AI Provider to configure:                                                    │
+│  [1] opencode-go (MiMo-v2.5 / OpenCode Zen API)                                         │
+│  [2] anthropic   (Claude 3.5 Sonnet / Claude 3.7 Sonnet)                               │
+│  [3] openai      (GPT-4o / o1 / o3-mini)                                               │
+│  [4] deepseek    (DeepSeek-V3 / DeepSeek-R1 Reasoner)                                  │
+╰─────────────────────────────────────────────────────────────────────────────────────────╯
+Select provider [1-4 or name] (default: 1): 1
+Enter API Key for opencode-go: ***********************************
+
+✓ Successfully stored credentials in ~/.mia/credentials.json
+✓ Active model set to mimo-v2.5. Harness reloaded and ready!
+
+🥕 mia > Inspect the test failure in tests/test_calc.py and fix the bug
+
+💭 Thinking: Inspecting test_calc.py and the implementation in src/calc.py...
+▶ Tool: read_file(path="tests/test_calc.py") ─────────────────────────────── [✓ 1.2ms]
+▶ Tool: bash(command="pytest tests/test_calc.py") ────────────────────────── [✗ Failed (140.2ms)]
+  FAIL tests/test_calc.py::test_multiply - AssertionError
+▶ Tool: edit_file(path="src/calc.py") ────────────────────────────────────── [✓ 2.1ms]
+  @@ -12,4 +12,4 @@
+  - return a + b
+  + return a * b
+▶ Tool: bash(command="pytest tests/test_calc.py") ────────────────────────── [✓ Succeeded (120.5ms)]
+  1 passed in 0.12s
+
+✓ I have fixed the multiplication logic in src/calc.py. All tests in tests/test_calc.py are now passing.
+✓ Turn completed • Total tokens: 1,420 • Cost: $0.0018
+
+🥕 mia > 
 ```
 
 ---
 
-## 2. Palette & Visual Design Tokens (Carrot-Orange System)
+## 3. Work Breakdown Slices
 
-| Token Name | Hex / Style | Purpose |
-|---|---|---|
-| **Signature Carrot** | `#FF7A00` / `[bold #FF7A00]` | Prompt prefix `🥕 mia >`, active highlights, thinking headers |
-| **Carrot Dim** | `#994A00` | Secondary badges, divider accents |
-| **Tool Header** | `#38BDF8` / `[bold cyan]` | Tool invocation names (`read_file`, `edit_file`, `bash`) |
-| **Success Status** | `#10B981` / `[green]` | Tool execution success badge `[✓ 1.2ms]`, approvals |
-| **Alert / Warning** | `#F59E0B` / `[yellow]` | Security guardrail interceptions, warnings |
-| **Error Status** | `#EF4444` / `[bold red]` | Tool errors, rate-limits, validation failures |
-| **Subtle Text** | `#6B7280` / `[dim]` | Timestamps, token usage counters, divider lines |
+### Slice 1: Interactive Authentication & Guided Setup Wizard
+- [x] **Task 1.1:** Build `interactive_login()` wizard in `src/mia_cli/repl.py` supporting `opencode-go`, `anthropic`, `openai`, and `deepseek`.
+- [x] **Task 1.2:** Store API keys atomically via `FileCredentialStore` in `~/.mia/credentials.json`.
+- [x] **Task 1.3:** First-run onboarding check: if no credentials exist for the selected model, prompt user with the setup wizard automatically on launch.
+- [x] **Task 1.4:** Add in-session `/login [provider]` slash command.
 
----
+### Slice 2: Instant Slash Command Palette
+- [x] **Task 2.1:** Typing `/`, `/?`, or `/help` renders a clean, formatted Rich command table.
+- [x] **Task 2.2:** Multi-provider model presets (`/model` without args lists popular models like `mimo-v2.5`, `claude-3-5-sonnet`, `gpt-4o`, `deepseek-chat`).
+- [x] **Task 2.3:** Profile inspector (`/profile` without args lists profiles with tool capabilities).
+- [x] **Task 2.4:** Session statistics (`/cost`) showing token breakdown, compaction count, and estimated cost.
 
-## 3. Interaction Specification & Command Reference
+### Slice 3: Real-Time Stream Engine & Tool Diffs
+- [x] **Task 3.1:** Stream reasoning thoughts in real time with dim italic styling.
+- [x] **Task 3.2:** Render tool calls with latency badges (`[✓ 1.2ms]`) and Monokai syntax-highlighted diffs.
+- [x] **Task 3.3:** Turn cancellation on `Ctrl+C` without terminating the REPL session.
 
-### Prompting Workflow
-* **Default Launch:** `mia` starts the interactive REPL in the current directory.
-* **Inline Streaming:** Real-time token streaming with live thinking thoughts and tool call execution.
-* **Cancellation (`Ctrl+C`):** Interrupts an ongoing LLM generation or running bash tool without crashing the session.
-* **Exit (`Ctrl+D` or `/quit`):** Saves session tree and exits cleanly.
-
-### Slash Commands Reference
-* `/help` — Display interactive command guide and available tool suite.
-* `/model <name>` — Switch the active LLM (e.g. `/model mimo-v2.5`, `/model claude-3-5-sonnet`).
-* `/profile <name>` — Switch the agent profile (`coding`, `architect`, `minimal`).
-* `/compact` — Manually trigger structured context compaction and view summary checkpoint.
-* `/cost` — Show token usage, compaction stats, and estimated USD cost.
-* `/sessions` — List saved session trees for the active profile.
-* `/clear` — Clear the terminal screen.
-* `/quit` or `/exit` — Exit the REPL session.
-
----
-
-## 4. Work Breakdown Slices
-
-### Slice 1: Interactive Stream REPL Engine (`src/mia_cli/repl.py`)
-- [x] **Task 1.1:** Build `MiaREPL` class with readline history persistence (`~/.mia/history`) and tab-completion for `/` commands.
-- [x] **Task 1.2:** Integrate `RichStreamRenderer` for live thoughts, tool executions, and Monokai diffs.
-- [x] **Task 1.3:** Implement graceful `Ctrl+C` turn interruption and `Ctrl+D` exit handling.
-
-### Slice 2: Interactive Security & Guardrail Interception (`src/mia_middleware/`)
-- [x] **Task 2.1:** Add interactive approval hook to `SecurityGuardMiddleware` for CLI prompts (`[y/N/edit]`).
-- [x] **Task 2.2:** Support interactive editing of intercepted bash commands before execution.
-
-### Slice 3: Slash Commands & In-Session Management
-- [x] **Task 3.1:** Implement `/model`, `/profile`, `/compact`, `/cost`, `/sessions`, `/clear`, `/help`.
-- [x] **Task 3.2:** Wire profile and model hot-swapping directly into the active `AgentHarness`.
-
-### Slice 4: CLI Default Integration & Verification
-- [x] **Task 4.1:** Wire `uv run mia` default invocation to launch `MiaREPL`.
-- [x] **Task 4.2:** Retain `mia run -p "<instruction>"` for headless benchmark/scripting runs.
-- [x] **Task 4.3:** Automated unit and scenario tests in `tests/test_cli_repl.py`.
-- [x] **Task 4.4:** Full verification gate: `ruff`, `mypy`, `pytest` (100% passing).
+### Slice 4: Full Quality Gate & Verification
+- [x] **Task 4.1:** Automated unit and scenario tests in `tests/test_cli_repl.py` and `tests/test_credentials.py`.
+- [x] **Task 4.2:** 100% strict type checking (`mypy src`) and linting (`ruff`).
+- [x] **Task 4.3:** 100% passing tests (`pytest`).

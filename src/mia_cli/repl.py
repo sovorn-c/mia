@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import getpass
 import os
 import readline
 from pathlib import Path
@@ -15,6 +16,7 @@ from rich.table import Table
 from rich.text import Text
 
 from mia_agent.auth.config import ConfigManager
+from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.events import (
     AssistantChunkEvent,
     StepEndEvent,
@@ -38,6 +40,7 @@ from mia_tools.fs import EditFileTool, ReadFileTool, WriteFileTool
 
 SLASH_COMMANDS = [
     "/help",
+    "/login",
     "/model",
     "/profile",
     "/compact",
@@ -48,6 +51,29 @@ SLASH_COMMANDS = [
     "/exit",
 ]
 
+PROVIDER_PRESETS: dict[str, dict[str, str]] = {
+    "1": {
+        "id": "opencode-go",
+        "name": "opencode-go (MiMo-v2.5 / OpenCode Zen API)",
+        "default_model": "mimo-v2.5",
+    },
+    "2": {
+        "id": "anthropic",
+        "name": "anthropic (Claude 3.5 Sonnet / Claude 3.7 Sonnet)",
+        "default_model": "claude-3-5-sonnet-20241022",
+    },
+    "3": {
+        "id": "openai",
+        "name": "openai (GPT-4o / o1 / o3-mini)",
+        "default_model": "gpt-4o",
+    },
+    "4": {
+        "id": "deepseek",
+        "name": "deepseek (DeepSeek-V3 / DeepSeek-R1 Reasoner)",
+        "default_model": "deepseek-chat",
+    },
+}
+
 
 class REPLCompleter:
     """Tab-completion handler for slash commands and profiles."""
@@ -56,7 +82,6 @@ class REPLCompleter:
         self.commands = commands
 
     def complete(self, text: str, state: int) -> str | None:
-        # Match text against commands
         options = [cmd for cmd in self.commands if cmd.startswith(text)]
         if state < len(options):
             return options[state]
@@ -77,6 +102,7 @@ class MiaREPL:
         self.console = Console()
         self.cwd = cwd or Path.cwd()
         self.config_mgr = ConfigManager()
+        self.cred_store = FileCredentialStore()
         self.profile_mgr = ProfileManager()
         self.profile_name = profile
         self.model_name = model or self.config_mgr.config.default_model
@@ -98,7 +124,7 @@ class MiaREPL:
             if self._history_file.exists():
                 readline.read_history_file(str(self._history_file))
 
-            # Remove '/' from word delimiters so '/model' is treated as a single token for completion
+            # Remove '/' and '-' from word delimiters so '/model' is treated as a single token for completion
             delims = readline.get_completer_delims().replace("/", "").replace("-", "")
             readline.set_completer_delims(delims)
 
@@ -178,6 +204,77 @@ class MiaREPL:
             compactor=compactor,
         )
 
+    def interactive_login(self, provider_hint: str | None = None) -> None:
+        """Guided interactive setup wizard to configure and store API credentials."""
+        self.console.print(
+            Panel(
+                "[bold #FF7A00]🔑 Mia Authentication Setup[/bold #FF7A00]\n\n"
+                "Select an AI Provider to configure:\n"
+                " [1] opencode-go (MiMo-v2.5 / OpenCode Zen API)\n"
+                " [2] anthropic   (Claude 3.5 Sonnet / Claude 3.7 Sonnet)\n"
+                " [3] openai      (GPT-4o / o1 / o3-mini)\n"
+                " [4] deepseek    (DeepSeek-V3 / DeepSeek-R1 Reasoner)",
+                border_style="#2D3342",
+                padding=(0, 1),
+            )
+        )
+
+        selected_provider = "opencode-go"
+        default_model = "mimo-v2.5"
+
+        if provider_hint:
+            clean_hint = provider_hint.strip().lower()
+            for preset in PROVIDER_PRESETS.values():
+                if clean_hint in (preset["id"], preset["id"].split("-")[0]):
+                    selected_provider = preset["id"]
+                    default_model = preset["default_model"]
+                    break
+        else:
+            try:
+                choice = input("Select provider [1-4 or name] (default: 1): ").strip().lower()
+                if choice in PROVIDER_PRESETS:
+                    selected_provider = PROVIDER_PRESETS[choice]["id"]
+                    default_model = PROVIDER_PRESETS[choice]["default_model"]
+                elif choice:
+                    for preset in PROVIDER_PRESETS.values():
+                        if choice in (preset["id"], preset["id"].split("-")[0]):
+                            selected_provider = preset["id"]
+                            default_model = preset["default_model"]
+                            break
+            except (KeyboardInterrupt, EOFError):
+                self.console.print("\n[yellow]Setup cancelled.[/yellow]\n")
+                return
+
+        # Prompt for API Key
+        try:
+            prompt_str = f"Enter API key for {selected_provider}: "
+            try:
+                api_key = getpass.getpass(prompt_str).strip()
+            except Exception:
+                api_key = input(prompt_str).strip()
+
+            if not api_key:
+                self.console.print("[yellow]No API key entered. Setup aborted.[/yellow]\n")
+                return
+
+            # Save to ~/.mia/credentials.json
+            self.cred_store.set_api_key(selected_provider, api_key)
+            self.model_name = default_model
+
+            # Re-initialize harness with new credentials
+            self.config_mgr = ConfigManager()
+            self._init_harness()
+
+            self.console.print(
+                f"[bold green]✓ Successfully stored credentials for {selected_provider} in ~/.mia/credentials.json[/bold green]"
+            )
+            self.console.print(
+                f"[bold green]✓ Active model set to {self.model_name}. Harness reloaded and ready![/bold green]\n"
+            )
+
+        except (KeyboardInterrupt, EOFError):
+            self.console.print("\n[yellow]Setup cancelled.[/yellow]\n")
+
     def print_banner(self) -> None:
         """Render clean, modern welcome banner."""
         banner_content = Text.assemble(
@@ -190,7 +287,7 @@ class MiaREPL:
             ("│  Session: ", "dim #9CA3AF"),
             (f"{self.session_id}\n", "dim #F3F4F6"),
             ("Commands:  ", "dim #9CA3AF"),
-            ("Type / for command menu (/help, /model, /profile, /cost, /quit)", "dim #FF7A00"),
+            ("Type / for command menu (/login, /model, /profile, /cost, /quit)", "dim #FF7A00"),
         )
         self.console.print(
             Panel(
@@ -296,6 +393,7 @@ class MiaREPL:
             table.add_column("Command", style="bold #FF7A00", width=18)
             table.add_column("Usage / Description", style="white")
             table.add_row("/help", "Show this command menu")
+            table.add_row("/login [provider]", "Interactive setup wizard to add/update API keys")
             table.add_row(
                 "/model [name]", f"View or switch active model (current: {self.model_name})"
             )
@@ -313,6 +411,10 @@ class MiaREPL:
             )
             return True
 
+        elif cmd == "/login":
+            self.interactive_login(args)
+            return True
+
         elif cmd in ("/quit", "/exit"):
             self.console.print("[dim]Goodbye![/dim]")
             return False
@@ -327,8 +429,9 @@ class MiaREPL:
                     f"[bold #FF7A00]Current model:[/bold #FF7A00] [bold cyan]{self.model_name}[/bold cyan]"
                 )
                 self.console.print(
-                    "[dim]To switch, use: /model <name> (e.g. /model mimo-v2.5 or /model claude-3-5-sonnet)[/dim]\n"
+                    "[dim]Recommended models: mimo-v2.5, claude-3-5-sonnet-20241022, gpt-4o, deepseek-chat[/dim]"
                 )
+                self.console.print("[dim]To switch: /model <name> (e.g. /model mimo-v2.5)[/dim]\n")
             else:
                 self.model_name = args
                 self._init_harness()
@@ -344,7 +447,7 @@ class MiaREPL:
                 )
                 self.console.print(f"[dim]Available profiles: {', '.join(profiles)}[/dim]")
                 self.console.print(
-                    "[dim]To switch, use: /profile <name> (e.g. /profile architect)[/dim]\n"
+                    "[dim]To switch: /profile <name> (e.g. /profile architect)[/dim]\n"
                 )
             else:
                 self.profile_name = args
@@ -384,8 +487,19 @@ class MiaREPL:
             self._save_history()
 
     async def run_async(self) -> None:
-        """Main async REPL loop."""
+        """Main async REPL loop with first-run onboarding verification."""
         self.print_banner()
+
+        # First-run credential verification
+        if not self.custom_provider:
+            _, _, api_key, _ = self.config_mgr.resolve_credentials(model=self.model_name)
+            if not api_key:
+                self.console.print(
+                    "[yellow]⚠️  No API key configured for model '"
+                    + self.model_name
+                    + "'. Launching setup wizard...[/yellow]\n"
+                )
+                self.interactive_login()
 
         while True:
             try:
