@@ -6,8 +6,8 @@ session:
   target_version: "0.2.0"
 
 handoff:
-  next_skill: "verify-work"
-  summary: "Epic e02 completed and fully verified across all 4 vertical stories. 67/67 tests passing, strict Mypy passing (0 errors), Ruff lint and formatting clean."
+  next_skill: "audit-code"
+  summary: "Epic e02 passed all verify-work multi-phase gates. 67/67 tests passing, strict Mypy passing (0 errors), Ruff lint and formatting clean. Verification evidence saved to specs/verifications/e02s04-verify.yaml."
 
 git:
   branch: "main"
