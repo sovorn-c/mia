@@ -10,6 +10,7 @@ from rich.console import Console
 COMMAND_HINTS: list[tuple[str, str]] = [
     ("/help", "Show command menu & shortcuts (alias: /?)"),
     ("/login", "Authenticate AI providers & API keys (alias: /auth)"),
+    ("/logout", "Remove stored credentials & sign out of providers (alias: /signout)"),
     ("/model", "Switch active LLM (Pi-style scoper) (alias: /llm)"),
     ("/profile", "Switch agent persona (coding, architect, minimal)"),
     ("/diff", "View git diff of session modifications (alias: /changes)"),
