@@ -3,7 +3,7 @@ spec: "e03s02-essential-slash-command-contracts.md"
 title: "Essential Slash Command Contract Alignment"
 type: "fix"
 context: "domain and infrastructure"
-status: failing
+status: passing
 bcps: 4
 risk: "P1"
 
@@ -13,17 +13,19 @@ tasks:
     verify: "uv run --offline pytest tests/test_cli_repl.py -k 'command_metadata or slash_completer or help_contract'"
     risk: "P1"
     security: "none"
-    status: "failing"
+    status: "passing"
+    evidence: "945e8f5 and bc4c726; canonical metadata, completion, and truthful help/init tests pass."
     allure:
       severity: "high"
       categories: ["CLI", "Command Contract", "unit"]
 
   - id: "t02"
     description: "Add failing compaction behavior tests and a public UI-free AgentHarness manual compaction operation that reports token estimates and appends durable compaction lineage without changing automatic threshold behavior."
-    verify: "uv run --offline pytest tests/test_agent_loop.py tests/test_sessions.py tests/test_cli_repl.py -k 'compact'"
+    verify: "uv run --offline pytest tests/test_agent_loop.py tests/test_sessions.py tests/test_cli_repl.py -k 'compact or repl_slash_commands_suite'"
     risk: "P1"
     security: "low"
-    status: "failing"
+    status: "passing"
+    evidence: "664e402; manual compaction updates in-memory context and appends compaction plus leaf entries; REPL compact path smoke-tested."
     allure:
       severity: "high"
       categories: ["Session", "Compaction", "integration"]
@@ -33,7 +35,8 @@ tasks:
     verify: "uv run --offline pytest tests/test_cli_repl.py -k 'invalid_profile or diff_failure'"
     risk: "P1"
     security: "low"
-    status: "failing"
+    status: "passing"
+    evidence: "c416481, 43037a5, and 2d9cf57; invalid profiles preserve runtime state and Git failures are reported safely without false clean status."
     allure:
       severity: "high"
       categories: ["CLI", "Failure Safety", "unit"]
@@ -43,7 +46,8 @@ tasks:
     verify: "grep -q '17 canonical commands' specs/tech-architecture/tech-stack.md && grep -q 'Deferred active-turn cancellation' specs/tech-architecture/tech-stack.md && uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest"
     risk: "P1"
     security: "low"
-    status: "failing"
+    status: "passing"
+    evidence: "93 pytest passed; Ruff format/check, strict Mypy, documentation assertions, and diff check passed."
     allure:
       severity: "high"
       categories: ["Documentation", "Quality Gate", "full-suite"]

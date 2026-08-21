@@ -923,7 +923,7 @@ class MiaREPL:
                         f"[bold green]✓ Switched profile to {self.profile_name}[/bold green]\n"
                     )
 
-        elif cmd in ("/diff", "/changes"): 
+        elif cmd in ("/diff", "/changes"):
             try:
                 res = subprocess.run(
                     ["git", "diff"],
@@ -1009,7 +1009,7 @@ class MiaREPL:
                     f" - Git Repository: {'[green]Yes[/green]' if has_git else '[yellow]No[/yellow]'}\n"
                     f" - AGENTS.md Guidelines: {'[green]Found[/green]' if has_agents else '[dim]None[/dim]'}\n"
                     f" - README.md: {'[green]Found[/green]' if has_readme else '[dim]None[/dim]'}",
-                    title="[bold #FF7A00]Basic Repository Context[/bold #FF7A00]", 
+                    title="[bold #FF7A00]Basic Repository Context[/bold #FF7A00]",
                     border_style="#2D3342",
                 )
             )
