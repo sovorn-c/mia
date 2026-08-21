@@ -5,13 +5,22 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from mia_agent.auth.config import ConfigManager
+from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.events import TurnStartEvent
 from mia_agent.orchestration import (
+    AgentRuntimeFactory,
     Mode,
     OrchestrationEventEnvelope,
+    RuntimeIdentity,
     Workflow,
     WorkflowStage,
 )
+from mia_agent.profiles.manager import ProfileManager
+from mia_agent.session.entries import CustomEntry, LeafEntry, MessageEntry
+from mia_agent.session.jsonl import JsonlSessionStore
+from mia_ai.providers.mock import MockProvider
+from mia_ai.types import ChatMessage
 
 
 def test_models_single_mode_contract_validates_and_rejects_blank_names() -> None:
@@ -68,3 +77,67 @@ def test_orchestration_envelope_retains_inner_agent_event() -> None:
     assert envelope.event is inner
     assert envelope.event.type == "turn_start"
     assert envelope.mode == "single"
+
+
+def test_factory_builds_profile_scoped_runtime_and_persists_lineage(tmp_path) -> None:
+    profiles = ProfileManager(sessions_base_dir=tmp_path / "sessions")
+    config = ConfigManager(
+        config_path=tmp_path / "config.json",
+        credential_store=FileCredentialStore(path=tmp_path / "credentials.json"),
+    )
+    identity = RuntimeIdentity(
+        mode="research",
+        run_id="run-1",
+        task_id="specialist",
+        agent_id="agent-1",
+        profile="architect",
+        session_id="child-1",
+        parent_session_id="root-1",
+    )
+    runtime = AgentRuntimeFactory(
+        profile_manager=profiles,
+        config_manager=config,
+    ).build(
+        identity=identity,
+        provider=MockProvider(),
+        cwd=tmp_path,
+    )
+
+    assert runtime.identity == identity
+    assert runtime.harness.session_id == "child-1"
+    assert [tool.name for tool in runtime.harness.tools] == ["read_file"]
+    entries = runtime.session_store.load_entries()
+    metadata = next(entry for entry in entries if isinstance(entry, CustomEntry))
+    assert metadata.data["parent_session_id"] == "root-1"
+    assert metadata.data["profile"] == "architect"
+
+
+def test_factory_resumes_messages_from_active_session(tmp_path) -> None:
+    profiles = ProfileManager(sessions_base_dir=tmp_path / "sessions")
+    session_dir = profiles.get_session_dir("coding")
+    store = JsonlSessionStore(session_dir / "root-1.jsonl")
+    user_entry = MessageEntry(message=ChatMessage(role="user", content="existing prompt"))
+    store.append_entry(user_entry)
+    store.append_entry(
+        MessageEntry(
+            parent_id=user_entry.id,
+            message=ChatMessage(role="assistant", content="existing answer"),
+        )
+    )
+    store.append_entry(LeafEntry(entry_id=user_entry.id))
+
+    identity = RuntimeIdentity(
+        mode="single",
+        run_id="run-1",
+        task_id="task-1",
+        agent_id="agent-1",
+        profile="coding",
+        session_id="root-1",
+    )
+    runtime = AgentRuntimeFactory(profile_manager=profiles).build(
+        identity=identity,
+        provider=MockProvider(),
+        cwd=tmp_path,
+    )
+
+    assert [message.content for message in runtime.harness.messages] == ["existing prompt"]
