@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Flat execution status tracking
 version: "0.2.0"
-updated_at: "2026-08-21T20:00:00Z"
+updated_at: "2026-08-21T20:35:00Z"
 
 epics:
   e01:
@@ -22,4 +22,25 @@ epics:
       e01s04:
         title: "Minimalist Stream Rendering & Live Tool Diffs"
         status: "completed"
+        bcps: 4
+
+  e02:
+    title: "Stream-First REPL Polish: prompt_toolkit, Minimalist Stream, & Inspection"
+    status: "in_progress"
+    stories:
+      e02s01:
+        title: "prompt_toolkit Integration, Floating Slash Autocomplete & Pinned Status Footer"
+        status: "pending"
+        bcps: 5
+      e02s02:
+        title: "Minimalist Working Stream & carrot_bounce Animation"
+        status: "pending"
+        bcps: 5
+      e02s03:
+        title: "Post-Turn Inspection (Ctrl+O) & JSONL Session Tree Navigator (Esc / /tree)"
+        status: "pending"
+        bcps: 4
+      e02s04:
+        title: "Pi/Tau Keybindings (Ctrl+C clear, Ctrl+D exit, /stop) & Context Auto-Discovery"
+        status: "pending"
         bcps: 4

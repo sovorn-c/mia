@@ -21,6 +21,18 @@ in_scope:
   - id: "e01s04"
     name: "Minimalist Stream Rendering & Live Tool Diffs"
     description: "Clean inline stream output with subtle thinking indicators (💭), single-line tool cards, and Monokai syntax-highlighted git diffs."
+  - id: "e02s01"
+    name: "prompt_toolkit Integration & Floating Slash Autocomplete"
+    description: "Production prompt_toolkit PromptSession with live floating dropdown on '/', bracketed paste multi-line editor, and pinned status footer."
+  - id: "e02s02"
+    name: "Minimalist Working Stream & carrot_bounce Animation"
+    description: "Signature carrot_bounce animated working spinner, single-line in-place tool status badges, and memory-buffered raw reasoning tokens."
+  - id: "e02s03"
+    name: "Post-Turn Inspection & JSONL Tree Navigator"
+    description: "Ctrl+O (/inspect) detailed audit viewer and Esc (/tree) conversation branch navigator and turn forking."
+  - id: "e02s04"
+    name: "Pi/Tau Keybindings & Context Bootstrap"
+    description: "Ctrl+C input buffer clearing, Ctrl+D clean exit, /stop turn abort, and auto-discovery of AGENTS.md / git status."
 
 out_of_scope:
   - id: "oos-01"
@@ -29,6 +41,9 @@ out_of_scope:
   - id: "oos-02"
     name: "Multi-agent sidebar tabs in terminal"
     rationale: "Multi-agent interactions are streamlined into inline @mention prompt routing."
+  - id: "oos-03"
+    name: "Hardcoded /undo command"
+    rationale: "Replaced with JSONL branch tree navigation (/tree) which guarantees safe checkpoints without untracked git assumptions."
 
 constraints:
   - "Runtime: Python 3.12+ (strictly typed with Mypy, Ruff-formatted)."
@@ -39,9 +54,13 @@ success_criteria:
   - "uv run mia launches instantly with a clean single-line header banner without screen flickering."
   - "/login allows pasting API keys or authenticating OpenAI OAuth, verifies connection with a 1-token test, and saves to ~/.mia/credentials.json."
   - "/model displays only authenticated providers and their models, with clean arrow/numeric selection."
-  - "Prompt execution streams reasoning tokens smoothly and prints clear tool execution results with duration and syntax diffs."
+  - "Typing '/' immediately renders a sleek floating dropdown that dynamically filters keystrokes (/l -> /login, /logout) with zero ghost popup trails."
+  - "Active agent turns display signature carrot_bounce (🥕 ) spinner and in-place tool status without dumping 500-line raw outputs."
+  - "Pressing Ctrl+O (/inspect) expands full tool execution logs and diffs, Esc (/tree) navigates conversation branches, and Ctrl+C clears prompt line."
   - "All automated tests in tests/ pass with 100% strict type-checking (uv run mypy src)."
 
 references:
   - "specs/old_plan/mia_harness.md"
   - "specs/old_plan/mia_tui_harness.md"
+  - "specs/tech-architecture/tech-stack.md"
+

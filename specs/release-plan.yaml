@@ -12,7 +12,22 @@ epics:
       risk_reduction: 8
       job_size: 5
       score: 6.8
-    status: "in_progress"
+    status: "completed"
     bcps_total: 16
     stories_count: 4
     directory: "specs/epics/e01-minimal-stream-repl"
+
+  - id: "e02"
+    slug: "stream-repl-polish"
+    title: "Stream-First REPL Polish: prompt_toolkit, Minimalist Stream, & Inspection"
+    wsjf:
+      business_value: 20
+      time_criticality: 15
+      risk_reduction: 8
+      job_size: 5
+      score: 8.6
+    status: "in_progress"
+    bcps_total: 18
+    stories_count: 4
+    directory: "specs/epics/e02-stream-repl-polish"
+

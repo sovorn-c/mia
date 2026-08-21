@@ -1,0 +1,33 @@
+# specs/epics/e02-stream-repl-polish/e02s01-tasks.yaml
+story_id: "e02s01"
+title: "prompt_toolkit Integration, Floating Slash Autocomplete & Pinned Status Footer"
+status: "pending"
+bcps: 5
+
+tasks:
+  - id: "t01"
+    description: "Add prompt_toolkit dependency and wrap PromptSession with custom SlashCompleter supporting live keystroke filtering."
+    status: "failing"
+    risk: "P1"
+    verify: "uv run python -c 'from mia_cli.interactive_input import LivePromptSession; print(\"LivePromptSession imported\")'"
+    allure:
+      severity: "high"
+      categories: ["UI", "Prompt Engine"]
+
+  - id: "t02"
+    description: "Implement pinned live status footer below prompt showing workspace path, active model, token context %, and shortcut hints."
+    status: "failing"
+    risk: "P2"
+    verify: "uv run python -c 'from mia_cli.interactive_input import format_status_toolbar; print(format_status_toolbar(\"mia\", \"mimo-v2.5\", 12000, 128000))'"
+    allure:
+      severity: "normal"
+      categories: ["UI", "Status Toolbar"]
+
+  - id: "t03"
+    description: "Configure bracketed paste mode and Shift+Enter multi-line editing without premature line submission."
+    status: "failing"
+    risk: "P2"
+    verify: "uv run --offline pytest tests/test_cli_repl.py -k test_multiline_prompt"
+    allure:
+      severity: "normal"
+      categories: ["UI", "Prompt Ergonomics"]

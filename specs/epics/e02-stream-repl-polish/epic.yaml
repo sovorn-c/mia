@@ -1,0 +1,28 @@
+# specs/epics/e02-stream-repl-polish/epic.yaml
+id: "e02"
+slug: "stream-repl-polish"
+title: "Stream-First REPL Polish: prompt_toolkit, Minimalist Stream, & Inspection"
+status: "in_progress"
+bcps_total: 18
+
+stories:
+  - id: "e02s01"
+    title: "prompt_toolkit Integration, Floating Slash Autocomplete & Pinned Status Footer"
+    status: "pending"
+    bcps: 5
+    tasks_file: "e02s01-tasks.yaml"
+  - id: "e02s02"
+    title: "Minimalist Working Stream & carrot_bounce Animation"
+    status: "pending"
+    bcps: 5
+    tasks_file: "e02s02-tasks.yaml"
+  - id: "e02s03"
+    title: "Post-Turn Inspection (Ctrl+O) & JSONL Session Tree Navigator (Esc / /tree)"
+    status: "pending"
+    bcps: 4
+    tasks_file: "e02s03-tasks.yaml"
+  - id: "e02s04"
+    title: "Pi/Tau Keybindings (Ctrl+C clear, Ctrl+D exit, /stop) & Context Auto-Discovery"
+    status: "pending"
+    bcps: 4
+    tasks_file: "e02s04-tasks.yaml"

@@ -1,0 +1,24 @@
+# specs/epics/e02-stream-repl-polish/e02s02-tasks.yaml
+story_id: "e02s02"
+title: "Minimalist Working Stream & carrot_bounce Animation"
+status: "pending"
+bcps: 5
+
+tasks:
+  - id: "t01"
+    description: "Implement CarrotBounceSpinner in mia_cli/render.py with live duration timer and smooth bounce animation frames."
+    status: "failing"
+    risk: "P1"
+    verify: "uv run python -c 'from mia_cli.render import CarrotBounceSpinner; print(CarrotBounceSpinner().render_frame(1.2))'"
+    allure:
+      severity: "high"
+      categories: ["UI", "Stream Renderer"]
+
+  - id: "t02"
+    description: "Implement compact in-place single-line tool status badges (⠋ Reading ... -> ✓ Read ...) and buffer raw reasoning tokens in turn memory."
+    status: "failing"
+    risk: "P1"
+    verify: "uv run --offline pytest tests/test_cli_repl.py -k test_tool_badge_rendering"
+    allure:
+      severity: "high"
+      categories: ["UI", "Tool Status Cards"]
