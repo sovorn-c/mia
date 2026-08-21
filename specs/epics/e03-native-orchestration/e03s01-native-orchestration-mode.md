@@ -67,7 +67,7 @@ Route both active CLI paths through one native mode runtime. Preserve all curren
 ## 10. Constraints
 
 - Python 3.12+, strict Mypy, Ruff formatting, offline verification.
-- No new external package.
+- No new runtime package; PyYAML is development-only for repository planning gates.
 - `AgentHarness` remains a one-agent executor with no UI dependency.
 - `AgentProfile` remains a one-role configuration.
 - Tool allowlists and middleware are resolved independently for every agent instance.
