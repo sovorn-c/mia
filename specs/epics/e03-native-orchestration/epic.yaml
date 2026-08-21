@@ -2,6 +2,8 @@
 id: "e03"
 slug: "native-orchestration"
 title: "Native Orchestration Runtime"
+type: "feat"
+context: "domain and infrastructure"
 status: "completed"
 bcps_total: 5
 

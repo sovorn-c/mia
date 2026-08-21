@@ -171,6 +171,10 @@ All e03s01 orchestration types SHOULD remain in one cohesive `src/mia_agent/orch
 6. Synchronize Mia's glossary and technical architecture with the implemented runtime and deferred capabilities → verify: `grep -q 'Mode composes; Profile configures; Workflow coordinates; Agent executes; Plugin extends' specs/product/GLOSSARY_LATEST.yaml && grep -q 'Mode composes; Profile configures; Workflow coordinates; Agent executes; Plugin extends' specs/tech-architecture/tech-stack.md`
 7. Run all project quality gates and record verification evidence before changing task status from failing → verify: `uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest`
 
+### Implementation evidence
+
+The vertical slice was implemented in the following commits: `236049c` (contracts), `e195959` (runtime factory), `e08dd38` (single mode), `e9dd53d` (research workflow), `33b5cb3` (mode selection and resumable harness), and `06bc642` (architecture documentation).
+
 ## 17. Acceptance Criteria
 
 ### Scenario SC-e03s01-P0-01: Default mode preserves one-agent behavior

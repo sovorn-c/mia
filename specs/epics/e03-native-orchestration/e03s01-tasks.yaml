@@ -2,6 +2,8 @@
 story_id: "e03s01"
 spec: "e03s01-native-orchestration-mode.md"
 title: "Native Orchestration Mode Vertical Slice"
+type: "feat"
+context: "domain and infrastructure"
 status: passing
 bcps: 5
 risk: "P0"

@@ -1,27 +1,103 @@
-story: e03s01
+story_id: e03s01
+verified_at: "2026-08-21T23:02:59Z"
+verifier: verify-work
 status: passing
-verified_at: "2026-08-21T17:00:00Z"
-commands:
-  - command: "uv run --offline pytest tests/test_orchestration.py"
-    outcome: "10 passed"
-  - command: "uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py"
-    outcome: "25 passed"
-  - command: "uv run --offline pytest tests/test_agent_loop.py tests/test_profiles.py tests/test_sessions.py tests/test_e2e_scenarios.py"
-    outcome: "19 passed"
-  - command: "uv run --offline ruff format --check ."
-    outcome: "78 files already formatted"
-  - command: "uv run --offline ruff check ."
-    outcome: "All checks passed"
-  - command: "uv run --offline mypy src"
-    outcome: "Success: no issues found in 52 source files"
-  - command: "uv run --offline pytest"
-    outcome: "87 passed"
-manual:
-  outcome: "Research mode emitted specialist architect events before coordinator coding events; root and child JSONL sessions were readable."
-  order:
-    - task_id: specialist
-      agent_id: specialist
-      profile: architect
-    - task_id: root
-      agent_id: coordinator
-      profile: coding
+risk: P0
+branch: e03-native-orchestration
+phases:
+  preflight:
+    passed: true
+    command: "AGENTS.md quality gates"
+    note: "No BP_PREFLIGHT or bp-read-agents.sh exists; repository AGENTS.md was read and its required offline gates were executed."
+  smoke:
+    passed: true
+    steps:
+      - command: "uv run --offline mia --help"
+        actual: "Help and command list rendered."
+      - command: "uv run --offline mia run --help"
+        actual: "--mode and --profile options rendered."
+      - command: "uv run --offline mia profile list"
+        actual: "Built-in architect, code_mode, coding, and minimal profiles rendered."
+      - command: "uv run --offline mia run --mode does-not-exist --prompt 'verify invalid mode'"
+        actual: "Exited 1 and named the unknown mode plus available modes single, research."
+  task_verification:
+    passed: true
+    commands:
+      - command: "uv run --offline pytest tests/test_orchestration.py -k 'models or envelope'"
+        actual: "4 passed"
+      - command: "uv run --offline pytest tests/test_orchestration.py -k factory"
+        actual: "2 passed"
+      - command: "uv run --offline pytest tests/test_e2e_scenarios.py -k security_guardrail"
+        actual: "1 passed"
+      - command: "uv run --offline pytest tests/test_orchestration.py -k single"
+        actual: "2 passed"
+      - command: "uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py"
+        actual: "25 passed"
+      - command: "uv run --offline pytest tests/test_orchestration.py -k 'research or lineage or failure or cancellation'"
+        actual: "4 passed"
+      - command: "uv run --offline pytest tests/test_profiles.py -k architect"
+        actual: "1 passed"
+      - command: "uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py -k mode"
+        actual: "9 passed"
+      - command: "glossary and architecture invariant grep"
+        actual: "PASS"
+  build:
+    passed: true
+    command: "python3 -m compileall -q src"
+  typecheck:
+    passed: true
+    command: "uv run --offline mypy src"
+    actual: "Success: no issues found in 52 source files"
+  lint:
+    passed: true
+    commands:
+      - "uv run --offline ruff format --check ."
+      - "uv run --offline ruff check ."
+    actual: "78 files already formatted; All checks passed"
+  tests:
+    passed: true
+    command: "uv run --offline pytest"
+    actual: "88 passed"
+  terminal_verdict:
+    command: "uv run --offline pytest"
+    exit_code: 0
+    captured_at: "2026-08-21T23:02:59Z"
+    note: "Single contiguous terminal run; 88 tests passed in 2.92s."
+  security:
+    passed: true
+    report: "specs/security/REVIEW.md"
+    actual: "No concrete HIGH or MEDIUM finding at confidence >= 8."
+  nfr:
+    passed: true
+    report: "specs/verifications/NFR-e03s01.json"
+    actual: "Performance, reliability, and operability invariants passed; no separate e03 threshold artifact exists."
+  blind_spots:
+    passed: true
+    available: false
+    note: "Repository scripts check-blind-spots.sh, completeness-critic.sh, and bp-read-agents.sh are absent. Compensating plan-consistency, shell syntax, YAML/JSON parsing, compileall, and full quality gates passed."
+  manual:
+    user_confirmation: pending
+    steps:
+      - step: "Run deterministic single mode with MockProvider."
+        expected: "One attributed coordinator turn and one provider response."
+        actual: "One root/coding turn and one response observed."
+        passed: true
+      - step: "Run deterministic research mode with MockProvider."
+        expected: "Architect specialist events precede coordinator events."
+        actual: "Order was specialist/architect, then root/coordinator/coding."
+        passed: true
+      - step: "Reload research session files after the runtime exits."
+        expected: "Child and root JSONL files remain readable; child records parent root session."
+        actual: "Child had 4 readable entries, root had 4 readable entries, and parent_session_id was uat-root."
+        passed: true
+      - step: "Use /mode, /mode research, and an invalid /mode in MiaREPL."
+        expected: "Menu lists modes, research switches, invalid selection reports choices without changing current mode."
+        actual: "All three behaviors observed."
+        passed: true
+      - step: "Run mia run with an invalid mode."
+        expected: "Non-zero exit and available mode choices."
+        actual: "Exit code 1 with single and research choices."
+        passed: true
+  gaps:
+    closed: true
+    note: "No behavior gaps found. User confirmed the manual UAT results before audit and merge."
