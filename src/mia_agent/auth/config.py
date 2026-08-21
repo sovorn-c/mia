@@ -56,9 +56,29 @@ DEFAULT_PROVIDER_BASE_URLS = {
     "anthropic": "https://api.anthropic.com/v1",
     "openai": "https://api.openai.com/v1",
     "deepseek": "https://api.deepseek.com/v1",
-    "opencode-go": "https://api.opencode.ai/v1",
-    "mimo": "https://api.opencode.ai/v1",
+    "opencode-go": "https://opencode.ai/zen/go/v1",
+    "mimo": "https://opencode.ai/zen/go/v1",
 }
+
+
+def load_dotenv(dotenv_path: Path | None = None) -> None:
+    """Lightweight .env loader into os.environ without third-party dependencies."""
+    target = dotenv_path or Path.cwd() / ".env"
+    if not target.exists():
+        return
+    try:
+        with open(target, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip("'\"")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except Exception:
+        pass
 
 
 class ConfigManager:
@@ -69,6 +89,7 @@ class ConfigManager:
         config_path: Path | None = None,
         credential_store: FileCredentialStore | None = None,
     ) -> None:
+        load_dotenv()
         self.config_path = config_path or default_config_path()
         self.credential_store = credential_store or FileCredentialStore()
         self._config: MiaConfig = self._load_config()

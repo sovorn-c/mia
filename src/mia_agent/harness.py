@@ -175,6 +175,10 @@ class AgentHarness:
                     yield AssistantChunkEvent(thought_delta=chunk.thought)
                 elif chunk.type == "tool_call_end" and chunk.tool_call:
                     tool_calls.append(chunk.tool_call)
+                elif chunk.type == "error":
+                    error_msg = chunk.error or "Unknown provider error"
+                    accumulated_text.append(f"\n[Error: {error_msg}]\n")
+                    yield AssistantChunkEvent(delta_text=f"\n[Error: {error_msg}]\n")
                 elif chunk.type == "finish":
                     finish_reason = chunk.finish_reason
                     if chunk.usage:

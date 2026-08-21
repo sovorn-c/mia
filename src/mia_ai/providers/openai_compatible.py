@@ -140,8 +140,12 @@ class OpenAICompatibleProvider(LLMProvider):
                         choice = choices[0]
                         delta = choice.get("delta", {})
 
-                        # 1. Reasoning / Thinking content (e.g. DeepSeek-R1 / OpenAI o-series)
-                        thought = delta.get("reasoning_content") or delta.get("thought")
+                        # 1. Reasoning / Thinking content (e.g. DeepSeek-R1 / MiMo / OpenAI o-series)
+                        thought = (
+                            delta.get("reasoning_content")
+                            or delta.get("reasoning")
+                            or delta.get("thought")
+                        )
                         if thought:
                             yield StreamChunk(type="thought_delta", thought=thought)
 

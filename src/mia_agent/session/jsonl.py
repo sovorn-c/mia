@@ -29,11 +29,11 @@ class JsonlSessionStore:
         """Append a single session entry as a JSON line to disk."""
         import contextlib
 
+        dumped = entry.model_dump_json(exclude_none=True)
         with contextlib.suppress(OSError):
             self.path.parent.mkdir(parents=True, exist_ok=True)
-        dumped = entry.model_dump_json(exclude_none=True)
-        with open(self.path, "a", encoding="utf-8") as f:
-            f.write(dumped + "\n")
+            with open(self.path, "a", encoding="utf-8") as f:
+                f.write(dumped + "\n")
 
     def load_entries(self) -> list[SessionEntry]:
         """Read and deserialize all session entries from disk in chronological order."""
