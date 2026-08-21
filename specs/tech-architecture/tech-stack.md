@@ -135,3 +135,25 @@ Previous versions attempted character-by-character raw POSIX input (`setcbreak`)
   - `pulse` (`·•●•·`)
   - `braille` (`⣾⣽⣻⢿⡿⣟⣯⣷`)
 
+---
+
+## 6. Tool Execution & Approval Flow (Profile-Driven Hybrid)
+
+Mia uses a profile-driven execution model enforced via the `SecurityGuardMiddleware` pipeline:
+
+1. **`coding` Profile (Default):**
+   * **Execution:** Autonomous execution with zero interrupting prompts.
+   * **Safety:** File modifications are immediately tracked in session history; users can inspect via `Ctrl+O` or revert with `/undo`.
+   * **Speed:** Fast and fluid developer loop.
+
+2. **`strict` Profile:**
+   * **Execution:** Interactive confirmation gate on all write and execution tools (`edit_file`, `write_file`, `bash`).
+   * **Prompt:** `Approve edit to src/app.py? [y/n/d(iff)/a(ll)] › `
+
+3. **`architect` Profile:**
+   * **Execution:** Read-only mode (`read_file`, search); write and bash tools are disallowed.
+
+4. **Universal Background Guardrail:**
+   * `SecurityGuardMiddleware` actively blocks catastrophic or out-of-workspace actions (e.g. `rm -rf /`, directory traversal escapes, credential leaks) regardless of active profile.
+
+
