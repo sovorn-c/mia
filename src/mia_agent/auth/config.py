@@ -14,8 +14,8 @@ from mia_agent.auth.credentials import FileCredentialStore
 class MiaConfig(BaseModel):
     """User preferences and default model configuration."""
 
-    default_provider: str = "opencode-go"
-    default_model: str = "mimo-v2.5"
+    default_provider: str = ""
+    default_model: str = ""
     base_urls: dict[str, str] = Field(default_factory=dict)
     max_steps_per_turn: int = 25
     temperature: float = 0.7
@@ -116,11 +116,13 @@ class ConfigManager:
 
     def infer_provider(self, model: str) -> str:
         """Infer provider name from model name prefix."""
+        if not model:
+            return self._config.default_provider or ""
         lower = model.lower()
         for prefix, provider in MODEL_PROVIDER_PREFIXES.items():
             if lower.startswith(prefix):
                 return provider
-        return self._config.default_provider
+        return self._config.default_provider or ""
 
     def resolve_credentials(
         self,

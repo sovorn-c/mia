@@ -16,7 +16,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
-from mia_agent.auth.config import ConfigManager
+from mia_agent.auth.config import ConfigManager, MiaConfig
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.events import (
     AssistantChunkEvent,
@@ -90,23 +90,33 @@ COMMAND_ALIASES: dict[str, str] = {
 PROVIDER_PRESETS: dict[str, dict[str, str]] = {
     "1": {
         "id": "opencode-go",
-        "name": "opencode-go (MiMo-v2.5 / OpenCode Zen API) [Default]",
+        "name": "OpenCode Zen (MiMo-v2.5 / OpenCode models)",
         "default_model": "mimo-v2.5",
+        "base_url": "https://opencode.ai/zen/go/v1",
     },
     "2": {
         "id": "deepseek",
-        "name": "deepseek (DeepSeek-V3 / DeepSeek-R1 Reasoner)",
+        "name": "DeepSeek (DeepSeek-V3 / DeepSeek-R1)",
         "default_model": "deepseek-chat",
+        "base_url": "https://api.deepseek.com/v1",
     },
     "3": {
         "id": "anthropic",
-        "name": "anthropic (Claude 3.5 Sonnet / Claude 3.7 Sonnet)",
+        "name": "Anthropic (Claude 3.5 Sonnet / Claude 3.7 Sonnet)",
         "default_model": "claude-3-5-sonnet-20241022",
+        "base_url": "https://api.anthropic.com/v1",
     },
     "4": {
         "id": "openai",
-        "name": "openai (GPT-4o / o1 / o3-mini)",
+        "name": "OpenAI (GPT-4o / o1 / o3-mini)",
         "default_model": "gpt-4o",
+        "base_url": "https://api.openai.com/v1",
+    },
+    "5": {
+        "id": "custom",
+        "name": "Custom OpenAI-Compatible / Local (Ollama, vLLM, OpenRouter)",
+        "default_model": "custom-model",
+        "base_url": "http://localhost:11434/v1",
     },
 }
 
@@ -141,7 +151,7 @@ class MiaREPL:
         self.cred_store = FileCredentialStore()
         self.profile_mgr = ProfileManager()
         self.profile_name = profile
-        self.model_name = model or self.config_mgr.config.default_model
+        self.model_name: str | None = model or self.config_mgr.config.default_model or None
         self.custom_provider = custom_provider
 
         self.session_id = f"session_{os.urandom(4).hex()}"
@@ -197,8 +207,16 @@ class MiaREPL:
 
     def _init_harness(self) -> None:
         """Instantiate AgentHarness with active profile and model."""
+        if not self.custom_provider and not self.model_name:
+            self.harness = None
+            return
+
         prof = self.profile_mgr.get_profile(self.profile_name)
-        target_model = self.model_name or prof.model or self.config_mgr.config.default_model
+        target_model = self.model_name or prof.model or ""
+        if not target_model and not self.custom_provider:
+            self.harness = None
+            return
+
         provider, resolved_model = self._create_provider(target_model)
 
         base_tools = [
@@ -241,71 +259,109 @@ class MiaREPL:
         )
 
     def interactive_login(self, provider_hint: str | None = None) -> None:
-        """Guided interactive setup wizard to configure and store API credentials."""
+        """Guided interactive setup wizard to configure provider, model, and API credentials."""
         self.console.print(
             Panel(
-                "[bold #FF7A00]🔑 Mia Authentication Setup[/bold #FF7A00]\n\n"
+                "[bold #FF7A00]🔑 Mia Provider & Model Setup[/bold #FF7A00]\n\n"
                 "Select an AI Provider to configure:\n"
-                " [1] opencode-go (MiMo-v2.5 / OpenCode Zen API) [Default]\n"
-                " [2] deepseek    (DeepSeek-V3 / DeepSeek-R1 Reasoner)\n"
-                " [3] anthropic   (Claude 3.5 Sonnet / Claude 3.7 Sonnet)\n"
-                " [4] openai      (GPT-4o / o1 / o3-mini)",
+                " [1] OpenCode Zen (MiMo-v2.5 / OpenCode models)\n"
+                " [2] DeepSeek (DeepSeek-V3 / DeepSeek-R1 Reasoner)\n"
+                " [3] Anthropic (Claude 3.5 Sonnet / Claude 3.7 Sonnet)\n"
+                " [4] OpenAI (GPT-4o / o1 / o3-mini)\n"
+                " [5] Custom OpenAI-Compatible (Ollama, OpenRouter, vLLM, local)",
                 border_style="#2D3342",
                 padding=(0, 1),
             )
         )
 
         selected_provider = "opencode-go"
-        default_model = "mimo-v2.5"
+        chosen_model = "mimo-v2.5"
+        base_url = "https://opencode.ai/zen/go/v1"
 
         if provider_hint:
             clean_hint = provider_hint.strip().lower()
             for preset in PROVIDER_PRESETS.values():
                 if clean_hint in (preset["id"], preset["id"].split("-")[0]):
                     selected_provider = preset["id"]
-                    default_model = preset["default_model"]
+                    chosen_model = preset["default_model"]
+                    base_url = preset["base_url"]
                     break
         else:
             try:
-                choice = input("Select provider [1-4 or name] (default: 1): ").strip().lower()
+                choice = input("Select provider [1-5 or name] (default: 1): ").strip().lower()
                 if choice in PROVIDER_PRESETS:
                     selected_provider = PROVIDER_PRESETS[choice]["id"]
-                    default_model = PROVIDER_PRESETS[choice]["default_model"]
+                    chosen_model = PROVIDER_PRESETS[choice]["default_model"]
+                    base_url = PROVIDER_PRESETS[choice]["base_url"]
                 elif choice:
                     for preset in PROVIDER_PRESETS.values():
                         if choice in (preset["id"], preset["id"].split("-")[0]):
                             selected_provider = preset["id"]
-                            default_model = preset["default_model"]
+                            chosen_model = preset["default_model"]
+                            base_url = preset["base_url"]
                             break
+            except (KeyboardInterrupt, EOFError):
+                self.console.print("\n[yellow]Setup cancelled.[/yellow]\n")
+                return
+
+        # If custom, ask for Base URL and model name
+        if selected_provider == "custom":
+            try:
+                custom_url = input(f"Enter Base URL (default: {base_url}): ").strip()
+                if custom_url:
+                    base_url = custom_url
+                custom_m = input("Enter Model Name (e.g. llama3, qwen2.5-coder): ").strip()
+                if custom_m:
+                    chosen_model = custom_m
             except (KeyboardInterrupt, EOFError):
                 self.console.print("\n[yellow]Setup cancelled.[/yellow]\n")
                 return
 
         # Prompt for API Key
         try:
-            prompt_str = f"Enter API key for {selected_provider}: "
+            prompt_str = (
+                f"Enter API key for {selected_provider} (press Enter if local/none): "
+                if selected_provider == "custom"
+                else f"Enter API key for {selected_provider}: "
+            )
             try:
                 api_key = getpass.getpass(prompt_str).strip()
             except Exception:
                 api_key = input(prompt_str).strip()
 
-            if not api_key:
+            if not api_key and selected_provider != "custom":
                 self.console.print("[yellow]No API key entered. Setup aborted.[/yellow]\n")
                 return
 
             # Save to ~/.mia/credentials.json
-            self.cred_store.set_api_key(selected_provider, api_key)
-            self.model_name = default_model
+            if api_key:
+                self.cred_store.set_api_key(selected_provider, api_key)
+
+            # Save default model and provider to ~/.mia/config.json
+            current_cfg = self.config_mgr.config
+            updated_cfg = MiaConfig(
+                default_provider=selected_provider,
+                default_model=chosen_model,
+                base_urls={**current_cfg.base_urls, selected_provider: base_url},
+                max_steps_per_turn=current_cfg.max_steps_per_turn,
+                temperature=current_cfg.temperature,
+                compaction_threshold_ratio=current_cfg.compaction_threshold_ratio,
+                context_window_tokens=current_cfg.context_window_tokens,
+                keep_recent_tokens=current_cfg.keep_recent_tokens,
+            )
+            self.config_mgr.save_config(updated_cfg)
+
+            self.model_name = chosen_model
 
             # Re-initialize harness with new credentials
             self.config_mgr = ConfigManager()
             self._init_harness()
 
             self.console.print(
-                f"[bold green]✓ Successfully stored credentials for {selected_provider} in ~/.mia/credentials.json[/bold green]"
+                f"[bold green]✓ Successfully configured {selected_provider} (Model: {self.model_name})[/bold green]"
             )
             self.console.print(
-                f"[bold green]✓ Active model set to {self.model_name}. Harness reloaded and ready![/bold green]\n"
+                "[bold green]✓ Saved to ~/.mia/credentials.json and ~/.mia/config.json[/bold green]\n"
             )
 
         except (KeyboardInterrupt, EOFError):
@@ -313,11 +369,16 @@ class MiaREPL:
 
     def print_banner(self) -> None:
         """Render clean, modern welcome banner."""
+        model_display = (
+            f"{self.model_name}  " if self.model_name else "[Not Configured - Run /login]  "
+        )
+        model_style = "bold #38BDF8" if self.model_name else "bold yellow"
+
         banner_content = Text.assemble(
             ("Directory: ", "dim #9CA3AF"),
             (f"{self.cwd}\n", "bold #F3F4F6"),
             ("Model:     ", "dim #9CA3AF"),
-            (f"{self.model_name}  ", "bold #38BDF8"),
+            (model_display, model_style),
             ("│  Profile: ", "dim #9CA3AF"),
             (f"{self.profile_name}  ", "bold #10B981"),
             ("│  Session: ", "dim #9CA3AF"),
@@ -360,7 +421,19 @@ class MiaREPL:
     async def execute_turn(self, prompt: str) -> None:
         """Run single prompt turn with real-time stream rendering."""
         if not self.harness:
-            self._init_harness()
+            if not self.model_name:
+                self.console.print(
+                    "[yellow]⚠️  No model configured. Launching setup wizard first...[/yellow]\n"
+                )
+                self.interactive_login()
+                if not self.harness:
+                    self.console.print(
+                        "[yellow]Turn cancelled. Please configure a model with /login to start coding.[/yellow]\n"
+                    )
+                    return
+            else:
+                self._init_harness()
+
         assert self.harness is not None
 
         in_thought = False
@@ -472,13 +545,16 @@ class MiaREPL:
         # 5. Model Switcher
         elif cmd in ("/model", "/llm"):
             if not args:
+                model_str = self.model_name or "[Not Configured]"
                 self.console.print(
-                    f"[bold #FF7A00]Current model:[/bold #FF7A00] [bold cyan]{self.model_name}[/bold cyan]"
+                    f"[bold #FF7A00]Current model:[/bold #FF7A00] [bold cyan]{model_str}[/bold cyan]"
                 )
                 self.console.print(
-                    "[dim]Recommended models: mimo-v2.5 (OpenCode), deepseek-chat, claude-3-5-sonnet-20241022, gpt-4o[/dim]"
+                    "[dim]Presets: mimo-v2.5, deepseek-chat, claude-3-5-sonnet-20241022, gpt-4o[/dim]"
                 )
-                self.console.print("[dim]To switch: /model <name> (e.g. /model mimo-v2.5)[/dim]\n")
+                self.console.print(
+                    "[dim]To switch: /model <name> or run /login to change provider.[/dim]\n"
+                )
             else:
                 self.model_name = args
                 self._init_harness()
@@ -508,7 +584,11 @@ class MiaREPL:
         elif cmd in ("/diff", "/changes"):
             try:
                 res = subprocess.run(
-                    ["git", "diff"], cwd=self.cwd, capture_output=True, text=True, check=False
+                    ["git", "diff"],
+                    cwd=self.cwd,
+                    capture_output=True,
+                    text=True,
+                    check=False,
                 )
                 diff_text = res.stdout.strip()
                 if not diff_text:
@@ -593,16 +673,13 @@ class MiaREPL:
         """Main async REPL loop with first-run onboarding verification."""
         self.print_banner()
 
-        # First-run credential verification
-        if not self.custom_provider:
-            _, _, api_key, _ = self.config_mgr.resolve_credentials(model=self.model_name)
-            if not api_key:
-                self.console.print(
-                    "[yellow]⚠️  No API key configured for model '"
-                    + self.model_name
-                    + "'. Launching setup wizard...[/yellow]\n"
-                )
-                self.interactive_login()
+        # First-run credential & model verification
+        if not self.custom_provider and not self.model_name:
+            self.console.print(
+                "[bold #FF7A00]⚡ Welcome to Mia! No AI model or API key configured yet.[/bold #FF7A00]\n"
+                "[dim]Launching setup wizard to choose your provider...[/dim]\n"
+            )
+            self.interactive_login()
 
         while True:
             try:

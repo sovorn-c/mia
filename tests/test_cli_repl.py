@@ -64,9 +64,11 @@ def test_repl_completer_and_slash_menu(tmp_path: Path) -> None:
 def test_repl_interactive_login_wizard(tmp_path: Path) -> None:
     """Test interactive login wizard saves credentials and updates model."""
     cred_file = tmp_path / "credentials.json"
+    cfg_file = tmp_path / "config.json"
     mock = MockProvider()
     repl = MiaREPL(cwd=tmp_path, custom_provider=mock)
     repl.cred_store.path = cred_file
+    repl.config_mgr.config_path = cfg_file
 
     with (
         patch("builtins.input", side_effect=["1"]),
