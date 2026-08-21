@@ -42,7 +42,7 @@ tasks:
     verify: "uv run --offline pytest tests/test_orchestration.py -k 'research or lineage or failure or cancellation' && uv run --offline pytest tests/test_profiles.py -k architect && printf 'no new security findings in affected paths\\n'"
     risk: "P0"
     security: "medium"
-    status: "failing"
+    status: "passing"
     allure:
       severity: "critical"
       categories: ["Orchestration", "Security Review", "Delegation", "Session", "integration"]
