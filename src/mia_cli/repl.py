@@ -48,6 +48,7 @@ SLASH_COMMANDS = [
     "/help",
     "/login",
     "/logout",
+    "/mode",
     "/model",
     "/profile",
     "/diff",
@@ -68,6 +69,7 @@ COMMAND_DESCRIPTIONS: dict[str, str] = {
     "/help": "Show complete command menu, shortcuts & tools (alias: /?)",
     "/login": "Authenticate AI provider via API key or OpenAI Auth (alias: /auth)",
     "/logout": "Remove stored credentials & sign out of providers (alias: /signout)",
+    "/mode": "Show or select the orchestration mode used for prompts",
     "/model": "Interactive model picker & switcher scoped to authenticated providers (alias: /llm)",
     "/profile": "View or switch agent persona (alias: /role, /persona)",
     "/diff": "View git diff of session modifications with Monokai syntax (alias: /changes)",
@@ -857,7 +859,11 @@ class MiaREPL:
                 prompt,
                 mode_name=self.mode_name,
                 profile_name=self.profile_name,
-                runtime=self.agent_runtime,
+                provider=self.custom_provider,
+                model_override=self.model_name,
+                session_id=self.session_id,
+                cwd=self.cwd,
+                runtime=self.agent_runtime if self.mode_name == "single" else None,
             ):
                 event = envelope.event
                 if isinstance(event, OrchestrationErrorEvent):
@@ -906,6 +912,25 @@ class MiaREPL:
         elif cmd in ("/clear", "/cls"):
             self.console.clear()
             self.print_banner()
+
+        elif cmd == "/mode":
+            if not args:
+                available = ", ".join(self.mode_runtime.catalog.available_modes())
+                self.console.print(
+                    f"[bold #FF7A00]Current mode:[/bold #FF7A00] [bold cyan]{self.mode_name}[/bold cyan]"
+                )
+                self.console.print(f"[dim]Available modes: {available}[/dim]\n")
+            else:
+                try:
+                    self.mode_runtime.catalog.resolve(args, self.profile_name)
+                except ValueError as exc:
+                    self.console.print(f"[yellow]{exc}[/yellow]\n")
+                else:
+                    self.mode_name = args.strip().lower()
+                    self._init_harness()
+                    self.console.print(
+                        f"[bold green]✓ Switched orchestration mode to {self.mode_name}[/bold green]\n"
+                    )
 
         elif cmd in ("/model", "/llm"):
             if not args:

@@ -19,6 +19,7 @@ from mia_agent.events import (
 from mia_agent.session.compactor import ContextCompactor
 from mia_agent.session.entries import CompactionEntry, LeafEntry, MessageEntry
 from mia_agent.session.jsonl import JsonlSessionStore
+from mia_agent.session.tree import SessionTree
 from mia_ai.providers.base import LLMProvider
 from mia_ai.types import ChatMessage, TokenUsage, ToolCall, ToolDefinition
 from mia_middleware.pipeline import ToolCallContext, ToolPipeline
@@ -41,6 +42,7 @@ class AgentHarness:
         messages: Sequence[ChatMessage] | None = None,
         session_store: JsonlSessionStore | None = None,
         compactor: ContextCompactor | None = None,
+        last_entry_id: str | None = None,
     ) -> None:
         self.provider = provider
         self.model = model
@@ -53,7 +55,7 @@ class AgentHarness:
         self._messages: list[ChatMessage] = list(messages or [])
         self.session_store = session_store
         self.compactor = compactor
-        self._last_entry_id: str | None = None
+        self._last_entry_id = last_entry_id
         self._turn_counter = 0
         self._current_step = 0
 
@@ -69,6 +71,22 @@ class AgentHarness:
     def clear_history(self) -> None:
         """Clear all conversation history."""
         self._messages.clear()
+
+    def navigate_to(self, entry_id: str) -> list[ChatMessage]:
+        """Move the active branch to an existing entry without rewriting session history."""
+        if self.session_store is None:
+            raise ValueError("Session navigation requires a session store")
+
+        tree = SessionTree(self.session_store.load_entries())
+        target = tree.get_entry(entry_id)
+        if target is None:
+            raise ValueError(f"Session entry not found: {entry_id}")
+
+        path = tree.get_path_to_entry(entry_id)
+        self._messages = tree.extract_messages_from_path(path)
+        self._last_entry_id = entry_id
+        self.session_store.append_entry(LeafEntry(entry_id=entry_id))
+        return self.messages
 
     def _get_tool_definitions(self) -> list[ToolDefinition]:
         """Extract ToolDefinitions from registered tool objects."""
