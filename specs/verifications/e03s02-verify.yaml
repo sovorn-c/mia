@@ -8,14 +8,14 @@ phases:
   task_verification:
     passed: true
     commands:
-      - command: "uv run --offline pytest tests/test_cli_repl.py -k 'command_metadata or slash_completer or help_contract'"
-        actual: "2 passed"
+      - command: "uv run --offline pytest tests/test_cli_repl.py -k 'command_metadata or command_discovery or slash_completer or help_contract'"
+        actual: "3 passed"
       - command: "uv run --offline pytest tests/test_cli_repl.py -k 'command_discovery_has_one_truthful_canonical_list'"
         actual: "1 passed"
       - command: "uv run --offline pytest tests/test_agent_loop.py tests/test_sessions.py tests/test_cli_repl.py -k 'compact or repl_slash_commands_suite'"
         actual: "3 passed"
-      - command: "uv run --offline pytest tests/test_cli_repl.py -k 'invalid_profile or diff_failure'"
-        actual: "1 passed"
+      - command: "uv run --offline pytest tests/test_cli_repl.py -k 'invalid_profile or git_failure'"
+        actual: "2 passed"
       - command: "grep -q '17 canonical commands' specs/tech-architecture/tech-stack.md && grep -q 'Deferred active-turn cancellation' specs/tech-architecture/tech-stack.md"
         actual: "PASS"
   build:

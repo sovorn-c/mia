@@ -10,7 +10,7 @@ risk: "P1"
 tasks:
   - id: "t01"
     description: "Add failing command-metadata contract tests, derive completion/help/prefix matching from COMMAND_HINTS, restore /mode completion, narrow help/init copy, and remove unsupported /stop and /abort advertising."
-    verify: "uv run --offline pytest tests/test_cli_repl.py -k 'command_metadata or slash_completer or help_contract'"
+    verify: "uv run --offline pytest tests/test_cli_repl.py -k 'command_metadata or command_discovery or slash_completer or help_contract'"
     risk: "P1"
     security: "none"
     status: "passing"
@@ -32,7 +32,7 @@ tasks:
 
   - id: "t03"
     description: "Add failing command failure-path tests, validate profiles before mutating active state, and report non-zero git diff results instead of false clean-tree success."
-    verify: "uv run --offline pytest tests/test_cli_repl.py -k 'invalid_profile or diff_failure'"
+    verify: "uv run --offline pytest tests/test_cli_repl.py -k 'invalid_profile or git_failure'"
     risk: "P1"
     security: "low"
     status: "passing"
