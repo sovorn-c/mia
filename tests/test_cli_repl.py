@@ -1,4 +1,4 @@
-"""Unit and scenario tests for MiaREPL interactive stream harness."""
+"""Unit and scenario tests for MiaREPL interactive stream harness with Pi-style Auth and Model Scoper."""
 
 from __future__ import annotations
 
@@ -46,7 +46,6 @@ def test_repl_completer_and_slash_menu(tmp_path: Path) -> None:
     assert repl.handle_slash_command("/") is True
     assert repl.handle_slash_command("/?") is True
     assert repl.handle_slash_command("/help") is True
-    assert repl.handle_slash_command("/model") is True
     assert repl.handle_slash_command("/profile") is True
     assert repl.handle_slash_command("/cost") is True
     assert repl.handle_slash_command("/stats") is True
@@ -61,8 +60,8 @@ def test_repl_completer_and_slash_menu(tmp_path: Path) -> None:
     assert repl.handle_slash_command("/quit") is False
 
 
-def test_repl_interactive_login_wizard(tmp_path: Path) -> None:
-    """Test interactive login wizard saves credentials and updates model."""
+def test_repl_pi_style_auth_and_model_scoper(tmp_path: Path) -> None:
+    """Test Pi-style provider authentication followed by model scoping."""
     cred_file = tmp_path / "credentials.json"
     cfg_file = tmp_path / "config.json"
     mock = MockProvider()
@@ -70,8 +69,9 @@ def test_repl_interactive_login_wizard(tmp_path: Path) -> None:
     repl.cred_store.path = cred_file
     repl.config_mgr.config_path = cfg_file
 
+    # Simulate: Pick Provider [1] (opencode-go), Enter API Key, then Pick Model [1] (mimo-v2.5)
     with (
-        patch("builtins.input", side_effect=["1"]),
+        patch("builtins.input", side_effect=["1", "1"]),
         patch("getpass.getpass", return_value="sk-test-opencode-key-123"),
     ):
         repl.interactive_login()
@@ -79,6 +79,26 @@ def test_repl_interactive_login_wizard(tmp_path: Path) -> None:
     saved_key = repl.cred_store.get_api_key("opencode-go")
     assert saved_key == "sk-test-opencode-key-123"
     assert repl.model_name == "mimo-v2.5"
+
+
+def test_repl_scoped_model_picker(tmp_path: Path) -> None:
+    """Test interactive model picker lists authenticated models."""
+    cred_file = tmp_path / "credentials.json"
+    cfg_file = tmp_path / "config.json"
+    mock = MockProvider()
+    repl = MiaREPL(cwd=tmp_path, custom_provider=mock)
+    repl.cred_store.path = cred_file
+    repl.config_mgr.config_path = cfg_file
+
+    repl.cred_store.set_api_key("deepseek", "sk-deepseek-test-key")
+
+    with (
+        patch.dict("os.environ", {}, clear=True),
+        patch("builtins.input", return_value="1"),
+    ):
+        repl.interactive_model_picker()
+
+    assert repl.model_name == "deepseek-chat"
 
 
 @pytest.mark.asyncio

@@ -38,6 +38,7 @@ MODEL_PROVIDER_PREFIXES = {
     "gemini": "gemini",
     "mimo": "opencode-go",
     "opencode": "opencode-go",
+    "openrouter": "openrouter",
     "mock": "mock",
 }
 
@@ -47,6 +48,7 @@ ENV_API_KEY_MAP = {
     "openai": ["OPENAI_API_KEY"],
     "deepseek": ["DEEPSEEK_API_KEY"],
     "gemini": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+    "openrouter": ["OPENROUTER_API_KEY"],
     "opencode-go": ["OPENCODE_GO_API_KEY", "MIMO_API_KEY", "OPENCODE_API_KEY"],
     "mimo": ["MIMO_API_KEY", "OPENCODE_GO_API_KEY", "OPENCODE_API_KEY"],
 }
@@ -56,6 +58,8 @@ DEFAULT_PROVIDER_BASE_URLS = {
     "anthropic": "https://api.anthropic.com/v1",
     "openai": "https://api.openai.com/v1",
     "deepseek": "https://api.deepseek.com/v1",
+    "gemini": "https://generativelanguage.googleapis.com/v1beta/openai/",
+    "openrouter": "https://openrouter.ai/api/v1",
     "opencode-go": "https://opencode.ai/zen/go/v1",
     "mimo": "https://opencode.ai/zen/go/v1",
 }

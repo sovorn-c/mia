@@ -1,4 +1,4 @@
-"""Production-grade interactive CLI pair-programming REPL for Mia with 12 essential slash commands."""
+"""Production-grade interactive CLI pair-programming REPL for Mia with Pi-style Provider Auth & Scoped Model Switching."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import os
 import readline
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
@@ -57,8 +58,8 @@ SLASH_COMMANDS = [
 
 COMMAND_DESCRIPTIONS: dict[str, str] = {
     "/help": "Show complete command menu, shortcuts & tools (alias: /?)",
-    "/login": "Interactive setup wizard to configure/switch API keys (alias: /auth)",
-    "/model": "View or switch active LLM preset (alias: /llm)",
+    "/login": "Interactive provider auth setup to add/update API keys (alias: /auth)",
+    "/model": "Interactive model picker & switcher scoped to authenticated providers (alias: /llm)",
     "/profile": "View or switch agent persona (alias: /role, /persona)",
     "/diff": "View git diff of session modifications with Monokai syntax (alias: /changes)",
     "/cost": "Show real-time session tokens and estimated USD cost (alias: /stats, /tokens)",
@@ -87,36 +88,60 @@ COMMAND_ALIASES: dict[str, str] = {
     "/exit": "/quit",
 }
 
-PROVIDER_PRESETS: dict[str, dict[str, str]] = {
+PROVIDER_CATALOG: dict[str, dict[str, Any]] = {
     "1": {
         "id": "opencode-go",
-        "name": "OpenCode Zen (MiMo-v2.5 / OpenCode models)",
-        "default_model": "mimo-v2.5",
+        "name": "OpenCode Zen (OpenCode-Go API)",
         "base_url": "https://opencode.ai/zen/go/v1",
+        "default_model": "mimo-v2.5",
+        "models": ["mimo-v2.5", "qwen2.5-coder-32b-instruct", "deepseek-v3"],
     },
     "2": {
-        "id": "deepseek",
-        "name": "DeepSeek (DeepSeek-V3 / DeepSeek-R1)",
-        "default_model": "deepseek-chat",
-        "base_url": "https://api.deepseek.com/v1",
+        "id": "openrouter",
+        "name": "OpenRouter (Multi-Model Gateway)",
+        "base_url": "https://openrouter.ai/api/v1",
+        "default_model": "anthropic/claude-3.7-sonnet",
+        "models": [
+            "anthropic/claude-3.7-sonnet",
+            "deepseek/deepseek-r1",
+            "openai/gpt-4o",
+            "meta-llama/llama-3.3-70b-instruct",
+        ],
     },
     "3": {
-        "id": "anthropic",
-        "name": "Anthropic (Claude 3.5 Sonnet / Claude 3.7 Sonnet)",
-        "default_model": "claude-3-5-sonnet-20241022",
-        "base_url": "https://api.anthropic.com/v1",
+        "id": "gemini",
+        "name": "Google Gemini (Gemini API)",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "default_model": "gemini-2.5-flash",
+        "models": ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
     },
     "4": {
         "id": "openai",
         "name": "OpenAI (GPT-4o / o1 / o3-mini)",
-        "default_model": "gpt-4o",
         "base_url": "https://api.openai.com/v1",
+        "default_model": "gpt-4o",
+        "models": ["gpt-4o", "gpt-4o-mini", "o3-mini", "o1"],
     },
     "5": {
+        "id": "anthropic",
+        "name": "Anthropic (Claude 3.5 / 3.7 Sonnet)",
+        "base_url": "https://api.anthropic.com/v1",
+        "default_model": "claude-3-7-sonnet",
+        "models": ["claude-3-7-sonnet", "claude-3-5-sonnet-20241022", "claude-3-5-haiku"],
+    },
+    "6": {
+        "id": "deepseek",
+        "name": "DeepSeek (DeepSeek-V3 / DeepSeek-R1)",
+        "base_url": "https://api.deepseek.com/v1",
+        "default_model": "deepseek-chat",
+        "models": ["deepseek-chat", "deepseek-reasoner"],
+    },
+    "7": {
         "id": "custom",
-        "name": "Custom OpenAI-Compatible / Local (Ollama, vLLM, OpenRouter)",
-        "default_model": "custom-model",
+        "name": "Custom OpenAI-Compatible / Local (Ollama, vLLM, local)",
         "base_url": "http://localhost:11434/v1",
+        "default_model": "custom-model",
+        "models": [],
     },
 }
 
@@ -259,20 +284,19 @@ class MiaREPL:
         )
 
     def interactive_login(self, provider_hint: str | None = None) -> None:
-        """Guided interactive setup wizard to configure provider, model, and API credentials."""
-        self.console.print(
-            Panel(
-                "[bold #FF7A00]🔑 Mia Provider & Model Setup[/bold #FF7A00]\n\n"
-                "Select an AI Provider to configure:\n"
-                " [1] OpenCode Zen (MiMo-v2.5 / OpenCode models)\n"
-                " [2] DeepSeek (DeepSeek-V3 / DeepSeek-R1 Reasoner)\n"
-                " [3] Anthropic (Claude 3.5 Sonnet / Claude 3.7 Sonnet)\n"
-                " [4] OpenAI (GPT-4o / o1 / o3-mini)\n"
-                " [5] Custom OpenAI-Compatible (Ollama, OpenRouter, vLLM, local)",
-                border_style="#2D3342",
-                padding=(0, 1),
-            )
+        """Step 1: Provider Authentication Setup (Auth / API Keys)."""
+        table_text = (
+            "[bold #FF7A00]🔑 Mia Provider Authentication[/bold #FF7A00]\n\n"
+            "Select an AI Provider to authenticate:\n"
+            " [1] opencode-go (OpenCode Zen API) [Recommended]\n"
+            " [2] openrouter  (OpenRouter Multi-Model Gateway)\n"
+            " [3] gemini      (Google Gemini API)\n"
+            " [4] openai      (OpenAI API / OAuth)\n"
+            " [5] anthropic   (Anthropic Claude API)\n"
+            " [6] deepseek    (DeepSeek API)\n"
+            " [7] custom      (Custom OpenAI-Compatible / Local / Ollama)"
         )
+        self.console.print(Panel(table_text, border_style="#2D3342", padding=(0, 1)))
 
         selected_provider = "opencode-go"
         chosen_model = "mimo-v2.5"
@@ -280,7 +304,7 @@ class MiaREPL:
 
         if provider_hint:
             clean_hint = provider_hint.strip().lower()
-            for preset in PROVIDER_PRESETS.values():
+            for preset in PROVIDER_CATALOG.values():
                 if clean_hint in (preset["id"], preset["id"].split("-")[0]):
                     selected_provider = preset["id"]
                     chosen_model = preset["default_model"]
@@ -288,33 +312,32 @@ class MiaREPL:
                     break
         else:
             try:
-                choice = input("Select provider [1-5 or name] (default: 1): ").strip().lower()
-                if choice in PROVIDER_PRESETS:
-                    selected_provider = PROVIDER_PRESETS[choice]["id"]
-                    chosen_model = PROVIDER_PRESETS[choice]["default_model"]
-                    base_url = PROVIDER_PRESETS[choice]["base_url"]
+                choice = (
+                    input("Select provider to authenticate [1-7] (default: 1): ").strip().lower()
+                )
+                if choice in PROVIDER_CATALOG:
+                    selected_provider = PROVIDER_CATALOG[choice]["id"]
+                    chosen_model = PROVIDER_CATALOG[choice]["default_model"]
+                    base_url = PROVIDER_CATALOG[choice]["base_url"]
                 elif choice:
-                    for preset in PROVIDER_PRESETS.values():
+                    for preset in PROVIDER_CATALOG.values():
                         if choice in (preset["id"], preset["id"].split("-")[0]):
                             selected_provider = preset["id"]
                             chosen_model = preset["default_model"]
                             base_url = preset["base_url"]
                             break
             except (KeyboardInterrupt, EOFError):
-                self.console.print("\n[yellow]Setup cancelled.[/yellow]\n")
+                self.console.print("\n[yellow]Auth setup cancelled.[/yellow]\n")
                 return
 
-        # If custom, ask for Base URL and model name
+        # If custom, ask for Base URL
         if selected_provider == "custom":
             try:
                 custom_url = input(f"Enter Base URL (default: {base_url}): ").strip()
                 if custom_url:
                     base_url = custom_url
-                custom_m = input("Enter Model Name (e.g. llama3, qwen2.5-coder): ").strip()
-                if custom_m:
-                    chosen_model = custom_m
             except (KeyboardInterrupt, EOFError):
-                self.console.print("\n[yellow]Setup cancelled.[/yellow]\n")
+                self.console.print("\n[yellow]Auth setup cancelled.[/yellow]\n")
                 return
 
         # Prompt for API Key
@@ -330,19 +353,54 @@ class MiaREPL:
                 api_key = input(prompt_str).strip()
 
             if not api_key and selected_provider != "custom":
-                self.console.print("[yellow]No API key entered. Setup aborted.[/yellow]\n")
+                self.console.print("[yellow]No API key entered. Auth aborted.[/yellow]\n")
                 return
 
-            # Save to ~/.mia/credentials.json
+            # Save credentials to ~/.mia/credentials.json
             if api_key:
                 self.cred_store.set_api_key(selected_provider, api_key)
+
+            self.console.print(
+                f"[bold green]✓ Authenticated {selected_provider}. Saved to ~/.mia/credentials.json[/bold green]"
+            )
+
+            # Step 2: Immediate Model Scoping for this provider
+            self._prompt_model_scope(selected_provider, base_url, chosen_model)
+
+        except (KeyboardInterrupt, EOFError):
+            self.console.print("\n[yellow]Auth setup cancelled.[/yellow]\n")
+
+    def _prompt_model_scope(self, provider_id: str, base_url: str, default_model: str) -> None:
+        """Step 2: Model Scope & Selection for an Authenticated Provider."""
+        preset = next((p for p in PROVIDER_CATALOG.values() if p["id"] == provider_id), None)
+        models = preset["models"] if preset else []
+
+        self.console.print(f"\n[bold #FF7A00]Available models for {provider_id}:[/bold #FF7A00]")
+        for i, m in enumerate(models, start=1):
+            default_tag = " [bold green](Default)[/bold green]" if m == default_model else ""
+            self.console.print(f"  [{i}] {m}{default_tag}")
+        self.console.print(f"  [{len(models) + 1}] Custom / Enter model name")
+
+        try:
+            choice = input(
+                f"Select active model [1-{len(models) + 1} or type name] (default: 1): "
+            ).strip()
+            if not choice or choice == "1":
+                selected_model = default_model
+            elif choice.isdigit() and 1 <= int(choice) <= len(models):
+                selected_model = models[int(choice) - 1]
+            elif choice.isdigit() and int(choice) == len(models) + 1:
+                custom_m = input("Enter custom model name: ").strip()
+                selected_model = custom_m if custom_m else default_model
+            else:
+                selected_model = choice
 
             # Save default model and provider to ~/.mia/config.json
             current_cfg = self.config_mgr.config
             updated_cfg = MiaConfig(
-                default_provider=selected_provider,
-                default_model=chosen_model,
-                base_urls={**current_cfg.base_urls, selected_provider: base_url},
+                default_provider=provider_id,
+                default_model=selected_model,
+                base_urls={**current_cfg.base_urls, provider_id: base_url},
                 max_steps_per_turn=current_cfg.max_steps_per_turn,
                 temperature=current_cfg.temperature,
                 compaction_threshold_ratio=current_cfg.compaction_threshold_ratio,
@@ -351,21 +409,99 @@ class MiaREPL:
             )
             self.config_mgr.save_config(updated_cfg)
 
-            self.model_name = chosen_model
-
-            # Re-initialize harness with new credentials
+            self.model_name = selected_model
             self.config_mgr = ConfigManager()
             self._init_harness()
 
             self.console.print(
-                f"[bold green]✓ Successfully configured {selected_provider} (Model: {self.model_name})[/bold green]"
-            )
-            self.console.print(
-                "[bold green]✓ Saved to ~/.mia/credentials.json and ~/.mia/config.json[/bold green]\n"
+                f"[bold green]✓ Active model set to {self.model_name}[/bold green]\n"
             )
 
         except (KeyboardInterrupt, EOFError):
-            self.console.print("\n[yellow]Setup cancelled.[/yellow]\n")
+            self.console.print("\n[yellow]Model selection cancelled.[/yellow]\n")
+
+    def interactive_model_picker(self) -> None:
+        """Interactive Model Switcher (Pi-style) listing models scoped to authenticated providers."""
+        # Find which providers have credentials
+        authenticated_providers: list[dict[str, Any]] = []
+        for preset in PROVIDER_CATALOG.values():
+            pid = preset["id"]
+            key = self.cred_store.get_api_key(pid) or os.environ.get(f"{pid.upper()}_API_KEY")
+            if key or pid == "custom":
+                authenticated_providers.append(preset)
+
+        if not authenticated_providers:
+            self.console.print(
+                "[yellow]No providers authenticated yet. Launching /login setup...[/yellow]\n"
+            )
+            self.interactive_login()
+            return
+
+        table = Table(
+            title="🤖 Scoped Model Switcher (Pi-Style)",
+            border_style="#2D3342",
+            show_header=True,
+            header_style="bold #FF7A00",
+        )
+        table.add_column("Index", style="bold #FF7A00", width=8)
+        table.add_column("Provider", style="bold cyan", width=16)
+        table.add_column("Model Name", style="white")
+
+        model_options: list[tuple[str, str]] = []
+        idx = 1
+
+        for prov in authenticated_providers:
+            pid = prov["id"]
+            for m in prov["models"]:
+                active_tag = " [bold green](Active)[/bold green]" if m == self.model_name else ""
+                table.add_row(f"[{idx}]", pid, f"{m}{active_tag}")
+                model_options.append((pid, m))
+                idx += 1
+
+        table.add_row(f"[{idx}]", "any", "Type custom model name...")
+        self.console.print(table)
+
+        try:
+            choice = input(
+                f"Select model [1-{idx} or type model name] (active: {self.model_name or 'none'}): "
+            ).strip()
+            if not choice:
+                return
+
+            if choice.isdigit() and 1 <= int(choice) <= len(model_options):
+                prov_id, target_model = model_options[int(choice) - 1]
+                self.model_name = target_model
+                current_cfg = self.config_mgr.config
+                self.config_mgr.save_config(
+                    MiaConfig(
+                        default_provider=prov_id,
+                        default_model=target_model,
+                        base_urls=current_cfg.base_urls,
+                    )
+                )
+                self._init_harness()
+                self.console.print(
+                    f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n"
+                )
+
+            elif choice.isdigit() and int(choice) == idx:
+                custom_m = input("Enter custom model name: ").strip()
+                if custom_m:
+                    self.model_name = custom_m
+                    self._init_harness()
+                    self.console.print(
+                        f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n"
+                    )
+            else:
+                # Direct string input
+                self.model_name = choice
+                self._init_harness()
+                self.console.print(
+                    f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n"
+                )
+
+        except (KeyboardInterrupt, EOFError):
+            self.console.print("\n[yellow]Model selection cancelled.[/yellow]\n")
 
     def print_banner(self) -> None:
         """Render clean, modern welcome banner."""
@@ -527,7 +663,7 @@ class MiaREPL:
             self.print_command_menu()
             return True
 
-        # 2. Login / Auth
+        # 2. Login / Auth (Provider authentication)
         elif cmd in ("/login", "/auth"):
             self.interactive_login(args)
             return True
@@ -542,19 +678,10 @@ class MiaREPL:
             self.console.clear()
             self.print_banner()
 
-        # 5. Model Switcher
+        # 5. Model Switcher (Pi-style)
         elif cmd in ("/model", "/llm"):
             if not args:
-                model_str = self.model_name or "[Not Configured]"
-                self.console.print(
-                    f"[bold #FF7A00]Current model:[/bold #FF7A00] [bold cyan]{model_str}[/bold cyan]"
-                )
-                self.console.print(
-                    "[dim]Presets: mimo-v2.5, deepseek-chat, claude-3-5-sonnet-20241022, gpt-4o[/dim]"
-                )
-                self.console.print(
-                    "[dim]To switch: /model <name> or run /login to change provider.[/dim]\n"
-                )
+                self.interactive_model_picker()
             else:
                 self.model_name = args
                 self._init_harness()
@@ -676,8 +803,8 @@ class MiaREPL:
         # First-run credential & model verification
         if not self.custom_provider and not self.model_name:
             self.console.print(
-                "[bold #FF7A00]⚡ Welcome to Mia! No AI model or API key configured yet.[/bold #FF7A00]\n"
-                "[dim]Launching setup wizard to choose your provider...[/dim]\n"
+                "[bold #FF7A00]⚡ Welcome to Mia! No AI provider authenticated yet.[/bold #FF7A00]\n"
+                "[dim]Launching authentication setup...[/dim]\n"
             )
             self.interactive_login()
 
