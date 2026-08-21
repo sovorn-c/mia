@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from prompt_toolkit.document import Document
+from rich.console import Console
 
 from mia_agent.orchestration import OrchestrationErrorEvent, OrchestrationEventEnvelope
 from mia_agent.session.entries import MessageEntry
@@ -54,6 +55,24 @@ def test_command_discovery_has_one_truthful_canonical_list() -> None:
     assert canonical == SLASH_COMMANDS
     assert canonical == list(COMMAND_DESCRIPTIONS)
     assert "/abort" not in COMMAND_ALIASES
+
+
+def test_help_and_init_describe_only_implemented_behavior(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+
+    repl.handle_slash_command("/help")
+    help_output = repl.console.export_text()
+    assert "17 Canonical Slash Commands" in help_output
+    assert "shortcuts" not in help_output
+    assert "/mode" in help_output
+    assert "/stop" not in help_output
+
+    repl.console = Console(record=True, width=120)
+    repl.handle_slash_command("/init")
+    init_output = repl.console.export_text()
+    assert "Basic Repository Context" in init_output
+    assert "architecture" not in init_output.lower()
 
 
 def test_format_status_toolbar() -> None:
