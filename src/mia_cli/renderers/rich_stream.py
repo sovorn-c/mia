@@ -113,6 +113,8 @@ class RichStreamRenderer:
                 if self._in_thought:
                     self.console.print("\n")
                     self._in_thought = False
+                if not self._in_text:
+                    self.console.print("[bold #FF7A00]🥕 mia ›[/bold #FF7A00] ", end="")
                 self._in_text = True
                 self.console.print(Text(event.delta_text), end="")
 

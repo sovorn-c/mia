@@ -180,7 +180,7 @@ class LivePromptSession:
 
     async def read_prompt_async(
         self,
-        prompt_prefix: str = "🥕 mia › ",
+        prompt_prefix: str = "› ",
         bottom_toolbar: Any = None,
     ) -> str:
         """Async prompt user with floating slash completions, bracketed paste, and pinned bottom toolbar."""
@@ -208,7 +208,7 @@ class LivePromptSession:
 
     def read_prompt(
         self,
-        prompt_prefix: str = "🥕 mia › ",
+        prompt_prefix: str = "› ",
         bottom_toolbar: Any = None,
     ) -> str:
         """Prompt user with floating slash completions, bracketed paste, and pinned bottom toolbar."""
@@ -241,10 +241,10 @@ class LiveInteractivePrompt:
     def __init__(self, history_file: Path | None = None) -> None:
         self._session = LivePromptSession(history_file=history_file)
 
-    async def read_prompt_async(self, prompt_prefix: str = "🥕 mia › ") -> str:
+    async def read_prompt_async(self, prompt_prefix: str = "› ") -> str:
         return await self._session.read_prompt_async(prompt_prefix)
 
-    def read_prompt(self, prompt_prefix: str = "🥕 mia › ") -> str:
+    def read_prompt(self, prompt_prefix: str = "› ") -> str:
         return self._session.read_prompt(prompt_prefix)
 
 
