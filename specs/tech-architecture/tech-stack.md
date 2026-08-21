@@ -106,3 +106,32 @@ Previous versions attempted character-by-character raw POSIX input (`setcbreak`)
 11. **`/undo`** (`/revert`): Revert latest file change made by agent in this session.
 12. **`/clear`** (`/cls`): Clear screen and redraw clean single-line header banner.
 13. **`/quit`** (`/exit`): Save session and exit cleanly.
+
+---
+
+## 5. Minimalist Live Working Stream & Post-Turn Inspection (Antigravity & Codex Pattern)
+
+### A. Active Turn Live Working Stream (Zero Screen Clutter)
+* **Thinking State:** Animated spinner with live duration (`💭 Thinking (3.2s)...`). Raw reasoning tokens are buffered in memory and not spewed onto the terminal during streaming.
+* **Tool Working State:** Compact single-line in-place status:
+  - `⠋ Reading src/app.py...`
+  - `⠋ Editing src/mia_cli/repl.py...`
+  - `⠋ Searching codebase for 'PromptSession'...`
+  - `⠋ Running 'pytest'...`
+* **Tool Completed State:** Collapses immediately to a single-line badge:
+  - `✓ Read src/app.py (80 lines)`
+  - `✓ Edited src/mia_cli/repl.py`
+  - `✓ Executed bash: pytest (passed)`
+* **Zero Output Bloat:** Full 500-line file contents and multi-page tool outputs are never dumped raw into terminal scrollback during active streaming.
+
+### B. Post-Turn Inspection & Toggle Keybindings
+* Upon turn completion, Mia outputs the clean final answer and an unobtrusive bottom hint bar:
+  `[Ctrl+O] Expand details & tool logs  •  [Ctrl+T] Toggle thinking trace  •  /help`
+* **`Ctrl+O` (`/inspect`):** Opens a clean, scrollable inspection view showing full tool execution logs, arguments, and full file diffs.
+* **`Ctrl+T` (`/thinking`):** Toggles display of the complete reasoning / thinking trace for the current and subsequent turns.
+* **Customizable Working Indicator / Spinner Styles:**
+  - `carrot_bounce` (`🥕 `)
+  - `dots` (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`)
+  - `pulse` (`·•●•·`)
+  - `braille` (`⣾⣽⣻⢿⡿⣟⣯⣷`)
+
