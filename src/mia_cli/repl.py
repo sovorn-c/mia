@@ -706,9 +706,6 @@ class MiaREPL:
 
     async def execute_turn(self, prompt: str) -> None:
         """Run single prompt turn with minimalist stream rendering."""
-        # Render user prompt with subtle background highlight (Pi-style)
-        self.console.print(f"\n[on #20242C #F3F4F6]  {prompt}  [/on #20242C #F3F4F6]\n")
-
         if not self.harness:
             if not self.model_name:
                 self.console.print(
