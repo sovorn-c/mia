@@ -172,5 +172,23 @@ Mia uses a profile-driven execution model enforced via the `SecurityGuardMiddlew
 | **`Esc` (or `/tree`)** | Session Tree Fork | Opens interactive tree browser to jump to previous turn or fork branch |
 | **`/stop`** | Abort Turn | Halts the active LLM stream or running tool subprocess |
 
+---
+
+## 8. Prompt Ergonomics & Live Status Footer (Pi Standard)
+
+### A. Bracketed Paste & Multi-Line Editor
+* **Multi-Line Paste:** Pasted code blocks and stack traces are handled natively via `prompt_toolkit` bracketed paste mode with preserved indentation and full arrow-key multi-line editing.
+* **Submission:** Standard `Enter` submits prompts; `Shift+Enter` inserts newlines.
+
+### B. Live Pinned Status Footer
+* Pinned directly below the `prompt_toolkit` input prompt line:
+  ```
+  ──────────────────────────────────────────────────────────────────────────
+  📁 <workspace>  •  🧠 <model>  •  ⚡ <tokens>/<window> (<pct>%)  •  Esc: Tree  •  Ctrl+O: Logs
+  ```
+* Dynamically updates tokens and context window percentage as turns execute.
+
+
+
 
 
