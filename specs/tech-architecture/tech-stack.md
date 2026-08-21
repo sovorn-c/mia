@@ -129,8 +129,8 @@ Previous versions attempted character-by-character raw POSIX input (`setcbreak`)
   `[Ctrl+O] Expand details & tool logs  •  [Ctrl+T] Toggle thinking trace  •  /help`
 * **`Ctrl+O` (`/inspect`):** Opens a clean, scrollable inspection view showing full tool execution logs, arguments, and full file diffs.
 * **`Ctrl+T` (`/thinking`):** Toggles display of the complete reasoning / thinking trace for the current and subsequent turns.
-* **Customizable Working Indicator / Spinner Styles:**
-  - `carrot_bounce` (`🥕 `)
+* **Customizable Working Indicator / Spinner Styles (Default: `carrot_bounce`):**
+  - `carrot_bounce` (Default signature: `🥕 ` with smooth bounce animation)
   - `dots` (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`)
   - `pulse` (`·•●•·`)
   - `braille` (`⣾⣽⣻⢿⡿⣟⣯⣷`)
