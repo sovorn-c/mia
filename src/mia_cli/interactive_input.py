@@ -8,7 +8,7 @@ from pathlib import Path
 from rich.console import Console
 
 COMMAND_HINTS: list[tuple[str, str]] = [
-    ("/help", "Show command menu & tools (alias: /?)"),
+    ("/help", "Show command menu & shortcuts (alias: /?)"),
     ("/login", "Authenticate AI providers & API keys (alias: /auth)"),
     ("/model", "Switch active LLM (Pi-style scoper) (alias: /llm)"),
     ("/profile", "Switch agent persona (coding, architect, minimal)"),
@@ -51,7 +51,7 @@ class LiveInteractivePrompt:
             except Exception:
                 pass
 
-    def read_prompt(self, prompt_prefix: str = "🥕 mia > ") -> str:
+    def read_prompt(self, prompt_prefix: str = "🥕 mia › ") -> str:
         """Read line interactively with real-time popup on '/'."""
         if not sys.stdin.isatty():
             # Non-interactive fallback (pipes, pytest, CI)
@@ -97,7 +97,14 @@ class LiveInteractivePrompt:
                 # Enter (\r or \n)
                 if char in ("\r", "\n"):
                     self._clear_menu(rendered_menu_lines)
-                    sys.stdout.write("\r\x1b[K" + prompt_prefix + buffer + "\n")
+                    sys.stdout.write(
+                        "\r\x1b[K"
+                        + "\x1b[1;38;2;255;122;0m"
+                        + prompt_prefix
+                        + "\x1b[0m"
+                        + buffer
+                        + "\n"
+                    )
                     sys.stdout.flush()
                     line = buffer.strip()
                     if line and (not self.history or self.history[-1] != line):
@@ -186,27 +193,28 @@ class LiveInteractivePrompt:
 
         menu_lines_count = 0
 
-        # 3. If buffer starts with '/', render the live floating dropdown menu!
+        # 3. If buffer starts with '/', render the sleek floating dropdown menu
         if buffer.startswith("/"):
             query = buffer.split()[0].lower()
             matches = [item for item in COMMAND_HINTS if item[0].startswith(query)]
             if not matches:
-                matches = COMMAND_HINTS[:6]  # Fallback to top commands
+                matches = COMMAND_HINTS[:6]
 
-            menu_lines_count = len(matches) + 2  # Top border, items, bottom border
+            menu_lines_count = len(matches) + 2
             sys.stdout.write(
-                "\n\x1b[2m╭─ Available Commands (Press Tab or Enter) ───────────────────────╮\x1b[0m\n"
+                "\n\x1b[38;2;45;51;66m╭── \x1b[1;38;2;255;122;0mAvailable Commands\x1b[0m \x1b[38;2;107;114;128m(Press Tab or Enter)\x1b[0m \x1b[38;2;45;51;66m"
+                + "─" * 28
+                + "╮\x1b[0m\n"
             )
             for i, (cmd, desc) in enumerate(matches[:8]):
-                arrow = "▸ " if i == 0 else "  "
-                # Highlight command in orange, desc in dim
-                cmd_colored = f"\x1b[1;38;2;255;122;0m{cmd:<10}\x1b[0m"
-                desc_colored = f"\x1b[2;37m{desc[:50]}\x1b[0m"
-                sys.stdout.write(f"\x1b[2m│\x1b[0m {arrow}{cmd_colored} {desc_colored}\n")
+                arrow = "\x1b[1;38;2;255;122;0m▸\x1b[0m " if i == 0 else "  "
+                cmd_colored = f"\x1b[1;38;2;255;122;0m{cmd:<11}\x1b[0m"
+                desc_colored = f"\x1b[38;2;156;163;175m{desc[:48]}\x1b[0m"
+                sys.stdout.write(
+                    f"\x1b[38;2;45;51;66m│\x1b[0m {arrow}{cmd_colored} {desc_colored}\n"
+                )
 
-            sys.stdout.write(
-                "\x1b[2m╰─────────────────────────────────────────────────────────────────╯\x1b[0m"
-            )
+            sys.stdout.write("\x1b[38;2;45;51;66m╰" + "─" * 66 + "╯\x1b[0m")
 
             # Move cursor back up to the prompt line
             sys.stdout.write(f"\x1b[{menu_lines_count}A")
@@ -222,11 +230,11 @@ class LiveInteractivePrompt:
     def _clear_menu(self, menu_lines_count: int) -> None:
         """Erase any floating menu lines rendered below the prompt."""
         if menu_lines_count > 0:
-            # Save cursor
+            # Save cursor position
             sys.stdout.write("\x1b[s")
             # Move down and clear each line
             for _ in range(menu_lines_count):
                 sys.stdout.write("\n\x1b[2K")
-            # Restore cursor
+            # Restore cursor position
             sys.stdout.write("\x1b[u")
             sys.stdout.flush()

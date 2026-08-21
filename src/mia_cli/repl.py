@@ -197,13 +197,10 @@ class MiaREPL:
             if self._history_file.exists():
                 readline.read_history_file(str(self._history_file))
 
-            # Remove '/' and '-' from word delimiters so '/model' is treated as a single token for completion
             delims = readline.get_completer_delims().replace("/", "").replace("-", "")
             readline.set_completer_delims(delims)
-
             readline.set_completer(REPLCompleter(SLASH_COMMANDS).complete)
 
-            # Bind Tab for both GNU Readline and macOS libedit
             doc = getattr(readline, "__doc__", "") or ""
             if "libedit" in doc:
                 readline.parse_and_bind("bind ^I rl_complete")
@@ -332,7 +329,6 @@ class MiaREPL:
                 self.console.print("\n[yellow]Auth setup cancelled.[/yellow]\n")
                 return
 
-        # If custom, ask for Base URL
         if selected_provider == "custom":
             try:
                 custom_url = input(f"Enter Base URL (default: {base_url}): ").strip()
@@ -342,7 +338,6 @@ class MiaREPL:
                 self.console.print("\n[yellow]Auth setup cancelled.[/yellow]\n")
                 return
 
-        # Prompt for API Key
         try:
             prompt_str = (
                 f"Enter API key for {selected_provider} (press Enter if local/none): "
@@ -358,7 +353,6 @@ class MiaREPL:
                 self.console.print("[yellow]No API key entered. Auth aborted.[/yellow]\n")
                 return
 
-            # Save credentials to ~/.mia/credentials.json
             if api_key:
                 self.cred_store.set_api_key(selected_provider, api_key)
 
@@ -366,7 +360,6 @@ class MiaREPL:
                 f"[bold green]✓ Authenticated {selected_provider}. Saved to ~/.mia/credentials.json[/bold green]"
             )
 
-            # Step 2: Immediate Model Scoping for this provider
             self._prompt_model_scope(selected_provider, base_url, chosen_model)
 
         except (KeyboardInterrupt, EOFError):
@@ -397,7 +390,6 @@ class MiaREPL:
             else:
                 selected_model = choice
 
-            # Save default model and provider to ~/.mia/config.json
             current_cfg = self.config_mgr.config
             updated_cfg = MiaConfig(
                 default_provider=provider_id,
@@ -424,7 +416,6 @@ class MiaREPL:
 
     def interactive_model_picker(self) -> None:
         """Interactive Model Switcher (Pi-style) listing models scoped to authenticated providers."""
-        # Find which providers have credentials
         authenticated_providers: list[dict[str, Any]] = []
         for preset in PROVIDER_CATALOG.values():
             pid = preset["id"]
@@ -495,7 +486,6 @@ class MiaREPL:
                         f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n"
                     )
             else:
-                # Direct string input
                 self.model_name = choice
                 self._init_harness()
                 self.console.print(
@@ -506,26 +496,19 @@ class MiaREPL:
             self.console.print("\n[yellow]Model selection cancelled.[/yellow]\n")
 
     def print_banner(self) -> None:
-        """Render clean, modern welcome banner."""
-        model_display = (
-            f"{self.model_name}  " if self.model_name else "[Not Configured - Run /login]  "
-        )
+        """Render clean, compact Claude Code/Pi-style banner."""
+        model_display = self.model_name if self.model_name else "Not Configured"
         model_style = "bold #38BDF8" if self.model_name else "bold yellow"
 
         banner_content = Text.assemble(
-            ("Directory: ", "dim #9CA3AF"),
-            (f"{self.cwd}\n", "bold #F3F4F6"),
-            ("Model:     ", "dim #9CA3AF"),
-            (model_display, model_style),
+            (f"{self.cwd}  ", "dim #9CA3AF"),
+            ("│  Model: ", "dim #9CA3AF"),
+            (f"{model_display}  ", model_style),
             ("│  Profile: ", "dim #9CA3AF"),
             (f"{self.profile_name}  ", "bold #10B981"),
-            ("│  Session: ", "dim #9CA3AF"),
-            (f"{self.session_id}\n", "dim #F3F4F6"),
-            ("Commands:  ", "dim #9CA3AF"),
-            (
-                "Type / for menu (/login, /model, /profile, /diff, /cost, /compact, /quit)",
-                "dim #FF7A00",
-            ),
+            ("│  Type ", "dim #9CA3AF"),
+            ("/", "bold #FF7A00"),
+            (" for commands", "dim #9CA3AF"),
         )
         self.console.print(
             Panel(
@@ -557,7 +540,7 @@ class MiaREPL:
         )
 
     async def execute_turn(self, prompt: str) -> None:
-        """Run single prompt turn with real-time stream rendering."""
+        """Run single prompt turn with sleek Claude Code/Pi stream rendering."""
         if not self.harness:
             if not self.model_name:
                 self.console.print(
@@ -586,7 +569,7 @@ class MiaREPL:
                     if event.thought_delta:
                         if not in_thought:
                             self.console.print(
-                                "\n[bold #FF7A00]💭 Thinking:[/bold #FF7A00] ", end=""
+                                "\n[dim italic #FF7A00]✻ Thinking:[/dim italic #FF7A00] ", end=""
                             )
                             in_thought = True
                         self.console.print(
@@ -608,21 +591,32 @@ class MiaREPL:
                         in_thought = False
                         in_assistant = False
 
-                    args_preview = str(event.arguments)
-                    if len(args_preview) > 80:
-                        args_preview = args_preview[:77] + "..."
-                    self.console.print(
-                        f"\n[bold cyan]▶ Tool:[/bold cyan] [bold white]{event.tool_name}[/bold white]({args_preview})",
-                        end=" ",
-                    )
+                    # Claude Code style tool call header
+                    tool_desc = event.tool_name
+                    args = event.arguments
+                    if event.tool_name == "read_file":
+                        tool_desc = f"Read file: [bold white]{args.get('path', '')}[/bold white]"
+                    elif event.tool_name == "write_file":
+                        tool_desc = f"Write file: [bold white]{args.get('path', '')}[/bold white]"
+                    elif event.tool_name == "edit_file":
+                        tool_desc = f"Edit file: [bold white]{args.get('path', '')}[/bold white]"
+                    elif event.tool_name == "bash":
+                        cmd_prev = str(args.get("command", ""))
+                        if len(cmd_prev) > 50:
+                            cmd_prev = cmd_prev[:47] + "..."
+                        tool_desc = f"Run command: [bold white]{cmd_prev}[/bold white]"
+                    else:
+                        tool_desc = f"Tool: [bold white]{event.tool_name}[/bold white]"
+
+                    self.console.print(f"\n[bold #38BDF8]●[/bold #38BDF8] {tool_desc}", end=" ")
 
                 elif isinstance(event, ToolResultEvent):
                     status = (
-                        "[bold green]✓ Succeeded[/bold green]"
+                        "[dim green]✓[/dim green]"
                         if not event.is_error
                         else "[bold red]✗ Failed[/bold red]"
                     )
-                    self.console.print(f"── {status} [dim]({event.duration_ms:.1f}ms)[/dim]")
+                    self.console.print(f"{status} [dim]({event.duration_ms:.1f}ms)[/dim]")
 
                     # If diff output, render with Monokai syntax highlighting
                     output_str = str(event.output)
@@ -632,7 +626,7 @@ class MiaREPL:
                         )
                         self.console.print(diff_syntax)
                     elif event.is_error:
-                        self.console.print(f"[red]{output_str[:300]}[/red]")
+                        self.console.print(f"  [dim red]↳ {output_str[:300]}[/dim red]")
 
                 elif isinstance(event, StepEndEvent):
                     self.total_tokens += event.input_tokens + event.output_tokens
@@ -642,7 +636,7 @@ class MiaREPL:
                     if in_thought or in_assistant:
                         self.console.print()
                     self.console.print(
-                        f"[dim]✓ Turn completed • Total tokens: {self.total_tokens:,} • Cost: ${self.total_cost_usd:.4f}[/dim]\n"
+                        f"[dim]✓ Turn completed • {self.total_tokens:,} tokens • ${self.total_cost_usd:.4f}[/dim]\n"
                     )
 
         except asyncio.CancelledError:
@@ -657,30 +651,24 @@ class MiaREPL:
         raw_cmd = parts[0].lower()
         args = parts[1].strip() if len(parts) > 1 else ""
 
-        # Check alias
         cmd = COMMAND_ALIASES.get(raw_cmd, raw_cmd)
 
-        # 1. Menu and Help
         if cmd in ("/", "/?", "/help"):
             self.print_command_menu()
             return True
 
-        # 2. Login / Auth (Provider authentication)
         elif cmd in ("/login", "/auth"):
             self.interactive_login(args)
             return True
 
-        # 3. Quit / Exit
         elif cmd in ("/quit", "/exit"):
             self.console.print("[dim]Saving session tree... Goodbye![/dim]")
             return False
 
-        # 4. Clear screen
         elif cmd in ("/clear", "/cls"):
             self.console.clear()
             self.print_banner()
 
-        # 5. Model Switcher (Pi-style)
         elif cmd in ("/model", "/llm"):
             if not args:
                 self.interactive_model_picker()
@@ -691,7 +679,6 @@ class MiaREPL:
                     f"[bold green]✓ Switched active model to {self.model_name}[/bold green]\n"
                 )
 
-        # 6. Profile Switcher
         elif cmd in ("/profile", "/role", "/persona"):
             if not args:
                 profiles = [p.name for p in self.profile_mgr.list_profiles()]
@@ -709,7 +696,6 @@ class MiaREPL:
                     f"[bold green]✓ Switched profile to {self.profile_name}[/bold green]\n"
                 )
 
-        # 7. Git Diff View
         elif cmd in ("/diff", "/changes"):
             try:
                 res = subprocess.run(
@@ -733,17 +719,14 @@ class MiaREPL:
             except Exception as e:
                 self.console.print(f"[red]Failed to run git diff: {e}[/red]\n")
 
-        # 8. Token & Cost Stats
         elif cmd in ("/cost", "/stats", "/tokens"):
             self.console.print(
                 f"[bold #FF7A00]Session Metrics:[/bold #FF7A00] Tokens: {self.total_tokens:,} │ Cost: ${self.total_cost_usd:.4f}\n"
             )
 
-        # 9. Context Compactor
         elif cmd in ("/compact", "/compress"):
             self.console.print("[bold green]✓ Context compaction status verified.[/bold green]\n")
 
-        # 10. Sessions Tree List
         elif cmd in ("/sessions", "/history"):
             session_dir = self.profile_mgr.get_session_dir(self.profile_name)
             files = list(session_dir.glob("*.jsonl"))
@@ -752,7 +735,6 @@ class MiaREPL:
                 self.console.print(f" - {f.stem} [dim]({f.stat().st_size / 1024:.1f} KB)[/dim]")
             self.console.print()
 
-        # 11. Repo Context & Init
         elif cmd in ("/init", "/bootstrap"):
             has_git = (self.cwd / ".git").exists()
             has_agents = (self.cwd / "AGENTS.md").exists()
@@ -768,17 +750,14 @@ class MiaREPL:
                 )
             )
 
-        # 12. Undo Latest Edit
         elif cmd in ("/undo", "/revert"):
             self.console.print(
                 "[dim]Use git checkout or /diff to review and revert specific changes.[/dim]\n"
             )
 
         else:
-            # Prefix matching (e.g. user typed /d or /m)
             matched = [c for c in SLASH_COMMANDS if c.startswith(raw_cmd)]
             if len(matched) == 1:
-                # Execute the unique matched command
                 return self.handle_slash_command(f"{matched[0]} {args}".strip())
             elif matched:
                 self.console.print(
@@ -802,7 +781,6 @@ class MiaREPL:
         """Main async REPL loop with first-run onboarding verification."""
         self.print_banner()
 
-        # First-run credential & model verification
         if not self.custom_provider and not self.model_name:
             self.console.print(
                 "[bold #FF7A00]⚡ Welcome to Mia! No AI provider authenticated yet.[/bold #FF7A00]\n"
@@ -812,8 +790,7 @@ class MiaREPL:
 
         while True:
             try:
-                # Live interactive character-by-character input with real-time '/' popup
-                user_input = self.prompt_reader.read_prompt("🥕 mia > ")
+                user_input = self.prompt_reader.read_prompt("🥕 mia › ")
 
                 if not user_input:
                     continue
@@ -824,7 +801,6 @@ class MiaREPL:
                         break
                     continue
 
-                # Run turn with cancellation support
                 await self.execute_turn(user_input)
 
             except (KeyboardInterrupt, EOFError):
