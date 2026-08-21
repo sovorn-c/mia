@@ -40,7 +40,7 @@ class CarrotBounceSpinner:
 
 
 class RichStreamRenderer:
-    """Consumes typed AgentEvents and renders minimalist inline output with audit logging."""
+    """Consumes typed AgentEvents and renders minimalist inline output with live animated working status."""
 
     def __init__(
         self,
@@ -55,6 +55,23 @@ class RichStreamRenderer:
         self.turn_start_time = 0.0
         self.thinking_buffer: list[str] = []
         self.turn_audit_log: list[dict[str, Any]] = []
+        self._active_status: Any = None
+
+    def _start_status(self, text: str) -> None:
+        """Start or update animated status spinner."""
+        if not self.console.is_terminal:
+            return
+        if self._active_status is None:
+            self._active_status = self.console.status(text, spinner="dots")
+            self._active_status.start()
+        else:
+            self._active_status.update(text)
+
+    def _stop_status(self) -> None:
+        """Stop and clear active status spinner cleanly."""
+        if self._active_status is not None:
+            self._active_status.stop()
+            self._active_status = None
 
     def on_event(self, event: AgentEvent) -> None:
         """Handle a single AgentEvent and print minimalist output."""
@@ -64,6 +81,7 @@ class RichStreamRenderer:
             self.thinking_buffer.clear()
             self.turn_audit_log.clear()
             self._end_streams()
+            self._start_status("[bold #FF7A00]🥕 Thinking...[/bold #FF7A00]")
 
         elif isinstance(event, StepStartEvent):
             self._end_streams()
@@ -72,6 +90,7 @@ class RichStreamRenderer:
             if event.thought_delta:
                 self.thinking_buffer.append(event.thought_delta)
                 if self.show_thinking_trace:
+                    self._stop_status()
                     if not self._in_thought:
                         if self._in_text:
                             self.console.print()
@@ -83,8 +102,14 @@ class RichStreamRenderer:
                     self.console.print(
                         Text(event.thought_delta, style="dim italic #9CA3AF"), end=""
                     )
+                else:
+                    elapsed = max(0.0, time.time() - self.turn_start_time)
+                    self._start_status(
+                        f"[bold #FF7A00]🥕 Thinking ({elapsed:.1f}s)...[/bold #FF7A00]"
+                    )
 
             if event.delta_text:
+                self._stop_status()
                 if self._in_thought:
                     self.console.print("\n")
                     self._in_thought = False
@@ -92,6 +117,7 @@ class RichStreamRenderer:
                 self.console.print(Text(event.delta_text), end="")
 
         elif isinstance(event, ToolCallEvent):
+            self._stop_status()
             self._end_streams()
             args = event.arguments
             if event.tool_name == "read_file":
@@ -106,9 +132,7 @@ class RichStreamRenderer:
             else:
                 tool_summary = event.tool_name
 
-            self.console.print(
-                f"\n[bold #38BDF8]⠋[/bold #38BDF8] [dim]{tool_summary}[/dim]", end=""
-            )
+            self._start_status(f"[bold #38BDF8]⚙ Running {tool_summary}...[/bold #38BDF8]")
             self.turn_audit_log.append(
                 {
                     "tool_name": event.tool_name,
@@ -118,6 +142,7 @@ class RichStreamRenderer:
             )
 
         elif isinstance(event, ToolResultEvent):
+            self._stop_status()
             self._end_streams()
             dur_str = f"({event.duration_ms:.1f}ms)"
             output_str = str(event.output)
@@ -134,13 +159,11 @@ class RichStreamRenderer:
                 result_desc = "✓ Succeeded"
 
             if event.is_error:
-                self.console.print(
-                    f"\r[bold red]✗ {event.tool_name}[/bold red] [dim]{dur_str}[/dim]"
-                )
+                self.console.print(f"[bold red]✗ {event.tool_name}[/bold red] [dim]{dur_str}[/dim]")
                 self.console.print(f"  [dim red]↳ {output_str[:250]}[/dim red]")
             else:
                 self.console.print(
-                    f"\r[bold green]✓[/bold green] [bold white]{event.tool_name}[/bold white] [dim green]{result_desc}[/dim green] [dim]{dur_str}[/dim]"
+                    f"[bold green]✓[/bold green] [bold white]{event.tool_name}[/bold white] [dim green]{result_desc}[/dim green] [dim]{dur_str}[/dim]"
                 )
 
             # Update audit log entry
@@ -149,10 +172,14 @@ class RichStreamRenderer:
                 self.turn_audit_log[-1]["duration_ms"] = event.duration_ms
                 self.turn_audit_log[-1]["output"] = output_str
 
+            # Resume thinking status for subsequent steps
+            self._start_status("[bold #FF7A00]🥕 Thinking...[/bold #FF7A00]")
+
         elif isinstance(event, StepEndEvent):
             self._end_streams()
 
         elif isinstance(event, TurnCompleteEvent):
+            self._stop_status()
             self._end_streams()
             cost_str = f" | ${event.total_cost_usd:.4f}" if event.total_cost_usd > 0 else ""
             elapsed = time.time() - self.turn_start_time if self.turn_start_time > 0 else 0.0

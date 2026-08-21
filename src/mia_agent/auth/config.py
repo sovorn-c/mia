@@ -137,8 +137,81 @@ def validate_api_key(
         return False, f"Connection failed: Could not reach {resolved_base_url}"
     except httpx.TimeoutException:
         return False, f"Timeout: Provider {resolved_base_url} did not respond within 6s"
-    except Exception as exc:
-        return False, f"Validation probe error: {exc}"
+
+
+def discover_provider_models(
+    provider_id: str,
+    api_key: str | None = None,
+    base_url: str | None = None,
+) -> list[str]:
+    """Dynamically discover available models from provider API endpoint (/models)."""
+    import httpx
+
+    # If mock provider
+    if provider_id == "mock":
+        return ["mock-model-1", "mock-model-2"]
+
+    resolved_base_url = (
+        base_url or DEFAULT_PROVIDER_BASE_URLS.get(provider_id) or "https://api.openai.com/v1"
+    )
+
+    headers: dict[str, str] = {}
+    if api_key:
+        if provider_id == "anthropic":
+            headers["x-api-key"] = api_key
+            headers["anthropic-version"] = "2023-06-01"
+        else:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+    models: list[str] = []
+    # If not a dummy test key, attempt live HTTP fetch
+    if not (api_key and api_key.startswith("sk-test-")):
+        try:
+            url = f"{resolved_base_url.rstrip('/')}/models"
+            resp = httpx.get(url, headers=headers, timeout=3.5)
+            if resp.status_code == 200:
+                payload = resp.json()
+                if (
+                    isinstance(payload, dict)
+                    and "data" in payload
+                    and isinstance(payload["data"], list)
+                ):
+                    models = [
+                        item["id"]
+                        for item in payload["data"]
+                        if isinstance(item, dict) and "id" in item
+                    ]
+                elif isinstance(payload, list):
+                    models = [
+                        item["id"] if isinstance(item, dict) and "id" in item else str(item)
+                        for item in payload
+                    ]
+        except Exception:
+            pass
+
+    if models:
+        # Filter and sort unique models
+        return sorted(list(set(models)))
+
+    # Fallback to sensible standard presets if offline or endpoint unlisted
+    fallback_presets: dict[str, list[str]] = {
+        "opencode-go": ["mimo-v2.5", "qwen2.5-coder-32b-instruct", "deepseek-v3"],
+        "openrouter": [
+            "anthropic/claude-3.7-sonnet",
+            "deepseek/deepseek-r1",
+            "openai/gpt-4o",
+            "meta-llama/llama-3.3-70b-instruct",
+        ],
+        "gemini": ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
+        "openai": ["gpt-4o", "gpt-4o-mini", "o3-mini", "o1"],
+        "anthropic": [
+            "claude-3-7-sonnet-20250219",
+            "claude-3-5-sonnet-20241022",
+            "claude-3-5-haiku-20241022",
+        ],
+        "deepseek": ["deepseek-chat", "deepseek-reasoner"],
+    }
+    return fallback_presets.get(provider_id, [])
 
 
 def load_dotenv(dotenv_path: Path | None = None) -> None:

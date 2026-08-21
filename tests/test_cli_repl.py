@@ -269,3 +269,71 @@ def test_openai_oauth_save_direct_token(tmp_path: Path) -> None:
         ok, msg = mgr.save_direct_token("oauth-test-token-123")
         assert ok is True
         assert cred_store.get_api_key("openai") == "oauth-test-token-123"
+
+
+def test_discover_provider_models_live_and_fallback() -> None:
+    """Verify discover_provider_models parses /models response and falls back when offline."""
+    from mia_agent.auth.config import discover_provider_models
+
+    # 1. Successful HTTP GET /models discovery
+    with patch("httpx.get") as mock_get:
+        mock_get.return_value = MagicMock(
+            status_code=200,
+            json=lambda: {"data": [{"id": "live-model-alpha"}, {"id": "live-model-beta"}]},
+        )
+        models = discover_provider_models("openrouter", api_key="sk-live-test")
+        assert "live-model-alpha" in models
+        assert "live-model-beta" in models
+
+    # 2. Offline / error fallback
+    with patch("httpx.get", side_effect=Exception("offline")):
+        fallback = discover_provider_models("openai")
+        assert "gpt-4o" in fallback
+
+
+def test_rich_stream_status_transitions() -> None:
+    """Verify RichStreamRenderer correctly starts and stops status indicators during turns."""
+    from rich.console import Console
+
+    from mia_agent.events import (
+        AssistantChunkEvent,
+        ToolCallEvent,
+        ToolResultEvent,
+        TurnCompleteEvent,
+        TurnStartEvent,
+    )
+    from mia_cli.renderers.rich_stream import RichStreamRenderer
+
+    console = Console(force_terminal=True)
+    renderer = RichStreamRenderer(console=console)
+
+    # Turn Start
+    renderer.on_event(TurnStartEvent(turn_id="turn_1", user_input="hello"))
+    assert renderer._active_status is not None
+
+    # Thinking Chunk
+    renderer.on_event(AssistantChunkEvent(thought_delta="pondering problem"))
+    assert renderer._active_status is not None
+
+    # Text Chunk (clears status)
+    renderer.on_event(AssistantChunkEvent(delta_text="Hello world!"))
+    assert renderer._active_status is None
+
+    # Tool Call
+    renderer.on_event(
+        ToolCallEvent(call_id="call_1", tool_name="read_file", arguments={"path": "main.py"})
+    )
+    assert renderer._active_status is not None
+
+    # Tool Result
+    renderer.on_event(
+        ToolResultEvent(
+            call_id="call_1", tool_name="read_file", output="code content", duration_ms=10.0
+        )
+    )
+    # Returns to thinking status
+    assert renderer._active_status is not None
+
+    # Turn Complete
+    renderer.on_event(TurnCompleteEvent(total_steps=1, total_cost_usd=0.001))
+    assert renderer._active_status is None

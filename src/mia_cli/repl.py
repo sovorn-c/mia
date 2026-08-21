@@ -16,7 +16,12 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
-from mia_agent.auth.config import ConfigManager, MiaConfig, validate_api_key
+from mia_agent.auth.config import (
+    ConfigManager,
+    MiaConfig,
+    discover_provider_models,
+    validate_api_key,
+)
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.auth.openai_auth import OpenAIOAuthManager
 from mia_agent.events import StepEndEvent, TurnCompleteEvent
@@ -500,28 +505,63 @@ class MiaREPL:
             )
 
     def interactive_model_picker(self) -> None:
-        """Interactive Model Switcher (Pi-style) with Arrow Key Navigation."""
-        authenticated_providers: list[dict[str, Any]] = []
-        for preset in PROVIDER_CATALOG.values():
-            pid = preset["id"]
-            key = self.cred_store.get_api_key(pid) or os.environ.get(f"{pid.upper()}_API_KEY")
-            if key or pid == "custom":
-                authenticated_providers.append(preset)
+        """Interactive Model Switcher with dynamic live model discovery and provider scoping (Pi-Style)."""
+        stored_providers = self.cred_store.list_stored_providers()
+        all_known = [
+            "opencode-go",
+            "openrouter",
+            "gemini",
+            "openai",
+            "anthropic",
+            "deepseek",
+            "custom",
+        ]
+        authenticated_pids: list[str] = list(stored_providers)
+        for pid in all_known:
+            if pid not in authenticated_pids:
+                key = os.environ.get(f"{pid.upper()}_API_KEY")
+                if key:
+                    authenticated_pids.append(pid)
 
-        if not authenticated_providers:
+        if not authenticated_pids:
             self.console.print(
                 "[yellow]No providers authenticated yet. Launching /login setup...[/yellow]\n"
             )
             self.interactive_login()
             return
 
+        # If multiple providers authenticated, ask user if they want to scope by provider or view all
+        target_providers = authenticated_pids
+        if len(authenticated_pids) > 1:
+            scope_options = [(p, p, f"Discover models from {p}") for p in authenticated_pids]
+            scope_options.insert(
+                0,
+                (
+                    "all",
+                    "All Providers",
+                    "List models across all authenticated providers",
+                ),
+            )
+            chosen_scope = interactive_select(
+                "🔍 Scope Model Provider (Pi-Style)", scope_options, default_idx=0
+            )
+            if not chosen_scope:
+                return
+            if chosen_scope != "all":
+                target_providers = [chosen_scope]
+
+        self.console.print("[dim]Fetching live models from provider(s)...[/dim]")
+
         model_options: list[tuple[str, str, str]] = []
         model_provider_map: dict[str, str] = {}
         default_idx = 0
 
-        for prov in authenticated_providers:
-            pid = prov["id"]
-            for m in prov["models"]:
+        for pid in target_providers:
+            key = self.cred_store.get_api_key(pid) or os.environ.get(f"{pid.upper()}_API_KEY")
+            base_url = self.config_mgr.config.base_urls.get(pid)
+            live_models = discover_provider_models(pid, api_key=key, base_url=base_url)
+
+            for m in live_models:
                 is_active = m == self.model_name
                 desc = f"Provider: {pid} (Active)" if is_active else f"Provider: {pid}"
                 if is_active:
@@ -529,19 +569,32 @@ class MiaREPL:
                 model_options.append((m, m, desc))
                 model_provider_map[m] = pid
 
-        model_options.append(("__custom__", "Custom Model", "Type custom model name..."))
+        model_options.append(
+            ("__custom__", "Custom Model", "Type any custom or unlisted model ID...")
+        )
 
         selected = interactive_select(
-            "🤖 Scoped Model Switcher (Pi-Style)", model_options, default_idx=default_idx
+            "🤖 Switch Active Model", model_options, default_idx=default_idx
         )
         if not selected:
             return
 
         if selected == "__custom__":
             try:
-                custom_m = input("Enter custom model name: ").strip()
+                custom_m = input(
+                    "Enter custom model name (e.g. gpt-4o, claude-3-7-sonnet): "
+                ).strip()
                 if custom_m:
                     self.model_name = custom_m
+                    inferred_prov = self.config_mgr.infer_provider(custom_m)
+                    current_cfg = self.config_mgr.config
+                    self.config_mgr.save_config(
+                        MiaConfig(
+                            default_provider=inferred_prov or current_cfg.default_provider,
+                            default_model=custom_m,
+                            base_urls=current_cfg.base_urls,
+                        )
+                    )
                     self._init_harness()
                     self.console.print(
                         f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n"
