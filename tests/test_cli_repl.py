@@ -49,7 +49,7 @@ def test_format_status_toolbar() -> None:
     assert "mia" in toolbar_html.value
     assert "mimo-v2.5" in toolbar_html.value
     assert "12.5k/128k" in toolbar_html.value
-    assert "thinking: on" in toolbar_html.value
+    assert "💭 on" in toolbar_html.value
 
 
 def test_carrot_bounce_spinner() -> None:
