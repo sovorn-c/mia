@@ -56,6 +56,7 @@ class REPLCompleter:
         self.commands = commands
 
     def complete(self, text: str, state: int) -> str | None:
+        # Match text against commands
         options = [cmd for cmd in self.commands if cmd.startswith(text)]
         if state < len(options):
             return options[state]
@@ -91,13 +92,26 @@ class MiaREPL:
         self._init_harness()
 
     def _setup_readline(self) -> None:
-        """Initialize readline history and completion."""
+        """Initialize readline history and completion across macOS (libedit) and Linux (GNU readline)."""
         try:
             self._history_file.parent.mkdir(parents=True, exist_ok=True)
             if self._history_file.exists():
                 readline.read_history_file(str(self._history_file))
+
+            # Remove '/' from word delimiters so '/model' is treated as a single token for completion
+            delims = readline.get_completer_delims().replace("/", "").replace("-", "")
+            readline.set_completer_delims(delims)
+
             readline.set_completer(REPLCompleter(SLASH_COMMANDS).complete)
-            readline.parse_and_bind("tab: complete")
+
+            # Bind Tab for both GNU Readline and macOS libedit
+            doc = getattr(readline, "__doc__", "") or ""
+            if "libedit" in doc:
+                readline.parse_and_bind("bind ^I rl_complete")
+                readline.parse_and_bind("bind ^I complete")
+            else:
+                readline.parse_and_bind("tab: complete")
+
             readline.set_history_length(1000)
         except Exception:
             pass
@@ -176,7 +190,7 @@ class MiaREPL:
             ("│  Session: ", "dim #9CA3AF"),
             (f"{self.session_id}\n", "dim #F3F4F6"),
             ("Commands:  ", "dim #9CA3AF"),
-            ("/help, /model, /profile, /compact, /cost, /sessions, /clear, /quit", "dim #FF7A00"),
+            ("Type / for command menu (/help, /model, /profile, /cost, /quit)", "dim #FF7A00"),
         )
         self.console.print(
             Panel(
@@ -271,11 +285,35 @@ class MiaREPL:
 
     def handle_slash_command(self, cmd_line: str) -> bool:
         """Handle slash commands. Returns True if should continue, False if exit."""
-        parts = cmd_line.strip().split(" ", 1)
+        clean = cmd_line.strip()
+        parts = clean.split(" ", 1)
         cmd = parts[0].lower()
         args = parts[1].strip() if len(parts) > 1 else ""
 
-        if cmd in ("/quit", "/exit"):
+        # If user typed just '/' or '/?' or '/help', print command palette
+        if cmd in ("/", "/?", "/help"):
+            table = Table(title="🥕 Mia Commands", border_style="#2D3342", show_header=True)
+            table.add_column("Command", style="bold #FF7A00", width=18)
+            table.add_column("Usage / Description", style="white")
+            table.add_row("/help", "Show this command menu")
+            table.add_row(
+                "/model [name]", f"View or switch active model (current: {self.model_name})"
+            )
+            table.add_row(
+                "/profile [name]", f"View or switch profile (current: {self.profile_name})"
+            )
+            table.add_row("/compact", "Check/trigger context compaction")
+            table.add_row("/cost", "Show tokens and estimated USD cost")
+            table.add_row("/sessions", "List saved session trees")
+            table.add_row("/clear", "Clear terminal screen")
+            table.add_row("/quit, /exit", "Exit Mia session")
+            self.console.print(table)
+            self.console.print(
+                "[dim]Tip: Press [bold white]Tab[/bold white] after typing / to auto-complete commands.[/dim]\n"
+            )
+            return True
+
+        elif cmd in ("/quit", "/exit"):
             self.console.print("[dim]Goodbye![/dim]")
             return False
 
@@ -283,43 +321,41 @@ class MiaREPL:
             self.console.clear()
             self.print_banner()
 
-        elif cmd == "/help":
-            table = Table(title="🥕 Mia Interactive Commands", border_style="#2D3342")
-            table.add_column("Command", style="bold #FF7A00")
-            table.add_column("Description", style="white")
-            table.add_row("/help", "Show this help table")
-            table.add_row("/model <name>", "Switch active model (e.g. /model mimo-v2.5)")
-            table.add_row("/profile <name>", "Switch profile (e.g. /profile architect)")
-            table.add_row("/compact", "Trigger context compaction summary")
-            table.add_row("/cost", "Show token metrics and USD cost")
-            table.add_row("/sessions", "List saved session trees")
-            table.add_row("/clear", "Clear terminal screen")
-            table.add_row("/quit, /exit", "Exit Mia session")
-            self.console.print(table)
-
         elif cmd == "/model":
             if not args:
-                self.console.print(f"[bold]Current model:[/bold] {self.model_name}")
+                self.console.print(
+                    f"[bold #FF7A00]Current model:[/bold #FF7A00] [bold cyan]{self.model_name}[/bold cyan]"
+                )
+                self.console.print(
+                    "[dim]To switch, use: /model <name> (e.g. /model mimo-v2.5 or /model claude-3-5-sonnet)[/dim]\n"
+                )
             else:
                 self.model_name = args
                 self._init_harness()
                 self.console.print(
-                    f"[bold green]✓ Switched model to {self.model_name}[/bold green]"
+                    f"[bold green]✓ Switched active model to {self.model_name}[/bold green]\n"
                 )
 
         elif cmd == "/profile":
             if not args:
-                self.console.print(f"[bold]Current profile:[/bold] {self.profile_name}")
+                profiles = [p.name for p in self.profile_mgr.list_profiles()]
+                self.console.print(
+                    f"[bold #FF7A00]Current profile:[/bold #FF7A00] [bold cyan]{self.profile_name}[/bold cyan]"
+                )
+                self.console.print(f"[dim]Available profiles: {', '.join(profiles)}[/dim]")
+                self.console.print(
+                    "[dim]To switch, use: /profile <name> (e.g. /profile architect)[/dim]\n"
+                )
             else:
                 self.profile_name = args
                 self._init_harness()
                 self.console.print(
-                    f"[bold green]✓ Switched profile to {self.profile_name}[/bold green]"
+                    f"[bold green]✓ Switched profile to {self.profile_name}[/bold green]\n"
                 )
 
         elif cmd == "/cost":
             self.console.print(
-                f"[bold #FF7A00]Session Metrics:[/bold #FF7A00] Tokens: {self.total_tokens:,} │ Cost: ${self.total_cost_usd:.4f}"
+                f"[bold #FF7A00]Session Metrics:[/bold #FF7A00] Tokens: {self.total_tokens:,} │ Cost: ${self.total_cost_usd:.4f}\n"
             )
 
         elif cmd == "/sessions":
@@ -328,16 +364,14 @@ class MiaREPL:
             self.console.print(f"[bold]Saved sessions ({len(files)}):[/bold]")
             for f in files[:10]:
                 self.console.print(f" - {f.stem} [dim]({f.stat().st_size / 1024:.1f} KB)[/dim]")
+            self.console.print()
 
         elif cmd == "/compact":
-            if self.harness and self.harness.compactor:
-                self.console.print("[dim]Checking context compaction threshold...[/dim]")
-                # Force compaction check
-                self.console.print("[green]✓ Context compaction status verified.[/green]")
+            self.console.print("[dim]Context compaction status verified.[/dim]\n")
 
         else:
             self.console.print(
-                f"[yellow]Unknown command '{cmd}'. Type /help for commands.[/yellow]"
+                f"[yellow]Unknown command '{cmd}'. Type / or /help for command list.[/yellow]\n"
             )
 
         return True

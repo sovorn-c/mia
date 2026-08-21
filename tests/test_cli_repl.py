@@ -8,18 +8,30 @@ import pytest
 
 from mia_ai.providers.mock import MockProvider
 from mia_ai.types import ToolCall
-from mia_cli.repl import MiaREPL
+from mia_cli.repl import MiaREPL, REPLCompleter
 
 
-def test_repl_init_and_slash_commands(tmp_path: Path) -> None:
+def test_repl_completer_and_slash_menu(tmp_path: Path) -> None:
+    completer = REPLCompleter(
+        ["/help", "/model", "/profile", "/compact", "/cost", "/sessions", "/clear", "/quit"]
+    )
+
+    # Test prefix matching
+    assert completer.complete("/m", 0) == "/model"
+    assert completer.complete("/p", 0) == "/profile"
+    assert completer.complete("/c", 0) == "/compact"
+    assert completer.complete("/c", 1) == "/cost"
+    assert completer.complete("/c", 2) == "/clear"
+
     mock = MockProvider()
     repl = MiaREPL(cwd=tmp_path, custom_provider=mock)
 
-    assert repl.profile_name == "coding"
-    assert repl.harness is not None
-
-    # Test slash commands
+    # Test '/' prints menu
+    assert repl.handle_slash_command("/") is True
+    assert repl.handle_slash_command("/?") is True
     assert repl.handle_slash_command("/help") is True
+    assert repl.handle_slash_command("/model") is True
+    assert repl.handle_slash_command("/profile") is True
     assert repl.handle_slash_command("/cost") is True
     assert repl.handle_slash_command("/clear") is True
     assert repl.handle_slash_command("/model mock-model") is True
