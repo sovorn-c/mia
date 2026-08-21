@@ -151,6 +151,22 @@ def test_repl_slash_commands_suite(tmp_path: Path) -> None:
     assert repl.handle_slash_command("/quit") is False
 
 
+def test_invalid_profile_preserves_active_runtime(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+    original_harness = repl.harness
+    original_runtime = repl.agent_runtime
+
+    assert repl.handle_slash_command("/profile does-not-exist") is True
+
+    assert repl.profile_name == "coding"
+    assert repl.harness is original_harness
+    assert repl.agent_runtime is original_runtime
+    output = repl.console.export_text()
+    assert "not found" in output
+    assert "Available profiles" in output
+
+
 def test_repl_mode_selection_and_invalid_mode(tmp_path: Path) -> None:
     repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
 
