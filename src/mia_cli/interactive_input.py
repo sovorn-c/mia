@@ -1,4 +1,4 @@
-"""Native POSIX character-by-character interactive prompt with live floating slash command autocomplete."""
+"""Native POSIX character-by-character interactive prompt with live floating slash command autocomplete and arrow-key selection."""
 
 from __future__ import annotations
 
@@ -21,6 +21,95 @@ COMMAND_HINTS: list[tuple[str, str]] = [
     ("/clear", "Clear terminal screen (alias: /cls)"),
     ("/quit", "Save and exit cleanly (alias: /exit)"),
 ]
+
+
+def interactive_select(
+    title: str,
+    options: list[tuple[str, str, str]],  # (id, label, description)
+    default_idx: int = 0,
+) -> str | None:
+    """Prompt user to navigate with Up/Down arrow keys and press Enter to select (Claude Code/Pi style)."""
+    if not options:
+        return None
+
+    if not sys.stdin.isatty():
+        # Fallback for non-interactive / test environments
+        try:
+            line = input(
+                f"{title} (Enter choice id or press Enter for default [{options[default_idx][0]}]): "
+            ).strip()
+            if not line:
+                return options[default_idx][0]
+            if line.isdigit() and 1 <= int(line) <= len(options):
+                return options[int(line) - 1][0]
+            for opt in options:
+                if line.lower() == opt[0].lower():
+                    return opt[0]
+            return line
+        except (KeyboardInterrupt, EOFError):
+            return None
+
+    import termios
+    import tty
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+
+    current_idx = max(0, min(default_idx, len(options) - 1))
+    num_options = len(options)
+
+    # Print Title Header
+    sys.stdout.write(
+        f"\n\x1b[1;38;2;255;122;0m{title}\x1b[0m \x1b[2;37m(Use ↑/↓ arrows to navigate, Enter to select)\x1b[0m\n"
+    )
+
+    def render_options(idx: int) -> None:
+        for i, (_id, label, desc) in enumerate(options):
+            if i == idx:
+                cursor = "\x1b[1;38;2;255;122;0m▸\x1b[0m "
+                label_str = f"\x1b[1;38;2;255;122;0m{label:<20}\x1b[0m"
+                desc_str = f"\x1b[38;2;243;244;246m{desc}\x1b[0m"
+            else:
+                cursor = "  "
+                label_str = f"\x1b[38;2;156;163;175m{label:<20}\x1b[0m"
+                desc_str = f"\x1b[2;37m{desc}\x1b[0m"
+            sys.stdout.write(f"\r\x1b[K{cursor}{label_str} \x1b[2m│\x1b[0m {desc_str}\n")
+        sys.stdout.flush()
+
+    try:
+        tty.setcbreak(fd)
+        render_options(current_idx)
+
+        while True:
+            char = sys.stdin.read(1)
+
+            # Ctrl+C or Ctrl+D
+            if char in ("\x03", "\x04"):
+                sys.stdout.write("\n")
+                raise KeyboardInterrupt
+
+            # Enter
+            if char in ("\r", "\n"):
+                sys.stdout.write(f"\x1b[1;32m✓ Selected: {options[current_idx][1]}\x1b[0m\n\n")
+                sys.stdout.flush()
+                return options[current_idx][0]
+
+            # ANSI Arrow Navigation
+            if char == "\x1b":
+                seq1 = sys.stdin.read(1)
+                if seq1 == "[":
+                    seq2 = sys.stdin.read(1)
+                    if seq2 == "A":  # Up Arrow
+                        current_idx = (current_idx - 1) % num_options
+                        sys.stdout.write(f"\x1b[{num_options}A")
+                        render_options(current_idx)
+                    elif seq2 == "B":  # Down Arrow
+                        current_idx = (current_idx + 1) % num_options
+                        sys.stdout.write(f"\x1b[{num_options}A")
+                        render_options(current_idx)
+
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
 class LiveInteractivePrompt:
@@ -54,7 +143,6 @@ class LiveInteractivePrompt:
     def read_prompt(self, prompt_prefix: str = "🥕 mia › ") -> str:
         """Read line interactively with real-time popup on '/'."""
         if not sys.stdin.isatty():
-            # Non-interactive fallback (pipes, pytest, CI)
             try:
                 return input(prompt_prefix).strip()
             except EOFError:
@@ -74,7 +162,6 @@ class LiveInteractivePrompt:
         try:
             tty.setcbreak(fd)
 
-            # Initial render
             self._render_line(prompt_prefix, buffer, cursor_pos, rendered_menu_lines)
 
             while True:
@@ -166,7 +253,6 @@ class LiveInteractivePrompt:
                     buffer = buffer[:cursor_pos] + char + buffer[cursor_pos:]
                     cursor_pos += 1
 
-                # Re-render prompt and live floating menu
                 rendered_menu_lines = self._render_line(
                     prompt_prefix, buffer, cursor_pos, rendered_menu_lines
                 )
@@ -182,18 +268,14 @@ class LiveInteractivePrompt:
         prev_menu_lines: int,
     ) -> int:
         """Render prompt line and instant floating autocomplete dropdown below."""
-        # 1. Clear previous menu lines
         self._clear_menu(prev_menu_lines)
 
-        # 2. Render prompt and buffer
-        # ANSI Carrot Orange: \x1b[1;38;2;255;122;0m
         orange_prefix = "\x1b[1;38;2;255;122;0m" + prompt_prefix + "\x1b[0m"
         line_out = f"\r\x1b[K{orange_prefix}{buffer}"
         sys.stdout.write(line_out)
 
         menu_lines_count = 0
 
-        # 3. If buffer starts with '/', render the sleek floating dropdown menu
         if buffer.startswith("/"):
             query = buffer.split()[0].lower()
             matches = [item for item in COMMAND_HINTS if item[0].startswith(query)]
@@ -216,10 +298,8 @@ class LiveInteractivePrompt:
 
             sys.stdout.write("\x1b[38;2;45;51;66m╰" + "─" * 66 + "╯\x1b[0m")
 
-            # Move cursor back up to the prompt line
             sys.stdout.write(f"\x1b[{menu_lines_count}A")
 
-        # 4. Position cursor accurately inside the buffer
         prompt_visible_len = len(prompt_prefix)
         col = prompt_visible_len + cursor_pos + 1
         sys.stdout.write(f"\r\x1b[{col}C")
@@ -230,11 +310,8 @@ class LiveInteractivePrompt:
     def _clear_menu(self, menu_lines_count: int) -> None:
         """Erase any floating menu lines rendered below the prompt."""
         if menu_lines_count > 0:
-            # Save cursor position
             sys.stdout.write("\x1b[s")
-            # Move down and clear each line
             for _ in range(menu_lines_count):
                 sys.stdout.write("\n\x1b[2K")
-            # Restore cursor position
             sys.stdout.write("\x1b[u")
             sys.stdout.flush()

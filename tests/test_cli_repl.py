@@ -134,3 +134,20 @@ def test_live_interactive_prompt_non_tty(tmp_path: Path) -> None:
     with patch("builtins.input", return_value="/help"):
         res = prompt_reader.read_prompt()
         assert res == "/help"
+
+
+def test_interactive_select_non_tty() -> None:
+    """Verify interactive_select selects by index or id in non-tty mode."""
+    from mia_cli.interactive_input import interactive_select
+
+    options = [
+        ("opt_1", "Option One", "First item"),
+        ("opt_2", "Option Two", "Second item"),
+    ]
+    with patch("builtins.input", return_value="1"):
+        res = interactive_select("Test Title", options)
+        assert res == "opt_1"
+
+    with patch("builtins.input", return_value="opt_2"):
+        res2 = interactive_select("Test Title", options)
+        assert res2 == "opt_2"
