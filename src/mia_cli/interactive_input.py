@@ -1,17 +1,18 @@
-"""Native POSIX character-by-character interactive prompt with live floating slash command autocomplete and arrow-key selection."""
+"""Minimalist, rock-solid interactive prompt and dual-mode selection menu (Pi & Tau inspired)."""
 
 from __future__ import annotations
 
+import readline
 import sys
 from pathlib import Path
 
 from rich.console import Console
 
 COMMAND_HINTS: list[tuple[str, str]] = [
-    ("/help", "Show command menu & shortcuts (alias: /?)"),
-    ("/login", "Authenticate AI providers & API keys (alias: /auth)"),
-    ("/logout", "Remove stored credentials & sign out of providers (alias: /signout)"),
-    ("/model", "Switch active LLM (Pi-style scoper) (alias: /llm)"),
+    ("/help", "Show command menu, shortcuts & tools (alias: /?)"),
+    ("/login", "Authenticate AI provider via API key or Auth (alias: /auth)"),
+    ("/logout", "Remove stored credentials & sign out (alias: /signout)"),
+    ("/model", "Switch active LLM scoped to authenticated providers (alias: /llm)"),
     ("/profile", "Switch agent persona (coding, architect, minimal)"),
     ("/diff", "View git diff of session modifications (alias: /changes)"),
     ("/cost", "Show session tokens & USD cost (alias: /stats, /tokens)"),
@@ -20,8 +21,21 @@ COMMAND_HINTS: list[tuple[str, str]] = [
     ("/init", "Inspect repository context & AGENTS.md (alias: /bootstrap)"),
     ("/undo", "Revert latest file change made during session (alias: /revert)"),
     ("/clear", "Clear terminal screen (alias: /cls)"),
-    ("/quit", "Save and exit cleanly (alias: /exit)"),
+    ("/quit", "Save session tree and exit cleanly (alias: /exit)"),
 ]
+
+
+class REPLCompleter:
+    """Readline tab-completion handler for slash commands."""
+
+    def __init__(self, commands: list[str]) -> None:
+        self.commands = sorted(commands)
+
+    def complete(self, text: str, state: int) -> str | None:
+        options = [cmd for cmd in self.commands if cmd.startswith(text)]
+        if state < len(options):
+            return options[state]
+        return None
 
 
 def interactive_select(
@@ -29,23 +43,28 @@ def interactive_select(
     options: list[tuple[str, str, str]],  # (id, label, description)
     default_idx: int = 0,
 ) -> str | None:
-    """Prompt user to navigate with Up/Down arrow keys and press Enter to select (with Carrot 🥕 pointer)."""
+    """Dual-mode interactive selection menu supporting both instant numeric keys (1..N) and arrow keys (Up/Down + Enter).
+
+    Guarantees zero-flicker stability and clean terminal restoration.
+    """
     if not options:
         return None
 
+    num_options = len(options)
+    default_idx = max(0, min(default_idx, num_options - 1))
+
     if not sys.stdin.isatty():
         try:
-            line = input(
-                f"{title} (Enter choice id or press Enter for default [{options[default_idx][0]}]): "
-            ).strip()
-            if not line:
+            prompt_str = f"{title} [1-{num_options}] (default: {default_idx + 1}): "
+            raw = input(prompt_str).strip()
+            if not raw:
                 return options[default_idx][0]
-            if line.isdigit() and 1 <= int(line) <= len(options):
-                return options[int(line) - 1][0]
+            if raw.isdigit() and 1 <= int(raw) <= num_options:
+                return options[int(raw) - 1][0]
             for opt in options:
-                if line.lower() == opt[0].lower():
+                if raw.lower() == opt[0].lower() or raw.lower() == opt[1].lower():
                     return opt[0]
-            return line
+            return options[default_idx][0]
         except (KeyboardInterrupt, EOFError):
             return None
 
@@ -55,30 +74,29 @@ def interactive_select(
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
 
-    current_idx = max(0, min(default_idx, len(options) - 1))
-    num_options = len(options)
+    current_idx = default_idx
 
     # Print Title Header
     sys.stdout.write(
-        f"\n\x1b[1;38;2;255;122;0m{title}\x1b[0m \x1b[2;37m(Use ↑/↓ arrows to navigate, Enter to select)\x1b[0m\n"
+        f"\n\x1b[1;38;2;255;122;0m🥕 {title}\x1b[0m \x1b[2;37m(Press 1-{num_options}, or use ↑/↓ + Enter)\x1b[0m\n"
     )
+    sys.stdout.write("\x1b[38;2;45;51;66m" + "─" * 68 + "\x1b[0m\n")
 
-    def render_options(idx: int) -> None:
+    def render_all(selected_idx: int) -> None:
         for i, (_id, label, desc) in enumerate(options):
-            if i == idx:
+            num_prefix = f" {i + 1}. "
+            if i == selected_idx:
                 cursor = "🥕 "
-                label_str = f"\x1b[1;38;2;255;122;0m{label:<16}\x1b[0m"
-                desc_str = f"\x1b[38;2;243;244;246m{desc}\x1b[0m"
+                line_str = f"\x1b[1;38;2;255;122;0m{num_prefix}{label:<18}\x1b[0m \x1b[2m│\x1b[0m \x1b[38;2;243;244;246m{desc}\x1b[0m"
             else:
                 cursor = "   "
-                label_str = f"\x1b[38;2;156;163;175m{label:<16}\x1b[0m"
-                desc_str = f"\x1b[2;37m{desc}\x1b[0m"
-            sys.stdout.write(f"\r\x1b[K{cursor}{label_str} \x1b[2m│\x1b[0m {desc_str}\n")
+                line_str = f"\x1b[38;2;156;163;175m{num_prefix}{label:<18}\x1b[0m \x1b[2m│\x1b[0m \x1b[2;37m{desc}\x1b[0m"
+            sys.stdout.write(f"\r\x1b[K{cursor}{line_str}\n")
         sys.stdout.flush()
 
     try:
         tty.setcbreak(fd)
-        render_options(current_idx)
+        render_all(current_idx)
 
         while True:
             char = sys.stdin.read(1)
@@ -90,9 +108,20 @@ def interactive_select(
 
             # Enter
             if char in ("\r", "\n"):
-                sys.stdout.write(f"\x1b[1;32m✓ Selected: {options[current_idx][1]}\x1b[0m\n\n")
+                sys.stdout.write(f"\n\x1b[1;32m✓ Selected: {options[current_idx][1]}\x1b[0m\n\n")
                 sys.stdout.flush()
                 return options[current_idx][0]
+
+            # Direct single-number key entry (1..9)
+            if char.isdigit():
+                num = int(char)
+                if 1 <= num <= num_options:
+                    current_idx = num - 1
+                    sys.stdout.write(
+                        f"\n\x1b[1;32m✓ Selected: {options[current_idx][1]}\x1b[0m\n\n"
+                    )
+                    sys.stdout.flush()
+                    return options[current_idx][0]
 
             # ANSI Arrow Navigation
             if char == "\x1b":
@@ -102,24 +131,47 @@ def interactive_select(
                     if seq2 == "A":  # Up Arrow
                         current_idx = (current_idx - 1) % num_options
                         sys.stdout.write(f"\x1b[{num_options}A")
-                        render_options(current_idx)
+                        render_all(current_idx)
                     elif seq2 == "B":  # Down Arrow
                         current_idx = (current_idx + 1) % num_options
                         sys.stdout.write(f"\x1b[{num_options}A")
-                        render_options(current_idx)
+                        render_all(current_idx)
 
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
 class LiveInteractivePrompt:
-    """Zero-dependency POSIX interactive line reader with instant floating autocomplete menu."""
+    """Rock-solid, zero-flicker line reader with persistent history and Tab completion."""
 
     def __init__(self, history_file: Path | None = None) -> None:
         self.console = Console()
         self.history_file = history_file or (Path.home() / ".mia" / "history")
         self.history: list[str] = self._load_history()
-        self.history_idx: int = -1
+        self._setup_readline()
+
+    def _setup_readline(self) -> None:
+        """Configure readline with history and Tab-completion across platforms."""
+        try:
+            self.history_file.parent.mkdir(parents=True, exist_ok=True)
+            if self.history_file.exists():
+                readline.read_history_file(str(self.history_file))
+
+            commands = [cmd for cmd, _ in COMMAND_HINTS]
+            delims = readline.get_completer_delims().replace("/", "").replace("-", "")
+            readline.set_completer_delims(delims)
+            readline.set_completer(REPLCompleter(commands).complete)
+
+            doc = getattr(readline, "__doc__", "") or ""
+            if "libedit" in doc:
+                readline.parse_and_bind("bind ^I rl_complete")
+                readline.parse_and_bind("bind ^I complete")
+            else:
+                readline.parse_and_bind("tab: complete")
+
+            readline.set_history_length(1000)
+        except Exception:
+            pass
 
     def _load_history(self) -> list[str]:
         if self.history_file and self.history_file.exists():
@@ -131,187 +183,23 @@ class LiveInteractivePrompt:
         return []
 
     def _save_history(self) -> None:
-        if self.history_file and self.history:
+        if self.history_file:
             try:
                 self.history_file.parent.mkdir(parents=True, exist_ok=True)
-                self.history_file.write_text(
-                    "\n".join(self.history[-200:]) + "\n", encoding="utf-8"
-                )
+                readline.write_history_file(str(self.history_file))
             except Exception:
                 pass
 
     def read_prompt(self, prompt_prefix: str = "🥕 mia › ") -> str:
-        """Read line interactively with real-time popup on '/'."""
-        if not sys.stdin.isatty():
-            try:
-                return input(prompt_prefix).strip()
-            except EOFError:
-                raise
-
-        import termios
-        import tty
-
-        fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
-
-        buffer = ""
-        cursor_pos = 0
-        self.history_idx = -1
-        rendered_menu_lines = 0
-
+        """Read a single prompt line with clean history and zero cursor jumping."""
         try:
-            tty.setcbreak(fd)
-
-            self._render_line(prompt_prefix, buffer, cursor_pos, rendered_menu_lines)
-
-            while True:
-                char = sys.stdin.read(1)
-
-                # Ctrl+C
-                if char == "\x03":
-                    self._clear_menu(rendered_menu_lines)
-                    sys.stdout.write("\n")
-                    sys.stdout.flush()
-                    raise KeyboardInterrupt
-
-                # Ctrl+D
-                if char == "\x04" and not buffer:
-                    self._clear_menu(rendered_menu_lines)
-                    sys.stdout.write("\n")
-                    sys.stdout.flush()
-                    raise EOFError
-
-                # Enter (\r or \n)
-                if char in ("\r", "\n"):
-                    self._clear_menu(rendered_menu_lines)
-                    sys.stdout.write(
-                        "\r\x1b[K"
-                        + "\x1b[1;38;2;255;122;0m"
-                        + prompt_prefix
-                        + "\x1b[0m"
-                        + buffer
-                        + "\n"
-                    )
-                    sys.stdout.flush()
-                    line = buffer.strip()
-                    if line and (not self.history or self.history[-1] != line):
-                        self.history.append(line)
-                        self._save_history()
-                    return line
-
-                # Backspace (\x7f or \x08)
-                if char in ("\x7f", "\x08"):
-                    if cursor_pos > 0:
-                        buffer = buffer[: cursor_pos - 1] + buffer[cursor_pos:]
-                        cursor_pos -= 1
-
-                # Tab (\t) -> Autocomplete slash command
-                elif char == "\t":
-                    if buffer.startswith("/"):
-                        matches = [cmd for cmd, _ in COMMAND_HINTS if cmd.startswith(buffer)]
-                        if matches:
-                            buffer = matches[0] + " "
-                            cursor_pos = len(buffer)
-
-                # ANSI Escape Sequences (Arrows, etc.)
-                elif char == "\x1b":
-                    seq1 = sys.stdin.read(1)
-                    if seq1 == "[":
-                        seq2 = sys.stdin.read(1)
-                        # Up arrow -> History Prev
-                        if seq2 == "A":
-                            if self.history:
-                                if self.history_idx == -1:
-                                    self.history_idx = len(self.history) - 1
-                                elif self.history_idx > 0:
-                                    self.history_idx -= 1
-                                buffer = self.history[self.history_idx]
-                                cursor_pos = len(buffer)
-
-                        # Down arrow -> History Next
-                        elif seq2 == "B":
-                            if self.history_idx != -1:
-                                if self.history_idx < len(self.history) - 1:
-                                    self.history_idx += 1
-                                    buffer = self.history[self.history_idx]
-                                    cursor_pos = len(buffer)
-                                else:
-                                    self.history_idx = -1
-                                    buffer = ""
-                                    cursor_pos = 0
-
-                        # Right arrow
-                        elif seq2 == "C" and cursor_pos < len(buffer):
-                            cursor_pos += 1
-
-                        # Left arrow
-                        elif seq2 == "D" and cursor_pos > 0:
-                            cursor_pos -= 1
-
-                # Printable characters
-                elif char.isprintable():
-                    buffer = buffer[:cursor_pos] + char + buffer[cursor_pos:]
-                    cursor_pos += 1
-
-                rendered_menu_lines = self._render_line(
-                    prompt_prefix, buffer, cursor_pos, rendered_menu_lines
-                )
-
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-
-    def _render_line(
-        self,
-        prompt_prefix: str,
-        buffer: str,
-        cursor_pos: int,
-        prev_menu_lines: int,
-    ) -> int:
-        """Render prompt line and instant floating autocomplete dropdown below."""
-        self._clear_menu(prev_menu_lines)
-
-        orange_prefix = "\x1b[1;38;2;255;122;0m" + prompt_prefix + "\x1b[0m"
-        line_out = f"\r\x1b[K{orange_prefix}{buffer}"
-        sys.stdout.write(line_out)
-
-        menu_lines_count = 0
-
-        if buffer.startswith("/"):
-            query = buffer.split()[0].lower()
-            matches = [item for item in COMMAND_HINTS if item[0].startswith(query)]
-            if not matches:
-                matches = COMMAND_HINTS[:6]
-
-            menu_lines_count = len(matches) + 2
-            sys.stdout.write(
-                "\n\x1b[38;2;45;51;66m╭── \x1b[1;38;2;255;122;0mAvailable Commands\x1b[0m \x1b[38;2;107;114;128m(Press Tab or Enter)\x1b[0m \x1b[38;2;45;51;66m"
-                + "─" * 28
-                + "╮\x1b[0m\n"
-            )
-            for i, (cmd, desc) in enumerate(matches[:8]):
-                arrow = "🥕 " if i == 0 else "   "
-                cmd_colored = f"\x1b[1;38;2;255;122;0m{cmd:<11}\x1b[0m"
-                desc_colored = f"\x1b[38;2;156;163;175m{desc[:48]}\x1b[0m"
-                sys.stdout.write(
-                    f"\x1b[38;2;45;51;66m│\x1b[0m {arrow}{cmd_colored} {desc_colored}\n"
-                )
-
-            sys.stdout.write("\x1b[38;2;45;51;66m╰" + "─" * 66 + "╯\x1b[0m")
-
-            sys.stdout.write(f"\x1b[{menu_lines_count}A")
-
-        prompt_visible_len = len(prompt_prefix)
-        col = prompt_visible_len + cursor_pos + 1
-        sys.stdout.write(f"\r\x1b[{col}C")
-        sys.stdout.flush()
-
-        return menu_lines_count
-
-    def _clear_menu(self, menu_lines_count: int) -> None:
-        """Erase any floating menu lines rendered below the prompt."""
-        if menu_lines_count > 0:
-            sys.stdout.write("\x1b[s")
-            for _ in range(menu_lines_count):
-                sys.stdout.write("\n\x1b[2K")
-            sys.stdout.write("\x1b[u")
-            sys.stdout.flush()
+            colored_prompt = f"\x1b[1;38;2;255;122;0m{prompt_prefix}\x1b[0m"
+            raw_input = input(colored_prompt).strip()
+            if raw_input:
+                self._save_history()
+            return raw_input
+        except EOFError:
+            raise
+        except KeyboardInterrupt:
+            sys.stdout.write("\n")
+            raise

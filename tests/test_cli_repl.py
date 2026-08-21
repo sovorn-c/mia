@@ -164,8 +164,8 @@ def test_validate_api_key_rejection(tmp_path: Path) -> None:
 
     from mia_agent.auth.config import validate_api_key
 
-    with patch("httpx.get") as mock_get:
-        mock_get.return_value = MagicMock(status_code=401)
+    with patch("httpx.post") as mock_post:
+        mock_post.return_value = MagicMock(status_code=401)
         valid, msg = validate_api_key("opencode-go", "bad-key-12345")
         assert valid is False
         assert "401" in msg

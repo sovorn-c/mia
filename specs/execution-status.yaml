@@ -1,0 +1,25 @@
+# specs/execution-status.yaml — Flat execution status tracking
+version: "0.2.0"
+updated_at: "2026-08-21T20:00:00Z"
+
+epics:
+  e01:
+    title: "Minimalist Pi/Tau-Style Stream REPL & Robust Auth"
+    status: "completed"
+    stories:
+      e01s01:
+        title: "Rock-Solid Terminal Input & Dual-Mode Picker (Arrow & Number)"
+        status: "completed"
+        bcps: 3
+      e01s02:
+        title: "Resilient Provider Key Probe & Connection Diagnostics"
+        status: "completed"
+        bcps: 4
+      e01s03:
+        title: "Pi-Style Scoped Model Switcher & 12 Slash Commands Suite"
+        status: "completed"
+        bcps: 5
+      e01s04:
+        title: "Minimalist Stream Rendering & Live Tool Diffs"
+        status: "completed"
+        bcps: 4

@@ -415,10 +415,23 @@ class MiaREPL:
                 is_valid, val_msg = validate_api_key(selected_provider, api_key, base_url)
                 if not is_valid:
                     self.console.print(f"\n[bold red]✗ Validation failed:[/bold red] {val_msg}")
-                    self.console.print(
-                        "[yellow]Credentials were NOT saved. Please check your key and try again.[/yellow]\n"
-                    )
-                    return
+                    if any(w in val_msg for w in ("Unauthorized", "401", "403", "Invalid")):
+                        self.console.print(
+                            "[yellow]Credentials were NOT saved. Please check your key and try again.[/yellow]\n"
+                        )
+                        return
+                    else:
+                        try:
+                            save_anyway = (
+                                input("Endpoint unreachable. Save credentials anyway? [y/N]: ")
+                                .strip()
+                                .lower()
+                            )
+                        except (KeyboardInterrupt, EOFError):
+                            save_anyway = "n"
+                        if save_anyway not in ("y", "yes"):
+                            self.console.print("[yellow]Credentials not saved.[/yellow]\n")
+                            return
 
                 self.cred_store.set_api_key(selected_provider, api_key)
 

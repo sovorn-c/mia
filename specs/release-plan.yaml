@@ -1,0 +1,18 @@
+# specs/release-plan.yaml — Release index & WSJF epic sequencing
+version: "0.2.0"
+target_release: "v0.2.0-minimal-repl"
+
+epics:
+  - id: "e01"
+    slug: "minimal-stream-repl"
+    title: "Minimalist Pi/Tau-Style Stream REPL & Robust Auth"
+    wsjf:
+      business_value: 13
+      time_criticality: 13
+      risk_reduction: 8
+      job_size: 5
+      score: 6.8
+    status: "in_progress"
+    bcps_total: 16
+    stories_count: 4
+    directory: "specs/epics/e01-minimal-stream-repl"

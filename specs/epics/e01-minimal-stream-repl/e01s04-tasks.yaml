@@ -1,0 +1,16 @@
+# specs/epics/e01-minimal-stream-repl/e01s04-tasks.yaml
+story_id: "e01s04"
+title: "Minimalist Stream Rendering & Live Tool Diffs"
+status: "pending"
+bcps: 4
+
+tasks:
+  - id: "t01"
+    description: "Implement clean stream output for thoughts (💭), single-line tool execution cards, and Monokai syntax-highlighted diffs."
+    status: "pending"
+    verify: "uv run python -c 'from mia_cli.renderers.rich_stream import RichStreamRenderer; from rich.console import Console; r = RichStreamRenderer(console=Console())'"
+
+  - id: "t02"
+    description: "Run full verification quality gate: unit tests, scenario tests, ruff format/check, and strict mypy."
+    status: "pending"
+    verify: "uv run pytest && uv run mypy src && uv run ruff check ."

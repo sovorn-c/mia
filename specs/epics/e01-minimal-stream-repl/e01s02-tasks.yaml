@@ -1,0 +1,16 @@
+# specs/epics/e01-minimal-stream-repl/e01s02-tasks.yaml
+story_id: "e01s02"
+title: "Resilient Provider Key Probe & Connection Diagnostics"
+status: "pending"
+bcps: 4
+
+tasks:
+  - id: "t01"
+    description: "Replace brittle GET /models key check in validate_api_key with a lightweight 1-token completion probe supporting all providers."
+    status: "pending"
+    verify: "uv run python -c 'from mia_agent.auth.config import validate_api_key; ok, msg = validate_api_key(\"mock\", \"sk-test\"); assert ok'"
+
+  - id: "t02"
+    description: "Add permissive timeout/unreachable fallback in /login so keys for local/custom or proxy endpoints can be saved with user confirmation."
+    status: "pending"
+    verify: "uv run pytest tests/test_credentials.py"

@@ -68,7 +68,7 @@ DEFAULT_PROVIDER_BASE_URLS = {
 def validate_api_key(
     provider_id: str, api_key: str, base_url: str | None = None
 ) -> tuple[bool, str]:
-    """Test API key against the provider's live endpoint before saving credentials."""
+    """Test API key against the provider with a lightweight 1-token completion probe."""
     import httpx
 
     # If mock key in offline tests or mock provider
@@ -79,29 +79,58 @@ def validate_api_key(
         provider_id, "https://api.openai.com/v1"
     )
 
+    probe_model_map = {
+        "opencode-go": "mimo-v2.5",
+        "mimo": "mimo-v2.5",
+        "openrouter": "openrouter/auto",
+        "gemini": "gemini-2.0-flash",
+        "openai": "gpt-4o-mini",
+        "anthropic": "claude-3-5-haiku-20241022",
+        "deepseek": "deepseek-chat",
+        "custom": "default",
+    }
+    probe_model = probe_model_map.get(provider_id, "gpt-4o-mini")
+
     try:
         if provider_id == "anthropic":
             headers = {
                 "x-api-key": api_key,
                 "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
             }
-            resp = httpx.get(
-                f"{resolved_base_url.rstrip('/')}/models", headers=headers, timeout=6.0
-            )
+            url = f"{resolved_base_url.rstrip('/')}/messages"
+            payload = {
+                "model": probe_model,
+                "max_tokens": 1,
+                "messages": [{"role": "user", "content": "hi"}],
+            }
+            resp = httpx.post(url, headers=headers, json=payload, timeout=6.0)
             if resp.status_code == 200:
                 return True, "API Key successfully validated"
             elif resp.status_code in (401, 403):
                 return False, f"Invalid API Key (HTTP {resp.status_code} Unauthorized)"
+            elif resp.status_code in (400, 404, 429):
+                return True, f"Key authenticated (Server status {resp.status_code})"
             return True, f"Endpoint reached (HTTP {resp.status_code})"
 
         else:
-            headers = {"Authorization": f"Bearer {api_key}"}
-            url = f"{resolved_base_url.rstrip('/')}/models"
-            resp = httpx.get(url, headers=headers, timeout=6.0)
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+            url = f"{resolved_base_url.rstrip('/')}/chat/completions"
+            payload = {
+                "model": probe_model,
+                "max_tokens": 1,
+                "messages": [{"role": "user", "content": "hi"}],
+            }
+            resp = httpx.post(url, headers=headers, json=payload, timeout=6.0)
             if resp.status_code == 200:
                 return True, "API Key successfully validated"
             elif resp.status_code in (401, 403):
                 return False, f"Invalid API Key (HTTP {resp.status_code} Unauthorized)"
+            elif resp.status_code in (400, 404, 422, 429):
+                return True, f"Key authenticated (Server status {resp.status_code})"
             return True, f"Endpoint reached (HTTP {resp.status_code})"
 
     except httpx.ConnectError:
@@ -109,7 +138,7 @@ def validate_api_key(
     except httpx.TimeoutException:
         return False, f"Timeout: Provider {resolved_base_url} did not respond within 6s"
     except Exception as exc:
-        return False, f"Validation failed: {exc}"
+        return False, f"Validation probe error: {exc}"
 
 
 def load_dotenv(dotenv_path: Path | None = None) -> None:

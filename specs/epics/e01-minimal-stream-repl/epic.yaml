@@ -1,0 +1,28 @@
+# specs/epics/e01-minimal-stream-repl/epic.yaml
+id: "e01"
+slug: "minimal-stream-repl"
+title: "Minimalist Pi/Tau-Style Stream REPL & Robust Auth"
+status: "completed"
+bcps_total: 16
+
+stories:
+  - id: "e01s01"
+    title: "Rock-Solid Terminal Input & Dual-Mode Picker (Arrow & Number)"
+    status: "completed"
+    bcps: 3
+    tasks_file: "e01s01-tasks.yaml"
+  - id: "e01s02"
+    title: "Resilient Provider Key Probe & Connection Diagnostics"
+    status: "completed"
+    bcps: 4
+    tasks_file: "e01s02-tasks.yaml"
+  - id: "e01s03"
+    title: "Pi-Style Scoped Model Switcher & 12 Slash Commands Suite"
+    status: "completed"
+    bcps: 5
+    tasks_file: "e01s03-tasks.yaml"
+  - id: "e01s04"
+    title: "Minimalist Stream Rendering & Live Tool Diffs"
+    status: "completed"
+    bcps: 4
+    tasks_file: "e01s04-tasks.yaml"

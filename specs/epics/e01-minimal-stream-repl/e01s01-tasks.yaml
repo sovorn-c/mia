@@ -1,0 +1,16 @@
+# specs/epics/e01-minimal-stream-repl/e01s01-tasks.yaml
+story_id: "e01s01"
+title: "Rock-Solid Terminal Input & Dual-Mode Picker (Arrow & Number)"
+status: "pending"
+bcps: 3
+
+tasks:
+  - id: "t01"
+    description: "Refactor interactive_select into a robust dual-mode picker supporting instant number entry (1, 2, 3...) and arrow keys without cursor drift."
+    status: "pending"
+    verify: "uv run python -c 'from mia_cli.interactive_input import interactive_select; print(\"interactive_select imported\")'"
+
+  - id: "t02"
+    description: "Refactor LiveInteractivePrompt / Readline handler into a clean, zero-flicker prompt with persistent history (~/.mia/history) and tab completion."
+    status: "pending"
+    verify: "uv run python -c 'from mia_cli.interactive_input import LiveInteractivePrompt; p = LiveInteractivePrompt(); print(len(p.history))'"

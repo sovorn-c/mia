@@ -1,0 +1,47 @@
+# specs/product/SCOPE_LATEST.yaml — Bounded PRD for Mia Stream REPL & Auth
+core_value: "Ultra-fast, zero-flicker, minimalist inline stream REPL with rock-solid provider auth and Pi-style model switching."
+
+summary: >
+  Mia is re-architected into a clean, minimalist inline stream REPL inspired by Pi, Tau, and Claude Code.
+  It completely replaces fragile, flickering character-by-character ANSI cursor loops with a resilient
+  line-editing engine. It establishes a robust provider credential model with direct chat completion
+  validation probes (eliminating brittle GET /models assumptions), a clean scoped model switcher (/model),
+  and a focused suite of 12 essential slash commands with seamless stream rendering.
+
+in_scope:
+  - id: "e01s01"
+    name: "Rock-Solid Terminal Input & Navigation"
+    description: "Stable line-editing prompt with history (~/.mia/history), arrow recall, Tab autocomplete, and zero-flicker selection menu."
+  - id: "e01s02"
+    name: "Pi/Tau Provider Auth & Connection Probe"
+    description: "Multi-provider authentication for OpenCode, OpenRouter, Gemini, OpenAI, Anthropic, DeepSeek, and Custom with lightweight 1-token probe."
+  - id: "e01s03"
+    name: "Scoped Model Switcher & Essential Slash Commands"
+    description: "Interactive /model switcher dynamically scoped to authenticated providers, plus full suite of 12 essential slash commands."
+  - id: "e01s04"
+    name: "Minimalist Stream Rendering & Live Tool Diffs"
+    description: "Clean inline stream output with subtle thinking indicators (💭), single-line tool cards, and Monokai syntax-highlighted git diffs."
+
+out_of_scope:
+  - id: "oos-01"
+    name: "Heavy full-screen Textual TUI canvas"
+    rationale: "Full-screen TUI widgets cause layout thrashing and terminal conflicts; user specifically requested a minimalist inline REPL."
+  - id: "oos-02"
+    name: "Multi-agent sidebar tabs in terminal"
+    rationale: "Multi-agent interactions are streamlined into inline @mention prompt routing."
+
+constraints:
+  - "Runtime: Python 3.12+ (strictly typed with Mypy, Ruff-formatted)."
+  - "Zero raw ANSI cursor manipulation loops that break terminal wrapping or physical line counts."
+  - "Key validation must never falsely block local/Ollama, Gemini, or OpenCode endpoints."
+
+success_criteria:
+  - "uv run mia launches instantly with a clean single-line header banner without screen flickering."
+  - "/login allows pasting API keys or authenticating OpenAI OAuth, verifies connection with a 1-token test, and saves to ~/.mia/credentials.json."
+  - "/model displays only authenticated providers and their models, with clean arrow/numeric selection."
+  - "Prompt execution streams reasoning tokens smoothly and prints clear tool execution results with duration and syntax diffs."
+  - "All automated tests in tests/ pass with 100% strict type-checking (uv run mypy src)."
+
+references:
+  - "specs/old_plan/mia_harness.md"
+  - "specs/old_plan/mia_tui_harness.md"

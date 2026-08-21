@@ -1,0 +1,16 @@
+# specs/epics/e01-minimal-stream-repl/e01s03-tasks.yaml
+story_id: "e01s03"
+title: "Pi-Style Scoped Model Switcher & 12 Slash Commands Suite"
+status: "pending"
+bcps: 5
+
+tasks:
+  - id: "t01"
+    description: "Re-architect interactive_model_picker to display authenticated models with fast number/arrow selection and custom entry."
+    status: "pending"
+    verify: "uv run python -c 'from mia_cli.repl import MiaREPL; repl = MiaREPL(model=None); print(repl.model_name)'"
+
+  - id: "t02"
+    description: "Refactor slash command routing (/help, /login, /logout, /model, /profile, /diff, /cost, /compact, /sessions, /init, /undo, /clear, /quit)."
+    status: "pending"
+    verify: "uv run pytest tests/test_cli_repl.py"
