@@ -13,6 +13,7 @@ from prompt_toolkit.document import Document
 from prompt_toolkit.formatted_text import HTML, AnyFormattedText
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
+from prompt_toolkit.shortcuts import CompleteStyle
 from prompt_toolkit.styles import Style
 
 COMMAND_HINTS: list[tuple[str, str]] = [
@@ -26,6 +27,8 @@ COMMAND_HINTS: list[tuple[str, str]] = [
     ("/compact", "Trigger context window compaction (alias: /compress)"),
     ("/sessions", "List saved session trees (alias: /history)"),
     ("/tree", "Explore and fork session conversation branch (alias: /branch)"),
+    ("/inspect", "Open post-turn detail audit viewer & diffs (alias: /logs)"),
+    ("/thinking", "Toggle model reasoning trace visibility (alias: /trace)"),
     ("/stop", "Halt the active running agent turn (alias: /abort)"),
     ("/init", "Inspect repository context & AGENTS.md (alias: /bootstrap)"),
     ("/clear", "Clear terminal screen and redraw banner (alias: /cls)"),
@@ -35,10 +38,11 @@ COMMAND_HINTS: list[tuple[str, str]] = [
 MIA_STYLE = Style.from_dict(
     {
         "prompt": "bold #FF7A00",
-        "completion-menu": "bg:#1E222A #E5E7EB",
-        "completion-menu.completion": "bg:#1E222A #E5E7EB",
+        "completion-menu": "bg:#282C34 #E5E7EB",
+        "completion-menu.completion": "bg:#282C34 #E5E7EB",
         "completion-menu.completion.current": "bold bg:#FF7A00 #000000",
-        "completion-menu.meta": "bg:#1E222A #9CA3AF italic",
+        "completion-menu.meta": "bg:#21252B #9CA3AF italic",
+        "completion-menu.meta.completion.current": "bold bg:#FF7A00 #202020",
         "bottom-toolbar": "bg:#161922 #9CA3AF",
         "bottom-toolbar.accent": "bold #FF7A00",
         "bottom-toolbar.dim": "#6B7280",
@@ -55,16 +59,21 @@ class SlashCompleter(Completer):
     def get_completions(
         self, document: Document, complete_event: CompleteEvent
     ) -> Iterable[Completion]:
-        text = document.text_before_cursor.lstrip()
-        if not text.startswith("/"):
+        text = document.text_before_cursor
+        line = text.lstrip()
+        if not line.startswith("/"):
             return
 
-        query = text.split()[0].lower()
+        parts = line.split()
+        if len(parts) > 1 and not line.endswith(" "):
+            return
+
+        query = parts[0].lower() if parts else "/"
         for cmd, desc in self.commands:
             if cmd.lower().startswith(query):
                 yield Completion(
                     cmd,
-                    start_position=-len(text),
+                    start_position=-len(query),
                     display=cmd,
                     display_meta=desc,
                 )
@@ -117,7 +126,8 @@ class LivePromptSession:
             key_bindings=self.bindings,
             style=MIA_STYLE,
             complete_while_typing=True,
-            enable_history_search=True,
+            complete_style=CompleteStyle.COLUMN,
+            reserve_space_for_menu=8,
         )
 
     def _create_keybindings(self) -> KeyBindings:

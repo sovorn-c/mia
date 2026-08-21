@@ -835,10 +835,8 @@ class MiaREPL:
 
         if not self.custom_provider and not self.model_name:
             self.console.print(
-                "[bold #FF7A00]⚡ Welcome to Mia! No AI provider authenticated yet.[/bold #FF7A00]\n"
-                "[dim]Launching authentication setup...[/dim]\n"
+                "[dim]💡 No AI provider authenticated yet. Type [bold #FF7A00]/login[/bold #FF7A00] to authenticate, or [bold #FF7A00]/help[/bold #FF7A00] for commands.[/dim]\n"
             )
-            self.interactive_login()
 
         while True:
             try:
