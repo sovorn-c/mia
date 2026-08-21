@@ -181,6 +181,17 @@ def test_live_prompt_session_non_tty(tmp_path: Path) -> None:
         assert res == "hello mia"
 
 
+@pytest.mark.asyncio
+async def test_live_prompt_session_async_non_tty(tmp_path: Path) -> None:
+    """Verify LivePromptSession correctly reads async input in non-tty/test mode."""
+    history_file = tmp_path / "history"
+    session = LivePromptSession(history_file=history_file)
+
+    with patch("builtins.input", return_value="async hello"):
+        res = await session.read_prompt_async()
+        assert res == "async hello"
+
+
 def test_interactive_select_non_tty() -> None:
     """Verify interactive_select selects by index or id in non-tty mode."""
     options = [

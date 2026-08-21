@@ -842,7 +842,7 @@ class MiaREPL:
 
         while True:
             try:
-                user_input = self.prompt_session.read_prompt("🥕 mia › ")
+                user_input = await self.prompt_session.read_prompt_async("🥕 mia › ")
 
                 if not user_input:
                     continue

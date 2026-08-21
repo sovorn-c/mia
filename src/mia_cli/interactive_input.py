@@ -157,6 +157,34 @@ class LivePromptSession:
 
         return kb
 
+    async def read_prompt_async(
+        self,
+        prompt_prefix: str = "🥕 mia › ",
+        bottom_toolbar: Any = None,
+    ) -> str:
+        """Async prompt user with floating slash completions, bracketed paste, and pinned bottom toolbar."""
+        if not sys.stdin.isatty():
+            try:
+                return input(prompt_prefix).strip()
+            except EOFError:
+                raise
+
+        toolbar = bottom_toolbar or (self.toolbar_callback() if self.toolbar_callback else None)
+        formatted_prompt: AnyFormattedText = [("class:prompt", prompt_prefix)]
+
+        try:
+            result = await self.session.prompt_async(
+                formatted_prompt,
+                bottom_toolbar=toolbar,
+                reserve_space_for_menu=6,
+            )
+            return result.strip()
+        except KeyboardInterrupt:
+            # Handle empty Ctrl+C
+            return ""
+        except EOFError:
+            raise
+
     def read_prompt(
         self,
         prompt_prefix: str = "🥕 mia › ",
@@ -191,6 +219,9 @@ class LiveInteractivePrompt:
 
     def __init__(self, history_file: Path | None = None) -> None:
         self._session = LivePromptSession(history_file=history_file)
+
+    async def read_prompt_async(self, prompt_prefix: str = "🥕 mia › ") -> str:
+        return await self._session.read_prompt_async(prompt_prefix)
 
     def read_prompt(self, prompt_prefix: str = "🥕 mia › ") -> str:
         return self._session.read_prompt(prompt_prefix)
