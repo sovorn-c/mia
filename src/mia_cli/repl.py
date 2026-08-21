@@ -931,17 +931,21 @@ class MiaREPL:
                     text=True,
                     check=False,
                 )
-                diff_text = res.stdout.strip()
-                if not diff_text:
-                    self.console.print(
-                        "[bold green]✓ Working tree clean. No uncommitted diffs.[/bold green]\n"
-                    )
+                if res.returncode != 0:
+                    error = res.stderr.strip() or f"git diff exited with status {res.returncode}"
+                    self.console.print(f"[red]Git diff failed: {error}[/red]\n")
                 else:
-                    self.console.print("[bold #FF7A00]Current Git Diffs:[/bold #FF7A00]")
-                    self.console.print(
-                        Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
-                    )
-                    self.console.print()
+                    diff_text = res.stdout.strip()
+                    if not diff_text:
+                        self.console.print(
+                            "[bold green]✓ Working tree clean. No uncommitted diffs.[/bold green]\n"
+                        )
+                    else:
+                        self.console.print("[bold #FF7A00]Current Git Diffs:[/bold #FF7A00]")
+                        self.console.print(
+                            Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
+                        )
+                        self.console.print()
             except Exception as e:
                 self.console.print(f"[red]Failed to run git diff: {e}[/red]\n")
 
