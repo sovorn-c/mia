@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
+
 import pytest
 from pydantic import ValidationError
 
@@ -12,6 +15,7 @@ from mia_agent.orchestration import (
     AgentRuntimeFactory,
     Mode,
     ModeRuntime,
+    OrchestrationErrorEvent,
     OrchestrationEventEnvelope,
     RuntimeIdentity,
     Workflow,
@@ -21,7 +25,7 @@ from mia_agent.profiles.manager import ProfileManager
 from mia_agent.session.entries import CustomEntry, LeafEntry, MessageEntry
 from mia_agent.session.jsonl import JsonlSessionStore
 from mia_ai.providers.mock import MockProvider
-from mia_ai.types import ChatMessage
+from mia_ai.types import ChatMessage, StreamChunk
 
 
 def test_models_single_mode_contract_validates_and_rejects_blank_names() -> None:
@@ -178,3 +182,111 @@ async def test_single_mode_runtime_preserves_one_agent_event_stream(tmp_path) ->
     ]
     assert all(event.mode == "single" for event in events)
     assert {event.profile for event in events} == {"coding"}
+
+
+@pytest.mark.asyncio
+async def test_research_mode_runs_specialist_before_coordinator_with_lineage(tmp_path) -> None:
+    provider = MockProvider()
+    provider.queue_text_response("architect findings")
+    provider.queue_text_response("coordinator synthesis")
+    profiles = ProfileManager(sessions_base_dir=tmp_path / "sessions")
+    factory = AgentRuntimeFactory(
+        profile_manager=profiles,
+        config_manager=ConfigManager(
+            config_path=tmp_path / "config.json",
+            credential_store=FileCredentialStore(path=tmp_path / "credentials.json"),
+        ),
+    )
+    runtime = ModeRuntime(factory=factory, profile_manager=profiles)
+
+    events = [
+        event
+        async for event in runtime.prompt(
+            "research this repository",
+            mode_name="research",
+            profile_name="coding",
+            provider=provider,
+            run_id="run-research",
+            session_id="root-session",
+            cwd=tmp_path,
+        )
+    ]
+
+    assert len(provider.recorded_calls) == 2
+    assert [event.profile for event in events if event.event.type == "turn_start"] == [
+        "architect",
+        "coding",
+    ]
+    assert [event.task_id for event in events if event.event.type == "turn_start"] == [
+        "specialist",
+        "root",
+    ]
+    coordinator_messages = provider.recorded_calls[1]["messages"]
+    assert "architect findings" in coordinator_messages[-1]["content"]
+    child_session = tmp_path / "sessions" / "architect" / "run-research_specialist.jsonl"
+    child_entries = JsonlSessionStore(child_session).load_entries()
+    child_metadata = next(entry for entry in child_entries if isinstance(entry, CustomEntry))
+    assert child_metadata.data["parent_session_id"] == "root-session"
+
+
+class FailingProvider(MockProvider):
+    async def stream(self, **kwargs) -> AsyncIterator[StreamChunk]:
+        raise RuntimeError("specialist unavailable")
+        yield StreamChunk(type="finish")
+
+
+class CancellingProvider(MockProvider):
+    async def stream(self, **kwargs) -> AsyncIterator[StreamChunk]:
+        raise asyncio.CancelledError()
+        yield StreamChunk(type="finish")
+
+
+@pytest.mark.asyncio
+async def test_research_failure_stops_before_coordinator_and_emits_typed_error(tmp_path) -> None:
+    provider = FailingProvider()
+    profiles = ProfileManager(sessions_base_dir=tmp_path / "sessions")
+    runtime = ModeRuntime(
+        factory=AgentRuntimeFactory(profile_manager=profiles),
+        profile_manager=profiles,
+    )
+
+    events = [
+        event
+        async for event in runtime.prompt(
+            "research this repository",
+            mode_name="research",
+            provider=provider,
+            run_id="run-failure",
+            cwd=tmp_path,
+        )
+    ]
+
+    assert [event.task_id for event in events if event.event.type == "turn_start"] == ["specialist"]
+    assert isinstance(events[-1].event, OrchestrationErrorEvent)
+    assert events[-1].event.stage == "specialist"
+    assert events[-1].event.cancelled is False
+
+
+@pytest.mark.asyncio
+async def test_research_cancellation_emits_error_without_success(tmp_path) -> None:
+    provider = CancellingProvider()
+    profiles = ProfileManager(sessions_base_dir=tmp_path / "sessions")
+    runtime = ModeRuntime(
+        factory=AgentRuntimeFactory(profile_manager=profiles),
+        profile_manager=profiles,
+    )
+
+    events = [
+        event
+        async for event in runtime.prompt(
+            "research this repository",
+            mode_name="research",
+            provider=provider,
+            run_id="run-cancel",
+            cwd=tmp_path,
+        )
+    ]
+
+    assert isinstance(events[-1].event, OrchestrationErrorEvent)
+    assert events[-1].event.cancelled is True
+    assert all(event.event.type != "turn_complete" for event in events)
