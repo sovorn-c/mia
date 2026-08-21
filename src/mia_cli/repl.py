@@ -26,24 +26,22 @@ from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.auth.openai_auth import OpenAIOAuthManager
 from mia_agent.events import StepEndEvent, TurnCompleteEvent
 from mia_agent.harness import AgentHarness
+from mia_agent.orchestration import (
+    AgentRuntime,
+    AgentRuntimeFactory,
+    ModeRuntime,
+    RuntimeIdentity,
+)
 from mia_agent.profiles.manager import ProfileManager
-from mia_agent.session.compactor import ContextCompactor
-from mia_agent.session.entries import MessageEntry
+from mia_agent.session.entries import LeafEntry, MessageEntry, SessionInfoEntry
 from mia_agent.session.jsonl import JsonlSessionStore
-from mia_ai.providers.anthropic import AnthropicProvider
+from mia_agent.session.tree import SessionTree
 from mia_ai.providers.base import LLMProvider
-from mia_ai.providers.openai_compatible import OpenAICompatibleProvider
 from mia_cli.interactive_input import (
     LivePromptSession,
-    format_status_toolbar,
     interactive_select,
 )
 from mia_cli.renderers.rich_stream import RichStreamRenderer
-from mia_middleware.pipeline import ToolPipeline
-from mia_middleware.security import SecurityGuardMiddleware
-from mia_middleware.telemetry import AuditLogMiddleware, CostBudgetMiddleware
-from mia_tools.bash import BashTool
-from mia_tools.fs import EditFileTool, ReadFileTool, WriteFileTool
 
 SLASH_COMMANDS = [
     "/help",
@@ -55,6 +53,7 @@ SLASH_COMMANDS = [
     "/cost",
     "/compact",
     "/sessions",
+    "/resume",
     "/tree",
     "/inspect",
     "/thinking",
@@ -74,6 +73,7 @@ COMMAND_DESCRIPTIONS: dict[str, str] = {
     "/cost": "Show real-time session tokens and estimated USD cost (alias: /stats, /tokens)",
     "/compact": "Check/trigger context window compaction (alias: /compress)",
     "/sessions": "List saved JSONL session history trees (alias: /history)",
+    "/resume": "Resume a saved session; Ctrl+D/d deletes the selected saved session",
     "/tree": "Explore and fork session conversation branch (alias: /branch)",
     "/inspect": "Open post-turn detail audit viewer and file diffs (alias: /logs)",
     "/thinking": "Toggle display of model reasoning / thinking tokens (alias: /trace)",
@@ -166,6 +166,7 @@ class MiaREPL:
         profile: str = "coding",
         cwd: Path | None = None,
         custom_provider: LLMProvider | None = None,
+        session_id: str | None = None,
     ) -> None:
         self.console = Console()
         self.cwd = cwd or Path.cwd()
@@ -174,9 +175,20 @@ class MiaREPL:
         self.profile_mgr = ProfileManager()
         self.profile_name = profile
         self.custom_provider = custom_provider
+        self.mode_name = "single"
+        self.runtime_factory = AgentRuntimeFactory(
+            profile_manager=self.profile_mgr,
+            config_manager=self.config_mgr,
+        )
+        self.mode_runtime = ModeRuntime(
+            factory=self.runtime_factory,
+            profile_manager=self.profile_mgr,
+        )
 
         # Never assume a model unless explicitly authenticated or provided
-        initial_model = model or self.config_mgr.config.default_model or None
+        initial_model = model or (
+            None if custom_provider else self.config_mgr.config.default_model or None
+        )
         if initial_model and not custom_provider:
             inferred_prov = self.config_mgr.infer_provider(initial_model)
             has_key = self.cred_store.get_api_key(inferred_prov) or os.environ.get(
@@ -186,7 +198,8 @@ class MiaREPL:
                 initial_model = None
 
         self.model_name: str | None = initial_model
-        self.session_id = f"session_{os.urandom(4).hex()}"
+        self.session_id = session_id or f"session_{os.urandom(4).hex()}"
+        self.agent_runtime: AgentRuntime | None = None
         self.harness: AgentHarness | None = None
         self.total_cost_usd = 0.0
         self.total_tokens = 0
@@ -197,89 +210,39 @@ class MiaREPL:
         )
         self._history_file = Path.home() / ".mia" / "history"
 
-        # Initialize prompt_toolkit session with adjusted live status toolbar below prompt
+        # Initialize prompt_toolkit session with floating slash completions
         self.prompt_session = LivePromptSession(
             history_file=self._history_file,
-            toolbar_callback=self._render_toolbar,
         )
         self._init_harness()
 
-    def _render_toolbar(self) -> Any:
-        """Render clean status info below prompt, adjusted with 0 background."""
-        ws_name = self.cwd.name or "workspace"
-        m_name = self.model_name or "no model (/login)"
-        return format_status_toolbar(
-            workspace_name=ws_name,
-            model_name=m_name,
-            tokens=self.total_tokens,
-            window_tokens=128000,
-            thinking_enabled=self.show_thinking_trace,
-        )
-
-    def _create_provider(self, target_model: str) -> tuple[LLMProvider, str]:
-        """Resolve LLMProvider and model name."""
-        if self.custom_provider:
-            return self.custom_provider, target_model
-
-        provider_name, actual_model, api_key, base_url = self.config_mgr.resolve_credentials(
-            model=target_model
-        )
-        if provider_name == "anthropic":
-            return AnthropicProvider(api_key=api_key, base_url=base_url), actual_model
-        return OpenAICompatibleProvider(api_key=api_key, base_url=base_url), actual_model
-
     def _init_harness(self) -> None:
-        """Instantiate AgentHarness with active profile and model."""
+        """Instantiate the active profile through the shared runtime factory."""
+        self.agent_runtime = None
         if not self.custom_provider and not self.model_name:
             self.harness = None
             return
 
-        prof = self.profile_mgr.get_profile(self.profile_name)
-        target_model = self.model_name or prof.model or ""
-        if not target_model and not self.custom_provider:
+        profile = self.profile_mgr.get_profile(self.profile_name)
+        if not self.model_name and not profile.model and not self.custom_provider:
             self.harness = None
             return
 
-        provider, resolved_model = self._create_provider(target_model)
-
-        base_tools = [
-            ReadFileTool(cwd=self.cwd),
-            WriteFileTool(cwd=self.cwd),
-            EditFileTool(cwd=self.cwd),
-            BashTool(cwd=self.cwd),
-        ]
-        tools = self.profile_mgr.filter_tools(prof, base_tools)
-
-        pipeline = ToolPipeline(
-            [
-                SecurityGuardMiddleware(),
-                AuditLogMiddleware(),
-                CostBudgetMiddleware(),
-            ]
-        )
-
-        session_dir = self.profile_mgr.get_session_dir(prof.name)
-        session_file = session_dir / f"{self.session_id}.jsonl"
-        session_store = JsonlSessionStore(session_file)
-
-        compactor = ContextCompactor(
-            context_window_tokens=prof.context_window_tokens
-            or self.config_mgr.config.context_window_tokens,
-            compaction_threshold_ratio=prof.compaction_threshold_ratio
-            or self.config_mgr.config.compaction_threshold_ratio,
-        )
-
-        self.harness = AgentHarness(
-            provider=provider,
-            model=resolved_model,
-            system_prompt=prof.system_prompt,
-            tools=tools,
-            pipeline=pipeline,
-            max_steps_per_turn=prof.max_steps_per_turn,
+        identity = RuntimeIdentity(
+            mode=self.mode_name,
+            run_id=f"run_{self.session_id}",
+            task_id="root",
+            agent_id="coordinator",
+            profile=profile.name,
             session_id=self.session_id,
-            session_store=session_store,
-            compactor=compactor,
         )
+        self.agent_runtime = self.runtime_factory.build(
+            identity=identity,
+            provider=self.custom_provider,
+            model_override=self.model_name,
+            cwd=self.cwd,
+        )
+        self.harness = self.agent_runtime.harness
 
     def interactive_login(self, provider_hint: str | None = None) -> None:
         """Step 1: Choose Authentication Method (API Key or OpenAI Auth)."""
@@ -615,14 +578,80 @@ class MiaREPL:
             self._init_harness()
             self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
 
+    def _session_file(self, session_id: str | None = None) -> Path:
+        """Return the JSONL path for the active profile and session."""
+        prof = self.profile_mgr.get_profile(self.profile_name)
+        return (
+            self.profile_mgr.get_session_dir(prof.name) / f"{session_id or self.session_id}.jsonl"
+        )
+
+    @staticmethod
+    def _message_preview(entry: MessageEntry) -> str:
+        content = str(entry.message.content or "").replace("\n", " ").strip()
+        if len(content) > 54:
+            return f"{content[:51]}..."
+        return content or "(empty message)"
+
+    def _render_restored_messages(self, messages: list[Any]) -> None:
+        """Show the restored active branch without replaying it as a new turn."""
+        for message in messages:
+            content = Text(str(message.content or ""))
+            if message.role == "user":
+                self.console.print(Text("› ", style="bold #FF7A00") + content)
+            elif message.role == "assistant":
+                self.console.print(Text("🥕 mia › ", style="bold #FF7A00") + content)
+            elif message.role == "tool":
+                self.console.print(
+                    Text(f"  {message.tool_name or 'tool'} › ", style="dim") + content
+                )
+
+    def _tree_options(
+        self, entries: list[Any], active_ids: set[str]
+    ) -> tuple[list[tuple[str, str, str]], int]:
+        """Build Pi-like tree rows and preserve the active branch selection."""
+        visible = [
+            entry for entry in entries if not isinstance(entry, (LeafEntry, SessionInfoEntry))
+        ]
+        by_parent: dict[str | None, list[Any]] = {}
+        visible_ids = {entry.id for entry in visible}
+        for entry in visible:
+            parent_id = entry.parent_id if entry.parent_id in visible_ids else None
+            by_parent.setdefault(parent_id, []).append(entry)
+
+        rows: list[tuple[str, str, str]] = []
+
+        def walk(parent_id: str | None, prefix: str) -> None:
+            children = by_parent.get(parent_id, [])
+            for index, entry in enumerate(children):
+                is_last = index == len(children) - 1
+                branch = "└─ " if is_last else "├─ "
+                marker = "●" if entry.id in active_ids else "○"
+                if isinstance(entry, MessageEntry):
+                    role = "you" if entry.message.role == "user" else entry.message.role
+                    preview = self._message_preview(entry)
+                else:
+                    role = entry.type
+                    preview = str(getattr(entry, "summary", ""))[:54]
+                label = f"{prefix}{branch}{marker} {role}: {preview}"
+                description = (
+                    "Active branch" if entry.id in active_ids else "Fork from this checkpoint"
+                ) + f" • {entry.id[:8]}"
+                rows.append((entry.id, label, description))
+                walk(entry.id, prefix + ("   " if is_last else "│  "))
+
+        walk(None, "")
+        if not rows:
+            return [], 0
+        active_candidates = [idx for idx, row in enumerate(rows) if row[0] in active_ids]
+        return rows, active_candidates[-1] if active_candidates else len(rows) - 1
+
     def interactive_tree_navigator(self) -> None:
-        """Interactive JSONL session tree branch navigator (Pi/Tau style)."""
+        """Navigate the full JSONL tree and fork future prompts from the selected entry."""
         if not self.harness:
             self.console.print("[dim]No active session tree to navigate.[/dim]\n")
             return
 
-        prof = self.profile_mgr.get_profile(self.profile_name)
-        session_file = self.profile_mgr.get_session_dir(prof.name) / f"{self.session_id}.jsonl"
+        session_file = self._session_file()
         if not session_file.exists():
             self.console.print("[dim]No conversation turns in this session yet.[/dim]\n")
             return
@@ -630,50 +659,144 @@ class MiaREPL:
         try:
             store = JsonlSessionStore(session_file)
             entries = store.load_entries()
-            user_entries: list[tuple[str, str, str]] = []
-            turn_idx = 1
-            for e in entries:
-                if isinstance(e, MessageEntry) and e.message.role == "user":
-                    content_str = str(e.message.content or "")
-                    user_entries.append(
-                        (
-                            e.id,
-                            f"Turn #{turn_idx}: {content_str[:45]}...",
-                            f"Parent: {e.parent_id or 'root'}",
-                        )
-                    )
-                    turn_idx += 1
-
-            if not user_entries:
+            tree = SessionTree(entries)
+            active_path = tree.get_active_path()
+            active_ids = {entry.id for entry in active_path}
+            options, default_idx = self._tree_options(entries, active_ids)
+            if not options:
                 self.console.print("[dim]No past turns to branch from.[/dim]\n")
                 return
 
             chosen = interactive_select(
-                "🌿 Session Tree Navigator (Jump & Fork)",
-                user_entries,
-                default_idx=len(user_entries) - 1,
+                "🌿 Session Tree (↑/↓ choose checkpoint, Enter forks here)",
+                options,
+                default_idx=default_idx,
             )
-            if chosen:
-                self.console.print(
-                    f"\n[bold green]✓ Branching from turn checkpoint {chosen}[/bold green]\n"
+            if not chosen:
+                return
+            if active_path and chosen == active_path[-1].id:
+                self.console.print("[dim]Already at this checkpoint.[/dim]\n")
+                return
+
+            messages = self.harness.navigate_to(chosen)
+            self.console.print(
+                f"\n[bold green]✓ Branched from checkpoint {chosen[:8]}[/bold green]\n"
+            )
+            self._render_restored_messages(messages)
+            self.console.print()
+        except Exception as exc:
+            self.console.print(f"[red]Failed to navigate session tree: {exc}[/red]\n")
+
+    def delete_session(self, session_id: str) -> None:
+        """Delete a saved session, but never remove the active session file."""
+        if session_id == self.session_id:
+            raise ValueError("Cannot delete the currently active session")
+        session_file = self._session_file(session_id)
+        if not session_file.exists():
+            raise FileNotFoundError(f"Session '{session_id}' was not found")
+        session_file.unlink()
+
+    def interactive_session_resumer(self) -> None:
+        """Pick a saved session in the current profile and restore its active branch."""
+        session_dir = self.profile_mgr.get_session_dir(self.profile_name)
+        session_files = sorted(
+            session_dir.glob("*.jsonl"), key=lambda path: path.stat().st_mtime, reverse=True
+        )
+        options: list[tuple[str, str, str]] = []
+        for path in session_files:
+            try:
+                entries = JsonlSessionStore(path).load_entries()
+                tree = SessionTree(entries)
+                messages = tree.extract_messages_from_path(tree.get_active_path())
+                first_user = next((m for m in messages if m.role == "user"), None)
+                preview = str(first_user.content if first_user else "(empty session)")
+                preview = preview.replace("\n", " ").strip()[:52]
+                user_count = sum(1 for m in messages if m.role == "user")
+                current = " • current" if path.stem == self.session_id else ""
+                options.append(
+                    (
+                        path.stem,
+                        f"{preview or '(empty session)'}{current}",
+                        f"{user_count} prompt(s) • {path.stat().st_size / 1024:.1f} KB",
+                    )
                 )
-        except Exception as e:
-            self.console.print(f"[red]Failed to load session tree: {e}[/red]\n")
+            except Exception:
+                continue
+
+        if not options:
+            self.console.print("[dim]No saved sessions found for this profile.[/dim]\n")
+            return
+
+        chosen = interactive_select(
+            "↩ Resume Session (↑/↓ choose, Enter resume, Ctrl+D/d delete)",
+            options,
+            default_idx=0,
+            on_delete=self.delete_session,
+        )
+        if chosen:
+            self.resume_session(chosen)
+
+    def resume_session(self, session_id: str) -> None:
+        """Restore a saved session and its active branch into the live harness."""
+        if not session_id or Path(session_id).name != session_id or session_id in {".", ".."}:
+            self.console.print("[yellow]Invalid session ID.[/yellow]\n")
+            return
+        session_file = self._session_file(session_id)
+        if not session_file.exists():
+            self.console.print(f"[yellow]Session '{session_id}' was not found.[/yellow]\n")
+            return
+        try:
+            entries = JsonlSessionStore(session_file).load_entries()
+            tree = SessionTree(entries)
+            messages = tree.extract_messages_from_path(tree.get_active_path())
+            self.session_id = session_id
+            self._init_harness()
+            self.console.print(
+                f"\n[bold green]✓ Resumed {session_id} ({len(messages)} messages)[/bold green]\n"
+            )
+            self._render_restored_messages(messages)
+            self.console.print()
+        except Exception as exc:
+            self.console.print(f"[red]Failed to resume session: {exc}[/red]\n")
 
     def print_banner(self) -> None:
-        """Render clean, compact Claude Code/Pi-style banner."""
+        """Render clean, compact top status banner with full session telemetry."""
         model_display = self.model_name if self.model_name else "(none - run /login)"
         model_style = "bold #38BDF8" if self.model_name else "dim yellow"
+        ws_name = self.cwd.name or str(self.cwd)
+
+        # Context window computation
+        window_tokens = 128000
+        pct = (self.total_tokens / max(1, window_tokens)) * 100
+        pct_str = f"{pct:.1f}%" if self.total_tokens > 0 else "0%"
+        tokens_str = (
+            f"{self.total_tokens / 1000:.1f}k"
+            if self.total_tokens >= 1000
+            else str(self.total_tokens)
+        )
+        window_str = f"{window_tokens // 1000}k" if window_tokens >= 1000 else str(window_tokens)
+
+        thinking_text = "on" if self.show_thinking_trace else "off"
+        thinking_style = "bold #FF7A00" if self.show_thinking_trace else "dim #9CA3AF"
 
         banner_content = Text.assemble(
-            (f"{self.cwd}  ", "dim #9CA3AF"),
-            ("│  Model: ", "dim #9CA3AF"),
+            ("📁 ", "dim #9CA3AF"),
+            (f"{ws_name}  ", "bold white"),
+            ("│  🧠 ", "dim #9CA3AF"),
             (f"{model_display}  ", model_style),
-            ("│  Profile: ", "dim #9CA3AF"),
-            (f"{self.profile_name}  ", "bold #10B981"),
-            ("│  Type ", "dim #9CA3AF"),
+            ("│  ⚡ ", "dim #9CA3AF"),
+            (f"{tokens_str}/{window_str} ({pct_str})  ", "dim #9CA3AF"),
+            ("│  💭 ", "dim #9CA3AF"),
+            (f"{thinking_text}  ", thinking_style),
+            ("│  ^O ", "bold #FF7A00"),
+            ("audit  ", "dim #9CA3AF"),
+            ("│  ^T ", "bold #FF7A00"),
+            ("trace  ", "dim #9CA3AF"),
+            ("│  Esc Esc ", "bold #FF7A00"),
+            ("tree  ", "dim #9CA3AF"),
+            ("│  ", "dim #9CA3AF"),
             ("/", "bold #FF7A00"),
-            (" for commands", "dim #9CA3AF"),
+            (" help", "dim #9CA3AF"),
         )
         self.console.print(
             Panel(
@@ -706,8 +829,12 @@ class MiaREPL:
 
     async def execute_turn(self, prompt: str) -> None:
         """Run single prompt turn with minimalist stream rendering."""
+        # Start elapsed timing and working animation immediately upon submission
+        self.stream_renderer.start_turn()
+
         if not self.harness:
             if not self.model_name:
+                self.stream_renderer._stop_status()
                 self.console.print(
                     "[yellow]⚠️  No model configured. Launching login wizard first...[/yellow]\n"
                 )
@@ -721,10 +848,17 @@ class MiaREPL:
                 self._init_harness()
 
         assert self.harness is not None
+        assert self.agent_runtime is not None
 
         try:
             self.stream_renderer.show_thinking_trace = self.show_thinking_trace
-            async for event in self.harness.prompt(prompt):
+            async for envelope in self.mode_runtime.prompt(
+                prompt,
+                mode_name=self.mode_name,
+                profile_name=self.profile_name,
+                runtime=self.agent_runtime,
+            ):
+                event = envelope.event
                 self.stream_renderer.on_event(event)
                 if isinstance(event, StepEndEvent):
                     self.total_tokens += event.input_tokens + event.output_tokens
@@ -732,8 +866,10 @@ class MiaREPL:
                     self.total_cost_usd += event.total_cost_usd
 
         except asyncio.CancelledError:
+            self.stream_renderer._stop_status()
             self.console.print("\n[yellow]⚠️  Turn halted by user (/stop or Ctrl+C).[/yellow]\n")
         except Exception as exc:
+            self.stream_renderer._stop_status()
             self.console.print(f"\n[bold red]Error during execution:[/bold red] {exc}\n")
 
     def handle_slash_command(self, cmd_line: str) -> bool:
@@ -829,7 +965,13 @@ class MiaREPL:
             self.console.print(f"[bold]Saved sessions ({len(files)}):[/bold]")
             for f in files[:10]:
                 self.console.print(f" - {f.stem} [dim]({f.stat().st_size / 1024:.1f} KB)[/dim]")
-            self.console.print()
+            self.console.print("[dim]Use /resume to restore one.[/dim]\n")
+
+        elif cmd == "/resume":
+            if args:
+                self.resume_session(args)
+            else:
+                self.interactive_session_resumer()
 
         elif cmd in ("/tree", "/branch"):
             self.interactive_tree_navigator()
@@ -890,6 +1032,8 @@ class MiaREPL:
             self.console.print(
                 "[dim]💡 No AI provider authenticated yet. Type [bold #FF7A00]/login[/bold #FF7A00] to authenticate, or [bold #FF7A00]/help[/bold #FF7A00] for commands.[/dim]\n"
             )
+        else:
+            self.console.print()
 
         while True:
             try:

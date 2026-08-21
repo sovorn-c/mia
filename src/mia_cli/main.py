@@ -12,14 +12,8 @@ from rich.table import Table
 
 from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
-from mia_agent.harness import AgentHarness
+from mia_agent.orchestration import ModeRuntime
 from mia_agent.profiles.manager import ProfileManager
-from mia_agent.session.compactor import ContextCompactor
-from mia_agent.session.jsonl import JsonlSessionStore
-from mia_agent.session.tree import SessionTree
-from mia_ai.providers.anthropic import AnthropicProvider
-from mia_ai.providers.base import LLMProvider
-from mia_ai.providers.openai_compatible import OpenAICompatibleProvider
 from mia_cli.renderers.rich_stream import RichStreamRenderer
 from mia_middleware.pipeline import ToolPipeline
 from mia_middleware.security import SecurityGuardMiddleware
@@ -71,91 +65,28 @@ async def _run_agent_loop(
     compaction_threshold: float | None = None,
     context_window: int | None = None,
     cwd: Path | None = None,
+    mode_name: str = "single",
 ) -> None:
-    work_dir = cwd or Path.cwd()
-
-    # 1. Resolve Profile
-    profile_manager = ProfileManager()
-    profile = profile_manager.get_profile(profile_name)
-
-    # 2. Resolve Model & Credentials
-    config_mgr = ConfigManager()
-    target_model = model_override or profile.model or "claude-3-5-sonnet"
-    provider_name, model_name, api_key, base_url = config_mgr.resolve_credentials(
-        model=target_model
-    )
-
-    # 3. Instantiate Provider
-    provider: LLMProvider
-    if provider_name == "anthropic":
-        provider = AnthropicProvider(api_key=api_key, base_url=base_url)
-    else:
-        provider = OpenAICompatibleProvider(api_key=api_key, base_url=base_url)
-
-    # 4. Resolve Tools & Pipeline
-    all_tools = get_default_tools(cwd=work_dir)
-    active_tools = profile_manager.filter_tools(profile, all_tools)
-    pipeline = build_pipeline_from_profile(profile.middlewares)
-
-    # 5. Resolve Session Store & History
-    session_dir = profile_manager.get_session_dir(profile.name)
-    actual_session_id = session_id or f"session_{int(asyncio.get_event_loop().time())}"
-    session_file = session_dir / f"{actual_session_id}.jsonl"
-    session_store = JsonlSessionStore(session_file)
-
-    initial_messages = []
-    if session_file.exists():
-        entries = session_store.load_entries()
-        tree = SessionTree(entries)
-        initial_messages = tree.extract_messages_from_path(tree.get_active_path())
-
-    compaction_ratio = (
-        compaction_threshold
-        if compaction_threshold is not None
-        else (
-            profile.compaction_threshold_ratio
-            if profile.compaction_threshold_ratio is not None
-            else config_mgr.config.compaction_threshold_ratio
-        )
-    )
-    window_tokens = (
-        context_window
-        if context_window is not None
-        else (
-            profile.context_window_tokens
-            if profile.context_window_tokens is not None
-            else config_mgr.config.context_window_tokens
-        )
-    )
-    compactor = ContextCompactor(
-        context_window_tokens=window_tokens,
-        compaction_threshold_ratio=compaction_ratio,
-    )
-
-    # 6. Instantiate Harness
-    harness = AgentHarness(
-        provider=provider,
-        model=model_name,
-        system_prompt=profile.system_prompt,
-        tools=active_tools,
-        pipeline=pipeline,
-        max_steps_per_turn=profile.max_steps_per_turn,
-        session_id=actual_session_id,
-        messages=initial_messages,
-        session_store=session_store,
-        compactor=compactor,
-    )
-
-    # 7. Run and stream output
+    runtime = ModeRuntime()
     renderer = RichStreamRenderer(console=console)
-    async for event in harness.prompt(prompt_text):
-        renderer.on_event(event)
+    async for envelope in runtime.prompt(
+        prompt_text,
+        mode_name=mode_name,
+        profile_name=profile_name,
+        model_override=model_override,
+        session_id=session_id,
+        cwd=cwd,
+        compaction_threshold=compaction_threshold,
+        context_window=context_window,
+    ):
+        renderer.on_event(envelope.event)
 
 
 @app.command(name="run")
 def run_command(
     prompt: Annotated[str, typer.Option("--prompt", "-p", help="User instruction prompt")] = "",
     profile: Annotated[str, typer.Option("--profile", help="Active profile name")] = "coding",
+    mode: Annotated[str, typer.Option("--mode", help="Orchestration mode name")] = "single",
     model: Annotated[str | None, typer.Option("--model", "-m", help="LLM model identifier")] = None,
     resume: Annotated[
         str | None, typer.Option("--resume", "-r", help="Session ID to resume")
@@ -184,6 +115,7 @@ def run_command(
             session_id=resume,
             compaction_threshold=compaction_threshold,
             context_window=context_window,
+            mode_name=mode,
         )
     )
 

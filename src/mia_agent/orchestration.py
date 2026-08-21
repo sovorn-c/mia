@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -155,6 +157,114 @@ class AgentRuntime:
     identity: RuntimeIdentity
     profile: AgentProfile
     session_store: JsonlSessionStore
+
+
+class ModeCatalog:
+    """Resolve the built-in mode composition for a selected coordinator profile."""
+
+    def __init__(self, profile_manager: ProfileManager | None = None) -> None:
+        self.profile_manager = profile_manager or ProfileManager()
+
+    def available_modes(self) -> tuple[str, ...]:
+        return ("single", "research")
+
+    def resolve(self, name: str, coordinator_profile: str) -> Mode:
+        key = name.strip().lower()
+        if key not in self.available_modes():
+            available = ", ".join(self.available_modes())
+            raise ValueError(f"Mode '{name}' not found. Available modes: {available}")
+
+        if key == "single":
+            workflow = Workflow(
+                name="single-workflow",
+                stages=[
+                    WorkflowStage(
+                        name="coordinator",
+                        profile=coordinator_profile,
+                        kind="coordinator",
+                    )
+                ],
+            )
+        else:
+            workflow = Workflow(
+                name="research-workflow",
+                stages=[
+                    WorkflowStage(name="specialist", profile="architect", kind="specialist"),
+                    WorkflowStage(
+                        name="coordinator",
+                        profile=coordinator_profile,
+                        kind="coordinator",
+                    ),
+                ],
+            )
+
+        mode = Mode(name=key, coordinator_profile=coordinator_profile, workflow=workflow)
+        mode.validate_profiles({profile.name for profile in self.profile_manager.list_profiles()})
+        return mode
+
+
+class ModeRuntime:
+    """Execute explicit modes and attribute each inner AgentEvent."""
+
+    def __init__(
+        self,
+        *,
+        factory: AgentRuntimeFactory | None = None,
+        profile_manager: ProfileManager | None = None,
+        catalog: ModeCatalog | None = None,
+    ) -> None:
+        self.profile_manager = profile_manager or ProfileManager()
+        self.factory = factory or AgentRuntimeFactory(profile_manager=self.profile_manager)
+        self.catalog = catalog or ModeCatalog(profile_manager=self.profile_manager)
+
+    async def prompt(
+        self,
+        prompt_text: str,
+        *,
+        mode_name: str = "single",
+        profile_name: str = "coding",
+        provider: LLMProvider | None = None,
+        model_override: str | None = None,
+        session_id: str | None = None,
+        run_id: str | None = None,
+        cwd: Path | None = None,
+        compaction_threshold: float | None = None,
+        context_window: int | None = None,
+        runtime: AgentRuntime | None = None,
+    ) -> AsyncIterator[OrchestrationEventEnvelope]:
+        mode = self.catalog.resolve(mode_name, profile_name)
+        if runtime is None:
+            resolved_run_id = run_id or f"run_{uuid.uuid4().hex}"
+            identity = RuntimeIdentity(
+                mode=mode.name,
+                run_id=resolved_run_id,
+                task_id="root",
+                agent_id="coordinator",
+                profile=mode.coordinator_profile,
+                session_id=session_id or f"{resolved_run_id}_root",
+            )
+            runtime = self.factory.build(
+                identity=identity,
+                provider=provider,
+                model_override=model_override,
+                cwd=cwd,
+                compaction_threshold=compaction_threshold,
+                context_window=context_window,
+            )
+        else:
+            identity = runtime.identity
+            if identity.mode != mode.name or identity.profile != mode.coordinator_profile:
+                raise ValueError("existing runtime does not match the selected mode and profile")
+
+        async for event in runtime.harness.prompt(prompt_text):
+            yield OrchestrationEventEnvelope(
+                mode=identity.mode,
+                run_id=identity.run_id,
+                task_id=identity.task_id,
+                agent_id=identity.agent_id,
+                profile=identity.profile,
+                event=event,
+            )
 
 
 class AgentRuntimeFactory:
