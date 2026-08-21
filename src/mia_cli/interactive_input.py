@@ -28,12 +28,11 @@ def interactive_select(
     options: list[tuple[str, str, str]],  # (id, label, description)
     default_idx: int = 0,
 ) -> str | None:
-    """Prompt user to navigate with Up/Down arrow keys and press Enter to select (Claude Code/Pi style)."""
+    """Prompt user to navigate with Up/Down arrow keys and press Enter to select (with Carrot 🥕 pointer)."""
     if not options:
         return None
 
     if not sys.stdin.isatty():
-        # Fallback for non-interactive / test environments
         try:
             line = input(
                 f"{title} (Enter choice id or press Enter for default [{options[default_idx][0]}]): "
@@ -66,12 +65,12 @@ def interactive_select(
     def render_options(idx: int) -> None:
         for i, (_id, label, desc) in enumerate(options):
             if i == idx:
-                cursor = "\x1b[1;38;2;255;122;0m▸\x1b[0m "
-                label_str = f"\x1b[1;38;2;255;122;0m{label:<20}\x1b[0m"
+                cursor = "🥕 "
+                label_str = f"\x1b[1;38;2;255;122;0m{label:<16}\x1b[0m"
                 desc_str = f"\x1b[38;2;243;244;246m{desc}\x1b[0m"
             else:
-                cursor = "  "
-                label_str = f"\x1b[38;2;156;163;175m{label:<20}\x1b[0m"
+                cursor = "   "
+                label_str = f"\x1b[38;2;156;163;175m{label:<16}\x1b[0m"
                 desc_str = f"\x1b[2;37m{desc}\x1b[0m"
             sys.stdout.write(f"\r\x1b[K{cursor}{label_str} \x1b[2m│\x1b[0m {desc_str}\n")
         sys.stdout.flush()
@@ -289,7 +288,7 @@ class LiveInteractivePrompt:
                 + "╮\x1b[0m\n"
             )
             for i, (cmd, desc) in enumerate(matches[:8]):
-                arrow = "\x1b[1;38;2;255;122;0m▸\x1b[0m " if i == 0 else "  "
+                arrow = "🥕 " if i == 0 else "   "
                 cmd_colored = f"\x1b[1;38;2;255;122;0m{cmd:<11}\x1b[0m"
                 desc_colored = f"\x1b[38;2;156;163;175m{desc[:48]}\x1b[0m"
                 sys.stdout.write(

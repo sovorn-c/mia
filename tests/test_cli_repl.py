@@ -61,7 +61,7 @@ def test_repl_completer_and_slash_menu(tmp_path: Path) -> None:
 
 
 def test_repl_pi_style_auth_and_model_scoper(tmp_path: Path) -> None:
-    """Test Pi-style provider authentication followed by model scoping."""
+    """Test Pi-style provider authentication directly saves key and updates active provider."""
     cred_file = tmp_path / "credentials.json"
     cfg_file = tmp_path / "config.json"
     mock = MockProvider()
@@ -69,9 +69,9 @@ def test_repl_pi_style_auth_and_model_scoper(tmp_path: Path) -> None:
     repl.cred_store.path = cred_file
     repl.config_mgr.config_path = cfg_file
 
-    # Simulate: Pick Provider [1] (opencode-go), Enter API Key, then Pick Model [1] (mimo-v2.5)
+    # Simulate: Pick Provider (opencode-go), Enter API Key
     with (
-        patch("builtins.input", side_effect=["1", "1"]),
+        patch("builtins.input", side_effect=["opencode-go"]),
         patch("getpass.getpass", return_value="sk-test-opencode-key-123"),
     ):
         repl.interactive_login()

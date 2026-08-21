@@ -283,15 +283,15 @@ class MiaREPL:
         )
 
     def interactive_login(self, provider_hint: str | None = None) -> None:
-        """Step 1: Provider Authentication Setup (Auth / API Keys with arrow-key navigation)."""
+        """Step 1: Pure Provider Authentication Setup (Auth / API Keys with arrow-key navigation)."""
         provider_options = [
-            ("opencode-go", "opencode-go", "OpenCode Zen API (MiMo-v2.5) [Recommended]"),
+            ("opencode-go", "opencode-go", "OpenCode API Key [Recommended]"),
             ("openrouter", "openrouter", "OpenRouter Multi-Model Gateway"),
-            ("gemini", "gemini", "Google Gemini API (gemini-2.5-flash)"),
-            ("openai", "openai", "OpenAI API / OAuth (GPT-4o, o3-mini)"),
-            ("anthropic", "anthropic", "Anthropic Claude API (Claude 3.7 Sonnet)"),
-            ("deepseek", "deepseek", "DeepSeek API (DeepSeek-V3 / R1)"),
-            ("custom", "custom", "Custom OpenAI-Compatible / Local / Ollama"),
+            ("gemini", "gemini", "Google Gemini API Key"),
+            ("openai", "openai", "OpenAI API Key / OAuth"),
+            ("anthropic", "anthropic", "Anthropic API Key"),
+            ("deepseek", "deepseek", "DeepSeek API Key"),
+            ("custom", "custom", "Custom OpenAI-Compatible / Local Endpoint"),
         ]
 
         if provider_hint:
@@ -348,11 +348,28 @@ class MiaREPL:
             if api_key:
                 self.cred_store.set_api_key(selected_provider, api_key)
 
-            self.console.print(
-                f"[bold green]✓ Authenticated {selected_provider}. Saved to ~/.mia/credentials.json[/bold green]"
+            # Persist provider and default model into config
+            current_cfg = self.config_mgr.config
+            target_model = self.model_name or chosen_model
+            updated_cfg = MiaConfig(
+                default_provider=selected_provider,
+                default_model=target_model,
+                base_urls={**current_cfg.base_urls, selected_provider: base_url},
+                max_steps_per_turn=current_cfg.max_steps_per_turn,
+                temperature=current_cfg.temperature,
+                compaction_threshold_ratio=current_cfg.compaction_threshold_ratio,
+                context_window_tokens=current_cfg.context_window_tokens,
+                keep_recent_tokens=current_cfg.keep_recent_tokens,
             )
+            self.config_mgr.save_config(updated_cfg)
 
-            self._prompt_model_scope(selected_provider, base_url, chosen_model)
+            self.model_name = target_model
+            self.config_mgr = ConfigManager()
+            self._init_harness()
+
+            self.console.print(
+                f"[bold green]✓ Authenticated {selected_provider}. API key saved to ~/.mia/credentials.json[/bold green]\n"
+            )
 
         except (KeyboardInterrupt, EOFError):
             self.console.print("\n[yellow]Auth setup cancelled.[/yellow]\n")
