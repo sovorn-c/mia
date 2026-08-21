@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import sys
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -12,7 +13,7 @@ from prompt_toolkit.completion import CompleteEvent, Completer, Completion
 from prompt_toolkit.document import Document
 from prompt_toolkit.filters import is_done
 from prompt_toolkit.formatted_text import HTML, AnyFormattedText
-from prompt_toolkit.history import FileHistory
+from prompt_toolkit.history import FileHistory, History, InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
 from prompt_toolkit.layout.containers import (
     ConditionalContainer,
@@ -93,6 +94,37 @@ class SlashCompleter(Completer):
                 )
 
 
+class SafeFileHistory(History):
+    """Resilient FileHistory wrapper that gracefully falls back to in-memory on any permission/IO error."""
+
+    def __init__(self, filename: str | None = None) -> None:
+        super().__init__()
+        self._delegate: History
+        if filename:
+            try:
+                p = Path(filename)
+                p.parent.mkdir(parents=True, exist_ok=True)
+                if p.exists():
+                    p.read_text(encoding="utf-8", errors="ignore")
+                else:
+                    p.touch(exist_ok=True)
+                self._delegate = FileHistory(str(p))
+            except Exception:
+                self._delegate = InMemoryHistory()
+        else:
+            self._delegate = InMemoryHistory()
+
+    def load_history_strings(self) -> Iterable[str]:
+        try:
+            return self._delegate.load_history_strings()
+        except Exception:
+            return []
+
+    def store_string(self, string: str) -> None:
+        with contextlib.suppress(Exception):
+            self._delegate.store_string(string)
+
+
 def format_status_toolbar(
     workspace_name: str = "mia",
     model_name: str = "mimo-v2.5",
@@ -116,7 +148,7 @@ def format_status_toolbar(
         f"<style fg='#9CA3AF'>  📁 <b>{workspace_name}</b> │ "
         f"🧠 <b>{model_name}</b> │ "
         f"⚡ {tokens_str}/{window_str} ({pct_str}){thinking_badge} │ "
-        f"<b>Esc:</b> Cancel/Tree • <b>Ctrl+O:</b> Logs • <b>/help</b></style>"
+        f"<b>/help</b></style>"
     )
 
 
@@ -130,10 +162,11 @@ class LivePromptSession:
         self,
         history_file: Path | None = None,
         toolbar_callback: Callable[[], AnyFormattedText] | None = None,
+        input: Any = None,
+        output: Any = None,
     ) -> None:
         self.history_file = history_file or (Path.home() / ".mia" / "history")
-        self.history_file.parent.mkdir(parents=True, exist_ok=True)
-        self.history = FileHistory(str(self.history_file))
+        self.history = SafeFileHistory(str(self.history_file))
         self.toolbar_callback = toolbar_callback
         self.completer = SlashCompleter()
         self.bindings = self._create_keybindings()
@@ -145,6 +178,8 @@ class LivePromptSession:
             complete_while_typing=True,
             complete_style=CompleteStyle.COLUMN,
             reserve_space_for_menu=0,
+            input=input,
+            output=output,
         )
 
         if self.toolbar_callback and isinstance(self.session.layout.container, HSplit):
