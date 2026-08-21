@@ -1,6 +1,6 @@
 # specs/release-plan.yaml — Release index & WSJF epic sequencing
-version: "0.2.0"
-target_release: "v0.2.0-minimal-repl"
+version: "0.3.0"
+target_release: "v0.3.0-native-orchestration"
 
 epics:
   - id: "e01"
@@ -30,5 +30,19 @@ epics:
     bcps_total: 18
     stories_count: 4
     directory: "specs/epics/e02-stream-repl-polish"
+
+  - id: "e03"
+    slug: "native-orchestration"
+    title: "Native Orchestration Runtime"
+    wsjf:
+      business_value: 21
+      time_criticality: 13
+      risk_reduction: 13
+      job_size: 8
+      score: 5.9
+    status: "completed"
+    bcps_total: 5
+    stories_count: 1
+    directory: "specs/epics/e03-native-orchestration"
 
 

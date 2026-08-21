@@ -1,0 +1,15 @@
+# specs/epics/e03-native-orchestration/epic.yaml
+id: "e03"
+slug: "native-orchestration"
+title: "Native Orchestration Runtime"
+status: "completed"
+bcps_total: 5
+
+stories:
+  - id: e03s01
+    title: "Native Orchestration Mode Vertical Slice"
+    status: "passing"
+    bcps: 5
+    risk: "P0"
+    spec_file: "e03s01-native-orchestration-mode.md"
+    tasks_file: "e03s01-tasks.yaml"

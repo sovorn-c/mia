@@ -1,46 +1,80 @@
-# specs/execution-status.yaml — Flat execution status tracking
-version: "0.2.0"
-updated_at: "2026-08-21T20:39:00Z"
-
+# specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
+version: 0.3.0
+updated_at: '2026-08-21T17:23:58Z'
 epics:
   e01:
-    title: "Minimalist Pi/Tau-Style Stream REPL & Robust Auth"
-    status: "completed"
+    title: Minimalist Pi/Tau-Style Stream REPL & Robust Auth
+    status: completed
     stories:
       e01s01:
-        title: "Rock-Solid Terminal Input & Dual-Mode Picker (Arrow & Number)"
-        status: "completed"
+        title: Rock-Solid Terminal Input & Dual-Mode Picker (Arrow & Number)
+        status: completed
         bcps: 3
+        tasks_total: 2
+        tasks_passing: 0
+        tasks_failing: 0
       e01s02:
-        title: "Resilient Provider Key Probe & Connection Diagnostics"
-        status: "completed"
+        title: Resilient Provider Key Probe & Connection Diagnostics
+        status: completed
         bcps: 4
+        tasks_total: 2
+        tasks_passing: 0
+        tasks_failing: 0
       e01s03:
-        title: "Pi-Style Scoped Model Switcher & 12 Slash Commands Suite"
-        status: "completed"
+        title: Pi-Style Scoped Model Switcher & 12 Slash Commands Suite
+        status: completed
         bcps: 5
+        tasks_total: 2
+        tasks_passing: 0
+        tasks_failing: 0
       e01s04:
-        title: "Minimalist Stream Rendering & Live Tool Diffs"
-        status: "completed"
+        title: Minimalist Stream Rendering & Live Tool Diffs
+        status: completed
         bcps: 4
-
+        tasks_total: 2
+        tasks_passing: 0
+        tasks_failing: 0
   e02:
-    title: "Stream-First REPL Polish: prompt_toolkit, Minimalist Stream, & Inspection"
-    status: "completed"
+    title: 'Stream-First REPL Polish: prompt_toolkit, Minimalist Stream, & Inspection'
+    status: completed
     stories:
       e02s01:
-        title: "prompt_toolkit Integration, Floating Slash Autocomplete & Pinned Status Footer"
-        status: "completed"
+        title: prompt_toolkit Integration, Floating Slash Autocomplete & Pinned Status Footer
+        status: completed
         bcps: 5
+        tasks_total: 3
+        tasks_passing: 3
+        tasks_failing: 0
       e02s02:
-        title: "Minimalist Working Stream & carrot_bounce Animation"
-        status: "completed"
+        title: Minimalist Working Stream & carrot_bounce Animation
+        status: completed
         bcps: 5
+        tasks_total: 2
+        tasks_passing: 2
+        tasks_failing: 0
       e02s03:
-        title: "Post-Turn Inspection (Ctrl+O) & JSONL Session Tree Navigator (Esc / /tree)"
-        status: "completed"
+        title: Post-Turn Inspection (Ctrl+O) & JSONL Session Tree Navigator (Esc / /tree)
+        status: completed
         bcps: 4
+        tasks_total: 2
+        tasks_passing: 2
+        tasks_failing: 0
       e02s04:
-        title: "Pi/Tau Keybindings (Ctrl+C clear, Ctrl+D exit, /stop) & Context Auto-Discovery"
-        status: "completed"
+        title: Pi/Tau Keybindings (Ctrl+C clear, Ctrl+D exit, /stop) & Context Auto-Discovery
+        status: completed
         bcps: 4
+        tasks_total: 2
+        tasks_passing: 2
+        tasks_failing: 0
+  e03:
+    title: Native Orchestration Runtime
+    status: completed
+    stories:
+      e03s01:
+        title: Native Orchestration Mode Vertical Slice
+        status: passing
+        bcps: 5
+        risk: P0
+        tasks_total: 7
+        tasks_passing: 7
+        tasks_failing: 0
