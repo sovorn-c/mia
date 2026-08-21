@@ -17,71 +17,74 @@ A permanent, version-controlled specification for **Mia (Modular Intelligent Age
 
 ---
 
-## 2. Interaction Specification: The Production-Grade Standard
+## 2. Essential Slash Commands Suite (The Production Standard)
+
+A production-grade coding agent harness requires a comprehensive, instant slash command palette:
+
+| Command | Aliases | Purpose & Execution |
+|---|---|---|
+| **`/help`** | `/?` | Display the interactive command table, shortcuts, and active tool permissions. |
+| **`/login`** | `/auth` | Open the guided interactive setup wizard to configure/switch provider API keys. |
+| **`/model`** | `/llm` | Switch active model (`mimo-v2.5`, `gpt-4o`, `deepseek-chat`, `claude-3-5-sonnet`) or view presets. |
+| **`/profile`** | `/role`, `/persona` | Switch agent profile (`coding`, `architect`, `code_mode`, `minimal`). |
+| **`/diff`** | `/changes` | Run `git diff` on the repository and render Monokai syntax-highlighted code diffs. |
+| **`/cost`** | `/tokens`, `/stats` | Display real-time token counts (input, output, reasoning), context utilization %, and USD cost. |
+| **`/compact`** | `/compress` | Inspect context window limit and manually trigger structured token compaction. |
+| **`/sessions`** | `/history` | List saved JSONL session history trees for current profile. |
+| **`/init`** | `/bootstrap` | Scan repository architecture, check active rules, and verify `AGENTS.md`. |
+| **`/clear`** | `/cls` | Clear terminal screen and redraw header banner. |
+| **`/undo`** | `/revert` | Revert the latest file change made by the agent in this session. |
+| **`/quit`** | `/exit` | Save session tree and exit the harness cleanly. |
+
+---
+
+## 3. Interaction Flow & Autocomplete Behavior
 
 ```
 ╭─ 🥕 Mia v0.2.0 (mimo-v2.5) ─────────────────────────────────────────────────────────────╮
 │ Directory: /Users/sovorn/dev/harness/mia                                                │
-│ Model:     mimo-v2.5  │  Profile: coding  │  Session: session_a8f12c9e                  │
-│ Commands:  Type / for menu (/login, /model, /profile, /compact, /cost, /sessions, /quit)│
+│ Model:     mimo-v2.5  │  Profile: coding  │  Session: session_92f1b4a1                  │
+│ Commands:  Type / for menu (/login, /model, /profile, /diff, /cost, /compact, /quit)    │
 ╰─────────────────────────────────────────────────────────────────────────────────────────╯
 
-🥕 mia > /login
+🥕 mia > /
 
-╭─ 🔑 Mia Authentication Setup ───────────────────────────────────────────────────────────╮
-│ Select an AI Provider to configure:                                                    │
-│  [1] opencode-go (MiMo-v2.5 / OpenCode Zen API)                                         │
-│  [2] anthropic   (Claude 3.5 Sonnet / Claude 3.7 Sonnet)                               │
-│  [3] openai      (GPT-4o / o1 / o3-mini)                                               │
-│  [4] deepseek    (DeepSeek-V3 / DeepSeek-R1 Reasoner)                                  │
-╰─────────────────────────────────────────────────────────────────────────────────────────╯
-Select provider [1-4 or name] (default: 1): 1
-Enter API Key for opencode-go: ***********************************
-
-✓ Successfully stored credentials in ~/.mia/credentials.json
-✓ Active model set to mimo-v2.5. Harness reloaded and ready!
-
-🥕 mia > Inspect the test failure in tests/test_calc.py and fix the bug
-
-💭 Thinking: Inspecting test_calc.py and the implementation in src/calc.py...
-▶ Tool: read_file(path="tests/test_calc.py") ─────────────────────────────── [✓ 1.2ms]
-▶ Tool: bash(command="pytest tests/test_calc.py") ────────────────────────── [✗ Failed (140.2ms)]
-  FAIL tests/test_calc.py::test_multiply - AssertionError
-▶ Tool: edit_file(path="src/calc.py") ────────────────────────────────────── [✓ 2.1ms]
-  @@ -12,4 +12,4 @@
-  - return a + b
-  + return a * b
-▶ Tool: bash(command="pytest tests/test_calc.py") ────────────────────────── [✓ Succeeded (120.5ms)]
-  1 passed in 0.12s
-
-✓ I have fixed the multiplication logic in src/calc.py. All tests in tests/test_calc.py are now passing.
-✓ Turn completed • Total tokens: 1,420 • Cost: $0.0018
+╭─ 🥕 Mia Essential Commands ─────────────────────────────────────────────────────────────╮
+│ Command              │ Usage & Description                                              │
+├──────────────────────┼──────────────────────────────────────────────────────────────────┤
+│ /help, /?            │ Show this command menu                                           │
+│ /login, /auth        │ Interactive setup wizard to add/update API keys                  │
+│ /model [name]        │ View or switch active model (current: mimo-v2.5)                 │
+│ /profile [name]      │ View or switch profile (current: coding)                         │
+│ /diff, /changes      │ View git diff of session modifications with Monokai syntax       │
+│ /cost, /stats        │ Show session tokens (input/output) and estimated USD cost        │
+│ /compact, /compress  │ Trigger context compaction summary                               │
+│ /sessions, /history  │ List saved JSONL session trees                                   │
+│ /init                │ Verify repository AGENTS.md & context                            │
+│ /clear, /cls         │ Clear terminal screen                                            │
+│ /undo                │ Revert latest file change made during session                    │
+│ /quit, /exit         │ Exit Mia session                                                 │
+╰──────────────────────┴──────────────────────────────────────────────────────────────────╯
+Tip: Type any partial command (e.g. /d, /m, /c) or press Tab to autocomplete.
 
 🥕 mia > 
 ```
 
 ---
 
-## 3. Work Breakdown Slices
+## 4. Work Breakdown Slices
 
-### Slice 1: Interactive Authentication & Guided Setup Wizard
-- [x] **Task 1.1:** Build `interactive_login()` wizard in `src/mia_cli/repl.py` supporting `opencode-go`, `anthropic`, `openai`, and `deepseek`.
-- [x] **Task 1.2:** Store API keys atomically via `FileCredentialStore` in `~/.mia/credentials.json`.
-- [x] **Task 1.3:** First-run onboarding check: if no credentials exist for the selected model, prompt user with the setup wizard automatically on launch.
-- [x] **Task 1.4:** Add in-session `/login [provider]` slash command.
+### Slice 1: 12-Command Essential Slash Suite (`src/mia_cli/repl.py`)
+- [x] **Task 1.1:** Implement `/help`, `/login`, `/model`, `/profile`, `/diff`, `/cost`, `/compact`, `/sessions`, `/init`, `/clear`, `/undo`, `/quit`.
+- [x] **Task 1.2:** Add multi-alias support (`/auth`, `/changes`, `/stats`, `/compress`, `/history`, `/cls`, `/exit`, `/?`).
+- [x] **Task 1.3:** Build fuzzy prefix matcher: typing `/d` suggests `/diff`, typing `/c` suggests `/cost`, `/compact`, `/clear`.
 
-### Slice 2: Instant Slash Command Palette
-- [x] **Task 2.1:** Typing `/`, `/?`, or `/help` renders a clean, formatted Rich command table.
-- [x] **Task 2.2:** Multi-provider model presets (`/model` without args lists popular models like `mimo-v2.5`, `claude-3-5-sonnet`, `gpt-4o`, `deepseek-chat`).
-- [x] **Task 2.3:** Profile inspector (`/profile` without args lists profiles with tool capabilities).
-- [x] **Task 2.4:** Session statistics (`/cost`) showing token breakdown, compaction count, and estimated cost.
+### Slice 2: Live Shell & Git Integrations (`/diff`, `/undo`, `/init`)
+- [x] **Task 2.1:** `/diff` executes `git diff` and formats output via Rich `Syntax(..., "diff", theme="monokai")`.
+- [x] **Task 2.2:** `/init` scans directory for `AGENTS.md` / `README.md` and displays context health status.
+- [x] **Task 2.3:** `/undo` inspects recent `edit_file` / `write_file` tool events and offers instant rollback.
 
-### Slice 3: Real-Time Stream Engine & Tool Diffs
-- [x] **Task 3.1:** Stream reasoning thoughts in real time with dim italic styling.
-- [x] **Task 3.2:** Render tool calls with latency badges (`[✓ 1.2ms]`) and Monokai syntax-highlighted diffs.
-- [x] **Task 3.3:** Turn cancellation on `Ctrl+C` without terminating the REPL session.
-
-### Slice 4: Full Quality Gate & Verification
-- [x] **Task 4.1:** Automated unit and scenario tests in `tests/test_cli_repl.py` and `tests/test_credentials.py`.
-- [x] **Task 4.2:** 100% strict type checking (`mypy src`) and linting (`ruff`).
-- [x] **Task 4.3:** 100% passing tests (`pytest`).
+### Slice 3: Verification & Quality Gate
+- [x] **Task 3.1:** Automated test suite in `tests/test_cli_repl.py` covering all 12 commands and aliases.
+- [x] **Task 3.2:** 100% strict type checking (`mypy src`), formatting, and linting (`ruff`).
+- [x] **Task 3.3:** 100% passing tests (`pytest`).

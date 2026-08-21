@@ -19,9 +19,12 @@ def test_repl_completer_and_slash_menu(tmp_path: Path) -> None:
             "/login",
             "/model",
             "/profile",
-            "/compact",
+            "/diff",
             "/cost",
+            "/compact",
             "/sessions",
+            "/init",
+            "/undo",
             "/clear",
             "/quit",
         ]
@@ -31,8 +34,9 @@ def test_repl_completer_and_slash_menu(tmp_path: Path) -> None:
     assert completer.complete("/l", 0) == "/login"
     assert completer.complete("/m", 0) == "/model"
     assert completer.complete("/p", 0) == "/profile"
-    assert completer.complete("/c", 0) == "/compact"
-    assert completer.complete("/c", 1) == "/cost"
+    assert completer.complete("/d", 0) == "/diff"
+    assert completer.complete("/c", 0) == "/cost"
+    assert completer.complete("/c", 1) == "/compact"
     assert completer.complete("/c", 2) == "/clear"
 
     mock = MockProvider()
@@ -45,6 +49,10 @@ def test_repl_completer_and_slash_menu(tmp_path: Path) -> None:
     assert repl.handle_slash_command("/model") is True
     assert repl.handle_slash_command("/profile") is True
     assert repl.handle_slash_command("/cost") is True
+    assert repl.handle_slash_command("/stats") is True
+    assert repl.handle_slash_command("/diff") is True
+    assert repl.handle_slash_command("/init") is True
+    assert repl.handle_slash_command("/undo") is True
     assert repl.handle_slash_command("/clear") is True
     assert repl.handle_slash_command("/model mock-model") is True
     assert repl.model_name == "mock-model"

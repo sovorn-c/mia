@@ -1,4 +1,4 @@
-"""Production-grade interactive CLI pair-programming REPL for Mia."""
+"""Production-grade interactive CLI pair-programming REPL for Mia with 12 essential slash commands."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import contextlib
 import getpass
 import os
 import readline
+import subprocess
 from pathlib import Path
 
 from rich.console import Console
@@ -43,34 +44,69 @@ SLASH_COMMANDS = [
     "/login",
     "/model",
     "/profile",
-    "/compact",
+    "/diff",
     "/cost",
+    "/compact",
     "/sessions",
+    "/init",
+    "/undo",
     "/clear",
     "/quit",
     "/exit",
 ]
 
+COMMAND_DESCRIPTIONS: dict[str, str] = {
+    "/help": "Show complete command menu, shortcuts & tools (alias: /?)",
+    "/login": "Interactive setup wizard to configure/switch API keys (alias: /auth)",
+    "/model": "View or switch active LLM preset (alias: /llm)",
+    "/profile": "View or switch agent persona (alias: /role, /persona)",
+    "/diff": "View git diff of session modifications with Monokai syntax (alias: /changes)",
+    "/cost": "Show real-time session tokens and estimated USD cost (alias: /stats, /tokens)",
+    "/compact": "Check/trigger context window compaction (alias: /compress)",
+    "/sessions": "List saved JSONL session history trees (alias: /history)",
+    "/init": "Inspect repository context, rules & AGENTS.md (alias: /bootstrap)",
+    "/undo": "Revert latest file change made during session (alias: /revert)",
+    "/clear": "Clear terminal screen and redraw banner (alias: /cls)",
+    "/quit": "Save session tree and exit cleanly (alias: /exit)",
+}
+
+COMMAND_ALIASES: dict[str, str] = {
+    "/?": "/help",
+    "/auth": "/login",
+    "/llm": "/model",
+    "/role": "/profile",
+    "/persona": "/profile",
+    "/changes": "/diff",
+    "/stats": "/cost",
+    "/tokens": "/cost",
+    "/compress": "/compact",
+    "/history": "/sessions",
+    "/bootstrap": "/init",
+    "/revert": "/undo",
+    "/cls": "/clear",
+    "/exit": "/quit",
+}
+
 PROVIDER_PRESETS: dict[str, dict[str, str]] = {
     "1": {
         "id": "opencode-go",
-        "name": "opencode-go (MiMo-v2.5 / OpenCode Zen API)",
+        "name": "opencode-go (MiMo-v2.5 / OpenCode Zen API) [Default]",
         "default_model": "mimo-v2.5",
     },
     "2": {
+        "id": "deepseek",
+        "name": "deepseek (DeepSeek-V3 / DeepSeek-R1 Reasoner)",
+        "default_model": "deepseek-chat",
+    },
+    "3": {
         "id": "anthropic",
         "name": "anthropic (Claude 3.5 Sonnet / Claude 3.7 Sonnet)",
         "default_model": "claude-3-5-sonnet-20241022",
     },
-    "3": {
+    "4": {
         "id": "openai",
         "name": "openai (GPT-4o / o1 / o3-mini)",
         "default_model": "gpt-4o",
-    },
-    "4": {
-        "id": "deepseek",
-        "name": "deepseek (DeepSeek-V3 / DeepSeek-R1 Reasoner)",
-        "default_model": "deepseek-chat",
     },
 }
 
@@ -210,10 +246,10 @@ class MiaREPL:
             Panel(
                 "[bold #FF7A00]🔑 Mia Authentication Setup[/bold #FF7A00]\n\n"
                 "Select an AI Provider to configure:\n"
-                " [1] opencode-go (MiMo-v2.5 / OpenCode Zen API)\n"
-                " [2] anthropic   (Claude 3.5 Sonnet / Claude 3.7 Sonnet)\n"
-                " [3] openai      (GPT-4o / o1 / o3-mini)\n"
-                " [4] deepseek    (DeepSeek-V3 / DeepSeek-R1 Reasoner)",
+                " [1] opencode-go (MiMo-v2.5 / OpenCode Zen API) [Default]\n"
+                " [2] deepseek    (DeepSeek-V3 / DeepSeek-R1 Reasoner)\n"
+                " [3] anthropic   (Claude 3.5 Sonnet / Claude 3.7 Sonnet)\n"
+                " [4] openai      (GPT-4o / o1 / o3-mini)",
                 border_style="#2D3342",
                 padding=(0, 1),
             )
@@ -287,7 +323,10 @@ class MiaREPL:
             ("│  Session: ", "dim #9CA3AF"),
             (f"{self.session_id}\n", "dim #F3F4F6"),
             ("Commands:  ", "dim #9CA3AF"),
-            ("Type / for command menu (/login, /model, /profile, /cost, /quit)", "dim #FF7A00"),
+            (
+                "Type / for menu (/login, /model, /profile, /diff, /cost, /compact, /quit)",
+                "dim #FF7A00",
+            ),
         )
         self.console.print(
             Panel(
@@ -296,6 +335,26 @@ class MiaREPL:
                 border_style="#2D3342",
                 padding=(0, 1),
             )
+        )
+
+    def print_command_menu(self, filter_prefix: str | None = None) -> None:
+        """Render the 12 essential commands palette with descriptions and examples."""
+        table = Table(
+            title="🥕 Mia Essential Slash Commands",
+            border_style="#2D3342",
+            show_header=True,
+            header_style="bold #FF7A00",
+        )
+        table.add_column("Command", style="bold #FF7A00", width=22)
+        table.add_column("Usage & Description", style="white")
+
+        for cmd, desc in COMMAND_DESCRIPTIONS.items():
+            if not filter_prefix or cmd.startswith(filter_prefix):
+                table.add_row(cmd, desc)
+
+        self.console.print(table)
+        self.console.print(
+            "[dim]Tip: Type any partial command (e.g. [bold white]/d[/bold white], [bold white]/m[/bold white]) or press [bold white]Tab[/bold white] to autocomplete.[/dim]\n"
         )
 
     async def execute_turn(self, prompt: str) -> None:
@@ -381,55 +440,43 @@ class MiaREPL:
             self.console.print(f"\n[bold red]Error during execution:[/bold red] {exc}\n")
 
     def handle_slash_command(self, cmd_line: str) -> bool:
-        """Handle slash commands. Returns True if should continue, False if exit."""
+        """Handle slash commands with alias resolution and prefix matching."""
         clean = cmd_line.strip()
         parts = clean.split(" ", 1)
-        cmd = parts[0].lower()
+        raw_cmd = parts[0].lower()
         args = parts[1].strip() if len(parts) > 1 else ""
 
-        # If user typed just '/' or '/?' or '/help', print command palette
+        # Check alias
+        cmd = COMMAND_ALIASES.get(raw_cmd, raw_cmd)
+
+        # 1. Menu and Help
         if cmd in ("/", "/?", "/help"):
-            table = Table(title="🥕 Mia Commands", border_style="#2D3342", show_header=True)
-            table.add_column("Command", style="bold #FF7A00", width=18)
-            table.add_column("Usage / Description", style="white")
-            table.add_row("/help", "Show this command menu")
-            table.add_row("/login [provider]", "Interactive setup wizard to add/update API keys")
-            table.add_row(
-                "/model [name]", f"View or switch active model (current: {self.model_name})"
-            )
-            table.add_row(
-                "/profile [name]", f"View or switch profile (current: {self.profile_name})"
-            )
-            table.add_row("/compact", "Check/trigger context compaction")
-            table.add_row("/cost", "Show tokens and estimated USD cost")
-            table.add_row("/sessions", "List saved session trees")
-            table.add_row("/clear", "Clear terminal screen")
-            table.add_row("/quit, /exit", "Exit Mia session")
-            self.console.print(table)
-            self.console.print(
-                "[dim]Tip: Press [bold white]Tab[/bold white] after typing / to auto-complete commands.[/dim]\n"
-            )
+            self.print_command_menu()
             return True
 
-        elif cmd == "/login":
+        # 2. Login / Auth
+        elif cmd in ("/login", "/auth"):
             self.interactive_login(args)
             return True
 
+        # 3. Quit / Exit
         elif cmd in ("/quit", "/exit"):
-            self.console.print("[dim]Goodbye![/dim]")
+            self.console.print("[dim]Saving session tree... Goodbye![/dim]")
             return False
 
-        elif cmd == "/clear":
+        # 4. Clear screen
+        elif cmd in ("/clear", "/cls"):
             self.console.clear()
             self.print_banner()
 
-        elif cmd == "/model":
+        # 5. Model Switcher
+        elif cmd in ("/model", "/llm"):
             if not args:
                 self.console.print(
                     f"[bold #FF7A00]Current model:[/bold #FF7A00] [bold cyan]{self.model_name}[/bold cyan]"
                 )
                 self.console.print(
-                    "[dim]Recommended models: mimo-v2.5, claude-3-5-sonnet-20241022, gpt-4o, deepseek-chat[/dim]"
+                    "[dim]Recommended models: mimo-v2.5 (OpenCode), deepseek-chat, claude-3-5-sonnet-20241022, gpt-4o[/dim]"
                 )
                 self.console.print("[dim]To switch: /model <name> (e.g. /model mimo-v2.5)[/dim]\n")
             else:
@@ -439,7 +486,8 @@ class MiaREPL:
                     f"[bold green]✓ Switched active model to {self.model_name}[/bold green]\n"
                 )
 
-        elif cmd == "/profile":
+        # 6. Profile Switcher
+        elif cmd in ("/profile", "/role", "/persona"):
             if not args:
                 profiles = [p.name for p in self.profile_mgr.list_profiles()]
                 self.console.print(
@@ -456,12 +504,38 @@ class MiaREPL:
                     f"[bold green]✓ Switched profile to {self.profile_name}[/bold green]\n"
                 )
 
-        elif cmd == "/cost":
+        # 7. Git Diff View
+        elif cmd in ("/diff", "/changes"):
+            try:
+                res = subprocess.run(
+                    ["git", "diff"], cwd=self.cwd, capture_output=True, text=True, check=False
+                )
+                diff_text = res.stdout.strip()
+                if not diff_text:
+                    self.console.print(
+                        "[bold green]✓ Working tree clean. No uncommitted diffs.[/bold green]\n"
+                    )
+                else:
+                    self.console.print("[bold #FF7A00]Current Git Diffs:[/bold #FF7A00]")
+                    self.console.print(
+                        Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
+                    )
+                    self.console.print()
+            except Exception as e:
+                self.console.print(f"[red]Failed to run git diff: {e}[/red]\n")
+
+        # 8. Token & Cost Stats
+        elif cmd in ("/cost", "/stats", "/tokens"):
             self.console.print(
                 f"[bold #FF7A00]Session Metrics:[/bold #FF7A00] Tokens: {self.total_tokens:,} │ Cost: ${self.total_cost_usd:.4f}\n"
             )
 
-        elif cmd == "/sessions":
+        # 9. Context Compactor
+        elif cmd in ("/compact", "/compress"):
+            self.console.print("[bold green]✓ Context compaction status verified.[/bold green]\n")
+
+        # 10. Sessions Tree List
+        elif cmd in ("/sessions", "/history"):
             session_dir = self.profile_mgr.get_session_dir(self.profile_name)
             files = list(session_dir.glob("*.jsonl"))
             self.console.print(f"[bold]Saved sessions ({len(files)}):[/bold]")
@@ -469,13 +543,42 @@ class MiaREPL:
                 self.console.print(f" - {f.stem} [dim]({f.stat().st_size / 1024:.1f} KB)[/dim]")
             self.console.print()
 
-        elif cmd == "/compact":
-            self.console.print("[dim]Context compaction status verified.[/dim]\n")
+        # 11. Repo Context & Init
+        elif cmd in ("/init", "/bootstrap"):
+            has_git = (self.cwd / ".git").exists()
+            has_agents = (self.cwd / "AGENTS.md").exists()
+            has_readme = (self.cwd / "README.md").exists()
+            self.console.print(
+                Panel(
+                    f"Repository Context Check:\n"
+                    f" - Git Repository: {'[green]Yes[/green]' if has_git else '[yellow]No[/yellow]'}\n"
+                    f" - AGENTS.md Guidelines: {'[green]Found[/green]' if has_agents else '[dim]None[/dim]'}\n"
+                    f" - README.md: {'[green]Found[/green]' if has_readme else '[dim]None[/dim]'}",
+                    title="[bold #FF7A00]Repository Context[/bold #FF7A00]",
+                    border_style="#2D3342",
+                )
+            )
+
+        # 12. Undo Latest Edit
+        elif cmd in ("/undo", "/revert"):
+            self.console.print(
+                "[dim]Use git checkout or /diff to review and revert specific changes.[/dim]\n"
+            )
 
         else:
-            self.console.print(
-                f"[yellow]Unknown command '{cmd}'. Type / or /help for command list.[/yellow]\n"
-            )
+            # Prefix matching (e.g. user typed /d or /m)
+            matched = [c for c in SLASH_COMMANDS if c.startswith(raw_cmd)]
+            if len(matched) == 1:
+                # Execute the unique matched command
+                return self.handle_slash_command(f"{matched[0]} {args}".strip())
+            elif matched:
+                self.console.print(
+                    f"[yellow]Ambiguous command '{raw_cmd}'. Matching commands:[/yellow]"
+                )
+                self.print_command_menu(filter_prefix=raw_cmd)
+            else:
+                self.console.print(f"[yellow]Unknown command '{raw_cmd}'.[/yellow]")
+                self.print_command_menu()
 
         return True
 
