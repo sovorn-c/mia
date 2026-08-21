@@ -12,7 +12,7 @@ from rich.table import Table
 
 from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
-from mia_agent.orchestration import ModeRuntime
+from mia_agent.orchestration import ModeRuntime, OrchestrationErrorEvent
 from mia_agent.profiles.manager import ProfileManager
 from mia_cli.renderers.rich_stream import RichStreamRenderer
 from mia_middleware.pipeline import ToolPipeline
@@ -79,6 +79,12 @@ async def _run_agent_loop(
         compaction_threshold=compaction_threshold,
         context_window=context_window,
     ):
+        if isinstance(envelope.event, OrchestrationErrorEvent):
+            console.print(
+                f"[bold red]Orchestration error ({envelope.event.stage}): "
+                f"{envelope.event.error}[/bold red]"
+            )
+            continue
         renderer.on_event(envelope.event)
 
 

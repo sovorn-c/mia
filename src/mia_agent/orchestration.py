@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -11,7 +12,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from mia_agent.auth.config import ConfigManager
-from mia_agent.events import AgentEvent
+from mia_agent.events import AgentEvent, AssistantChunkEvent
 from mia_agent.harness import AgentHarness
 from mia_agent.profiles.manager import ProfileManager
 from mia_agent.profiles.model import AgentProfile
@@ -106,6 +107,15 @@ class Mode(BaseModel):
             )
 
 
+class OrchestrationErrorEvent(BaseModel):
+    """Terminal typed failure for a mode stage."""
+
+    type: Literal["orchestration_error"] = "orchestration_error"
+    stage: str
+    error: str
+    cancelled: bool = False
+
+
 class OrchestrationEventEnvelope(BaseModel):
     """Attribution envelope retaining one unchanged inner AgentEvent."""
 
@@ -114,7 +124,7 @@ class OrchestrationEventEnvelope(BaseModel):
     task_id: str
     agent_id: str
     profile: str
-    event: AgentEvent
+    event: AgentEvent | OrchestrationErrorEvent
 
     @field_validator("mode", "run_id", "task_id", "agent_id", "profile")
     @classmethod
@@ -233,6 +243,24 @@ class ModeRuntime:
         runtime: AgentRuntime | None = None,
     ) -> AsyncIterator[OrchestrationEventEnvelope]:
         mode = self.catalog.resolve(mode_name, profile_name)
+        if mode.name == "research":
+            if runtime is not None:
+                raise ValueError("research mode cannot reuse a single-agent runtime")
+            async for envelope in self._prompt_research(
+                mode=mode,
+                prompt_text=prompt_text,
+                profile_name=profile_name,
+                provider=provider,
+                model_override=model_override,
+                session_id=session_id,
+                run_id=run_id,
+                cwd=cwd,
+                compaction_threshold=compaction_threshold,
+                context_window=context_window,
+            ):
+                yield envelope
+            return
+
         if runtime is None:
             resolved_run_id = run_id or f"run_{uuid.uuid4().hex}"
             identity = RuntimeIdentity(
@@ -256,15 +284,127 @@ class ModeRuntime:
             if identity.mode != mode.name or identity.profile != mode.coordinator_profile:
                 raise ValueError("existing runtime does not match the selected mode and profile")
 
-        async for event in runtime.harness.prompt(prompt_text):
-            yield OrchestrationEventEnvelope(
-                mode=identity.mode,
-                run_id=identity.run_id,
-                task_id=identity.task_id,
-                agent_id=identity.agent_id,
-                profile=identity.profile,
-                event=event,
+        try:
+            async for event in runtime.harness.prompt(prompt_text):
+                yield self._envelope(identity, event)
+        except asyncio.CancelledError:
+            yield self._error_envelope(identity, "root", "prompt cancelled", cancelled=True)
+        except Exception as exc:
+            yield self._error_envelope(identity, "root", str(exc))
+
+    async def _prompt_research(
+        self,
+        *,
+        mode: Mode,
+        prompt_text: str,
+        profile_name: str,
+        provider: LLMProvider | None,
+        model_override: str | None,
+        session_id: str | None,
+        run_id: str | None,
+        cwd: Path | None,
+        compaction_threshold: float | None,
+        context_window: int | None,
+    ) -> AsyncIterator[OrchestrationEventEnvelope]:
+        resolved_run_id = run_id or f"run_{uuid.uuid4().hex}"
+        root_session_id = session_id or f"{resolved_run_id}_root"
+        specialist_identity = RuntimeIdentity(
+            mode=mode.name,
+            run_id=resolved_run_id,
+            task_id="specialist",
+            agent_id="specialist",
+            profile="architect",
+            session_id=f"{resolved_run_id}_specialist",
+            parent_session_id=root_session_id,
+        )
+        specialist = self.factory.build(
+            identity=specialist_identity,
+            provider=provider,
+            model_override=model_override,
+            cwd=cwd,
+            compaction_threshold=compaction_threshold,
+            context_window=context_window,
+        )
+        specialist_output: list[str] = []
+        try:
+            async for event in specialist.harness.prompt(prompt_text):
+                if isinstance(event, AssistantChunkEvent) and event.delta_text:
+                    specialist_output.append(event.delta_text)
+                yield self._envelope(specialist_identity, event)
+        except asyncio.CancelledError:
+            yield self._error_envelope(
+                specialist_identity,
+                "specialist",
+                "prompt cancelled",
+                cancelled=True,
             )
+            return
+        except Exception as exc:
+            yield self._error_envelope(specialist_identity, "specialist", str(exc))
+            return
+
+        coordinator_identity = RuntimeIdentity(
+            mode=mode.name,
+            run_id=resolved_run_id,
+            task_id="root",
+            agent_id="coordinator",
+            profile=profile_name,
+            session_id=root_session_id,
+        )
+        coordinator = self.factory.build(
+            identity=coordinator_identity,
+            provider=provider,
+            model_override=model_override,
+            cwd=cwd,
+            compaction_threshold=compaction_threshold,
+            context_window=context_window,
+        )
+        handoff = (
+            f"{prompt_text}\n\n"
+            "[Architect specialist result — reference only]\n"
+            f"{''.join(specialist_output)}\n"
+            "[End architect specialist result]"
+        )
+        try:
+            async for event in coordinator.harness.prompt(handoff):
+                yield self._envelope(coordinator_identity, event)
+        except asyncio.CancelledError:
+            yield self._error_envelope(
+                coordinator_identity,
+                "coordinator",
+                "prompt cancelled",
+                cancelled=True,
+            )
+        except Exception as exc:
+            yield self._error_envelope(coordinator_identity, "coordinator", str(exc))
+
+    @staticmethod
+    def _envelope(identity: RuntimeIdentity, event: AgentEvent) -> OrchestrationEventEnvelope:
+        return OrchestrationEventEnvelope(
+            mode=identity.mode,
+            run_id=identity.run_id,
+            task_id=identity.task_id,
+            agent_id=identity.agent_id,
+            profile=identity.profile,
+            event=event,
+        )
+
+    @staticmethod
+    def _error_envelope(
+        identity: RuntimeIdentity,
+        stage: str,
+        error: str,
+        *,
+        cancelled: bool = False,
+    ) -> OrchestrationEventEnvelope:
+        return OrchestrationEventEnvelope(
+            mode=identity.mode,
+            run_id=identity.run_id,
+            task_id=identity.task_id,
+            agent_id=identity.agent_id,
+            profile=identity.profile,
+            event=OrchestrationErrorEvent(stage=stage, error=error, cancelled=cancelled),
+        )
 
 
 class AgentRuntimeFactory:

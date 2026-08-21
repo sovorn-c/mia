@@ -30,6 +30,7 @@ from mia_agent.orchestration import (
     AgentRuntime,
     AgentRuntimeFactory,
     ModeRuntime,
+    OrchestrationErrorEvent,
     RuntimeIdentity,
 )
 from mia_agent.profiles.manager import ProfileManager
@@ -859,6 +860,11 @@ class MiaREPL:
                 runtime=self.agent_runtime,
             ):
                 event = envelope.event
+                if isinstance(event, OrchestrationErrorEvent):
+                    self.console.print(
+                        f"[bold red]Orchestration error ({event.stage}): {event.error}[/bold red]"
+                    )
+                    continue
                 self.stream_renderer.on_event(event)
                 if isinstance(event, StepEndEvent):
                     self.total_tokens += event.input_tokens + event.output_tokens
