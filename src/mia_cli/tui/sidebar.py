@@ -1,4 +1,4 @@
-"""Herdr-style Sidebar widget displaying agent roster and real-time state."""
+"""Sidebar widget displaying agent roster and real-time operational status."""
 
 from __future__ import annotations
 
@@ -40,7 +40,6 @@ class AgentListItem(Vertical):
         self.query_one(".agent-item-details", Static).update(self._build_details())
 
     def _build_header(self) -> Text:
-        # Status icon
         if self.agent.state == AgentState.WORKING:
             status_icon = Text("🟢 ", style="#10B981")
         elif self.agent.state == AgentState.BLOCKED:
@@ -63,11 +62,14 @@ class AgentListItem(Vertical):
         step_str = f"Step: {self.agent.current_step}/{self.agent.max_steps}"
         tokens_str = f"Tokens: {self.agent.total_tokens:,}"
         cost_str = f" | ${self.agent.total_cost_usd:.3f}" if self.agent.total_cost_usd > 0 else ""
-        return Text(f"{self.agent.name}\n{step_str} | {tokens_str}{cost_str}", style="dim #9CA3AF")
+        return Text(
+            f"{self.agent.name}\n{step_str} | {tokens_str}{cost_str}",
+            style="dim #9CA3AF",
+        )
 
 
-class HerdSidebar(Vertical):
-    """Sidebar containing the list of active agents in the herd."""
+class AgentSidebar(Vertical):
+    """Sidebar containing the list of active agents."""
 
     class AgentSelected(Message):
         """Emitted when user selects an agent from the sidebar."""
@@ -83,7 +85,7 @@ class HerdSidebar(Vertical):
         self.scroll_container = VerticalScroll(id="sidebar-agents-scroll")
 
     def compose(self) -> ComposeResult:
-        yield Static("🥕 HERD ROSTER", classes="sidebar-title")
+        yield Static("🥕 AGENTS", classes="sidebar-title")
         with self.scroll_container:
             for agent in self._agents.values():
                 yield AgentListItem(
@@ -103,7 +105,6 @@ class HerdSidebar(Vertical):
                 item = self.query_one(f"#agent-item-{agent.id}", AgentListItem)
                 item.update_agent(agent, is_active=(agent.id == self.active_id))
             except Exception:
-                # Mount new agent
                 new_item = AgentListItem(
                     agent=agent,
                     is_active=(agent.id == self.active_id),

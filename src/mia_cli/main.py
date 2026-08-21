@@ -257,12 +257,12 @@ def list_sessions_command(
 def tui_command(
     model: Annotated[str | None, typer.Option("--model", "-m", help="Default model")] = None,
 ) -> None:
-    """Launch the modern full-screen Mia Herd Textual TUI."""
-    from mia_cli.tui.app import MiaHerdApp
+    """Launch the modern full-screen Mia Textual TUI."""
+    from mia_cli.tui.app import MiaApp
 
     config_mgr = ConfigManager()
     target_model = model or config_mgr.config.default_model
-    tui_app = MiaHerdApp(model_name=target_model)
+    tui_app = MiaApp(model_name=target_model)
     tui_app.run()
 
 
@@ -271,11 +271,11 @@ def main_callback(
     ctx: typer.Context,
     model: Annotated[str | None, typer.Option("--model", "-m", help="Default model")] = None,
 ) -> None:
-    """Default callback: launch Mia Herd TUI if no subcommand was provided."""
+    """Default callback: launch Mia TUI if no subcommand was provided."""
     if ctx.invoked_subcommand is None:
-        from mia_cli.tui.app import MiaHerdApp
+        from mia_cli.tui.app import MiaApp
 
         config_mgr = ConfigManager()
         target_model = model or config_mgr.config.default_model
-        tui_app = MiaHerdApp(model_name=target_model)
+        tui_app = MiaApp(model_name=target_model)
         tui_app.run()

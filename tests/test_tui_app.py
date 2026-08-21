@@ -1,4 +1,4 @@
-"""Automated pilot tests for Mia Herd Textual TUI."""
+"""Automated pilot tests for Mia Textual TUI."""
 
 from __future__ import annotations
 
@@ -9,7 +9,8 @@ import pytest
 from mia_agent.events import AssistantChunkEvent, ToolCallEvent, ToolResultEvent
 from mia_agent.herd.manager import HerdManager
 from mia_ai.providers.mock import MockProvider
-from mia_cli.tui.app import MiaHerdApp
+from mia_cli.tui.app import MiaApp
+from mia_cli.tui.input import PromptInputBar
 from mia_cli.tui.sidebar import AgentListItem
 from mia_cli.tui.widgets.thinking_drawer import ThoughtDrawer
 from mia_cli.tui.widgets.tool_card import ToolCallCard
@@ -17,9 +18,9 @@ from mia_cli.tui.widgets.tool_card import ToolCallCard
 
 @pytest.mark.asyncio
 async def test_tui_app_mount_and_default_herd(tmp_path: Path) -> None:
-    """Verify MiaHerdApp mounts, registers default agents (@lead, @coder), and renders sidebar."""
+    """Verify MiaApp mounts, registers default agents (@lead, @coder), and renders sidebar."""
     manager = HerdManager(cwd=tmp_path)
-    app = MiaHerdApp(herd_manager=manager, model_name="mock-model")
+    app = MiaApp(herd_manager=manager, model_name="mock-model")
 
     async with app.run_test():
         # Check initial agents spawned
@@ -34,14 +35,14 @@ async def test_tui_app_mount_and_default_herd(tmp_path: Path) -> None:
 
         # Check header content
         assert app.header_widget.model_name == "mock-model"
-        assert "MIA HERD" in app.header_widget._build_content().plain
+        assert "MIA" in app.header_widget._build_content().plain
 
 
 @pytest.mark.asyncio
 async def test_tui_switch_agent_actions(tmp_path: Path) -> None:
     """Verify switching active agent updates active selection and input target."""
     manager = HerdManager(cwd=tmp_path)
-    app = MiaHerdApp(herd_manager=manager, model_name="mock-model")
+    app = MiaApp(herd_manager=manager, model_name="mock-model")
 
     async with app.run_test() as pilot:
         assert app.active_agent_id == "lead"
@@ -70,7 +71,7 @@ async def test_tui_widget_live_rendering(tmp_path: Path) -> None:
         custom_provider=mock,
     )
 
-    app = MiaHerdApp(herd_manager=manager, model_name="mock-model")
+    app = MiaApp(herd_manager=manager, model_name="mock-model")
 
     async with app.run_test() as pilot:
         # Dispatch thoughts and tool calls to @lead
@@ -102,3 +103,20 @@ async def test_tui_widget_live_rendering(tmp_path: Path) -> None:
         tool_cards = app.query(ToolCallCard)
         assert len(tool_cards) >= 1
         assert tool_cards[0].is_done is True
+
+
+@pytest.mark.asyncio
+async def test_tui_slash_command_handling(tmp_path: Path) -> None:
+    """Verify typing /model or /help triggers command handler."""
+    manager = HerdManager(cwd=tmp_path)
+    app = MiaApp(herd_manager=manager, model_name="mock-model")
+
+    async with app.run_test() as pilot:
+        # Trigger /model mimo-v2.5 command via input
+        app.input_bar.post_message(
+            PromptInputBar.SlashCommandTriggered(command="model", args="mimo-v2.5")
+        )
+        await pilot.pause()
+
+        assert app.model_name == "mimo-v2.5"
+        assert app.header_widget.model_name == "mimo-v2.5"

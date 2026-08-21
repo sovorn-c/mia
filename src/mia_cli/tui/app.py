@@ -1,4 +1,4 @@
-"""Main Textual Application for Mia Herd & Multi-Agent Orchestration."""
+"""Main Textual Application for Mia AI Coding Agent."""
 
 from __future__ import annotations
 
@@ -12,15 +12,16 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Static
 
+from mia_agent.events import AssistantChunkEvent
 from mia_agent.herd.manager import HerdManager
 from mia_agent.herd.models import AgentEventEnvelope, HerdEvent
 from mia_cli.tui.input import PromptInputBar
 from mia_cli.tui.panes import AgentPaneContainer
-from mia_cli.tui.sidebar import HerdSidebar
+from mia_cli.tui.sidebar import AgentSidebar
 from mia_cli.tui.theme import MIA_THEME_CSS
 
 
-class HerdHeader(Static):
+class MiaHeader(Static):
     """Modern header displaying active model, total cost, and token usage."""
 
     def __init__(self, model_name: str = "mimo-v2.5", **kwargs: Any) -> None:
@@ -40,7 +41,7 @@ class HerdHeader(Static):
     def _build_content(self) -> Text:
         cost_str = f"${self.total_cost:.4f}" if self.total_cost > 0 else "$0.0000"
         return Text.assemble(
-            ("🥕 MIA HERD ", "bold #FF7A00"),
+            ("🥕 MIA ", "bold #FF7A00"),
             ("v0.2.0  ", "dim #9CA3AF"),
             ("│  Model: ", "#9CA3AF"),
             (f"{self.model_name}  ", "bold #38BDF8"),
@@ -51,7 +52,7 @@ class HerdHeader(Static):
         )
 
 
-class HerdFooter(Static):
+class MiaFooter(Static):
     """Bottom status and shortcut indicator."""
 
     def compose(self) -> ComposeResult:
@@ -68,8 +69,8 @@ class HerdFooter(Static):
         yield Static(shortcuts)
 
 
-class MiaHerdApp(App[None]):
-    """Full-screen interactive Multi-Agent Textual TUI."""
+class MiaApp(App[None]):
+    """Full-screen interactive Textual TUI for Mia."""
 
     CSS = MIA_THEME_CSS
 
@@ -93,11 +94,11 @@ class MiaHerdApp(App[None]):
         self.model_name = model_name
         self.active_agent_id = "lead"
 
-        self.header_widget = HerdHeader(model_name=self.model_name)
-        self.sidebar_widget = HerdSidebar(agents=[], active_id=self.active_agent_id)
+        self.header_widget = MiaHeader(model_name=self.model_name)
+        self.sidebar_widget = AgentSidebar(agents=[], active_id=self.active_agent_id)
         self.pane_container = AgentPaneContainer(active_agent_id=self.active_agent_id)
         self.input_bar = PromptInputBar(default_target=self.active_agent_id)
-        self.footer_widget = HerdFooter()
+        self.footer_widget = MiaFooter()
 
     def compose(self) -> ComposeResult:
         yield self.header_widget
@@ -109,8 +110,8 @@ class MiaHerdApp(App[None]):
         yield self.footer_widget
 
     def on_mount(self) -> None:
-        """Initialize default agents and subscribe to herd events."""
-        # 1. Spawn default starter herd: @lead (architect) and @coder (coding)
+        """Initialize default agents and subscribe to events."""
+        # 1. Spawn default agents: @lead (architect) and @coder (coding)
         self.herd_manager.spawn_agent(
             agent_id="lead",
             name="Lead Architect",
@@ -128,7 +129,7 @@ class MiaHerdApp(App[None]):
             self.herd_manager.list_agents(), active_id=self.active_agent_id
         )
 
-        # 2. Subscribe to herd events
+        # 2. Subscribe to orchestrator events
         self.herd_manager.subscribe(self._on_herd_event)
 
     def _on_herd_event(self, event: HerdEvent) -> None:
@@ -146,11 +147,47 @@ class MiaHerdApp(App[None]):
         if isinstance(event, AgentEventEnvelope):
             self.pane_container.dispatch_event(event.agent_id, event.event)
 
-    def on_herd_sidebar_agent_selected(self, message: HerdSidebar.AgentSelected) -> None:
+    def on_agent_sidebar_agent_selected(self, message: AgentSidebar.AgentSelected) -> None:
         """User selected an agent from the sidebar."""
         self.active_agent_id = message.agent_id
         self.pane_container.switch_to_agent(self.active_agent_id)
         self.input_bar.set_target(self.active_agent_id)
+
+    def on_prompt_input_bar_slash_command_triggered(
+        self, message: PromptInputBar.SlashCommandTriggered
+    ) -> None:
+        """Handle slash commands (/help, /model, /profile, /clear, /quit)."""
+        cmd = message.command
+        args = message.args
+
+        if cmd == "help":
+            help_msg = (
+                "**🥕 Mia Commands & Shortcuts:**\n\n"
+                "- `@<agent> <prompt>`: Send message to specific agent (e.g. `@coder fix test`)\n"
+                "- `/model <name>`: Switch active model (e.g. `/model mimo-v2.5`)\n"
+                "- `/clear`: Clear active agent transcript\n"
+                "- `Alt+1..9`: Switch between active agents\n"
+                "- `Ctrl+N`: Spawn new worker agent\n"
+                "- `Ctrl+Q`: Quit Mia"
+            )
+            self.pane_container.add_user_message(self.active_agent_id, "/help")
+            self.pane_container.dispatch_event(
+                self.active_agent_id,
+                AssistantChunkEvent(delta_text=help_msg),
+            )
+        elif cmd == "model" and args:
+            self.model_name = args
+            self.header_widget.model_name = args
+            self.header_widget.update_metrics(
+                self.header_widget.total_tokens, self.header_widget.total_cost
+            )
+            self.pane_container.add_user_message(self.active_agent_id, f"/model {args}")
+            self.pane_container.dispatch_event(
+                self.active_agent_id,
+                AssistantChunkEvent(delta_text=f"✓ Switched active model to `{args}`."),
+            )
+        elif cmd == "quit":
+            self.exit()
 
     def on_prompt_input_bar_prompt_submitted(self, message: PromptInputBar.PromptSubmitted) -> None:
         """User submitted a prompt for an agent."""
@@ -196,7 +233,7 @@ class MiaHerdApp(App[None]):
             self.input_bar.set_target(self.active_agent_id)
 
     def action_spawn_new_agent(self) -> None:
-        """Spawn a new tester/reviewer agent via Ctrl+N."""
+        """Spawn a new worker agent via Ctrl+N."""
         existing = len(self.herd_manager.list_agents())
         new_id = f"worker{existing + 1}"
         self.herd_manager.spawn_agent(
@@ -206,3 +243,7 @@ class MiaHerdApp(App[None]):
             model=self.model_name,
         )
         self.action_switch_agent(len(self.herd_manager.list_agents()))
+
+
+# Alias for backward compatibility
+MiaHerdApp = MiaApp

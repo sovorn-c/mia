@@ -1,4 +1,4 @@
-"""Modern Carrot-Orange Design System and Textual CSS styles for Mia Herd."""
+"""Modern Carrot-Orange Design System and Textual CSS styles for Mia."""
 
 MIA_THEME_CSS = """
 Screen {
@@ -6,8 +6,8 @@ Screen {
     color: #F3F4F6;
 }
 
-/* --- Header --- */
-HerdHeader {
+/* --- Header Bar --- */
+MiaHeader {
     dock: top;
     height: 3;
     background: #16191E;
@@ -16,13 +16,10 @@ HerdHeader {
     padding: 0 1;
 }
 
-#header-title {
-    color: #FF7A00;
-    text-style: bold;
-}
-
-#header-status {
-    color: #9CA3AF;
+#header-content {
+    width: 100%;
+    height: 100%;
+    content-align: left middle;
 }
 
 /* --- Main Layout --- */
@@ -33,7 +30,7 @@ HerdHeader {
 }
 
 /* --- Sidebar --- */
-HerdSidebar {
+AgentSidebar {
     width: 32;
     background: #12151A;
     border-right: solid #2B303B;
@@ -72,15 +69,22 @@ AgentPaneContainer {
     width: 1fr;
     height: 1fr;
     background: #0D0F12;
-    padding: 1;
+    padding: 0 1;
 }
 
-#transcript-scroll {
+.pane-header-title {
+    height: 1;
+    margin-bottom: 1;
+    color: #9CA3AF;
+}
+
+AgentTranscriptView {
     height: 1fr;
     scrollbar-color: #FF7A00 #16191E;
+    scrollbar-size: 1 1;
 }
 
-/* --- Card Widgets --- */
+/* --- Message & Card Widgets --- */
 UserMessageCard {
     background: #16191E;
     border-left: thick #FF7A00;
@@ -89,6 +93,16 @@ UserMessageCard {
     border-bottom: solid #2B303B;
     padding: 1;
     margin-bottom: 1;
+}
+
+.user-msg-header {
+    color: #FF7A00;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+.user-msg-body {
+    color: #F3F4F6;
 }
 
 AssistantMessageCard {
@@ -107,13 +121,14 @@ ThoughtDrawer {
 
 .thought-header {
     color: #FF7A00;
-    text-style: italic;
+    text-style: bold italic;
+    padding: 1 0;
 }
 
 .thought-body {
     color: #9CA3AF;
     text-style: italic;
-    padding: 1 0;
+    padding: 0 0 1 0;
 }
 
 ToolCallCard {
@@ -128,38 +143,49 @@ ToolCallCard {
     text-style: bold;
 }
 
-.tool-success {
-    color: #10B981;
-}
-
-.tool-error {
-    color: #EF4444;
+.tool-body {
+    margin-top: 1;
+    color: #9CA3AF;
 }
 
 /* --- Input Area --- */
 #input-container {
     dock: bottom;
     height: auto;
-    max-height: 8;
+    min-height: 4;
+    max-height: 10;
     background: #16191E;
     border-top: solid #2B303B;
-    padding: 0 1;
+    padding: 1;
 }
 
 #input-container:focus-within {
     border-top: solid #FF7A00;
 }
 
-PromptInput {
+#input-row {
+    height: auto;
+}
+
+.input-prefix {
+    width: 5;
+    color: #FF7A00;
+    text-style: bold;
+}
+
+#prompt-text-input {
+    width: 1fr;
     background: #16191E;
     border: none;
     color: #F3F4F6;
-    height: auto;
-    min-height: 3;
+}
+
+#prompt-text-input:focus {
+    border: none;
 }
 
 /* --- Footer --- */
-HerdFooter {
+MiaFooter {
     dock: bottom;
     height: 1;
     background: #0D0F12;

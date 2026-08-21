@@ -1,5 +1,5 @@
-"""Textual TUI interface for Mia Herd multi-agent orchestrator."""
+"""Textual TUI interface for Mia coding agent."""
 
-from mia_cli.tui.app import MiaHerdApp
+from mia_cli.tui.app import MiaApp, MiaHerdApp
 
-__all__ = ["MiaHerdApp"]
+__all__ = ["MiaApp", "MiaHerdApp"]

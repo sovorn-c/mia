@@ -1,4 +1,4 @@
-"""Modern ToolCall card widget with diff syntax rendering."""
+"""Modern ToolCall card widget with diff syntax rendering and collapsible outputs."""
 
 from __future__ import annotations
 
@@ -50,8 +50,8 @@ class ToolCallCard(Vertical):
 
     def _render_header(self) -> None:
         args_str = json.dumps(self.arguments, ensure_ascii=False)
-        if len(args_str) > 80:
-            args_str = args_str[:77] + "..."
+        if len(args_str) > 70:
+            args_str = args_str[:67] + "..."
 
         if not self.is_done:
             status = Text("⚡ Running...", style="bold #FF7A00")
@@ -61,9 +61,11 @@ class ToolCallCard(Vertical):
             status = Text(f"✓ Succeeded ({self.duration_ms:.1f}ms)", style="bold #10B981")
 
         header = Text.assemble(
+            ("╭── ", "dim #2B303B"),
             ("▶ Tool: ", "bold #38BDF8"),
             (f"{self.tool_name}", "bold #F3F4F6"),
             (f"({args_str}) ", "#9CA3AF"),
+            ("─ " * 3, "dim #2B303B"),
             status,
         )
         self.header_widget.update(header)
@@ -72,14 +74,14 @@ class ToolCallCard(Vertical):
         if not self.output_text:
             return
 
-        # If unified diff, render with diff syntax
-        if "--- a/" in self.output_text and "+++ b/" in self.output_text:
+        # If unified diff from edit_file, render with rich monokai diff syntax
+        if "--- a/" in self.output_text or "+++ b/" in self.output_text:
             syntax_diff = Syntax(self.output_text, "diff", theme="monokai", line_numbers=False)
             self.body_widget.update(syntax_diff)
         else:
             lines = self.output_text.splitlines()
-            if len(lines) > 25:
-                preview = "\n".join(lines[:20] + [f"... [{len(lines) - 20} more lines]"])
+            if len(lines) > 30:
+                preview = "\n".join(lines[:25] + [f"... [{len(lines) - 25} lines truncated]"])
             else:
                 preview = self.output_text
             self.body_widget.update(Text(preview, style="#9CA3AF"))

@@ -1,7 +1,8 @@
-"""Collapsible thinking drawer widget for reasoning tokens."""
+"""Collapsible thinking drawer widget with streaming reasoning and token count."""
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from rich.text import Text
@@ -19,6 +20,10 @@ class ThoughtDrawer(Vertical):
         super().__init__(**kwargs)
         self._thought_text = initial_thought
         self.is_collapsed = is_collapsed
+        self.is_streaming = True
+        self.start_time = time.time()
+        self.duration_s = 0.0
+
         self.header_widget = Static("", classes="thought-header")
         self.body_widget = Static("", classes="thought-body")
 
@@ -31,7 +36,15 @@ class ThoughtDrawer(Vertical):
     def append_thought(self, delta: str) -> None:
         """Stream append thinking tokens."""
         self._thought_text += delta
+        self.duration_s = time.time() - self.start_time
+        self._update_header()
         self._update_body()
+
+    def complete(self) -> None:
+        """Mark thinking as finalized."""
+        self.is_streaming = False
+        self.duration_s = time.time() - self.start_time
+        self._update_header()
 
     def toggle_collapse(self) -> None:
         """Toggle collapsed state."""
@@ -44,12 +57,18 @@ class ThoughtDrawer(Vertical):
 
     def _update_header(self) -> None:
         icon = "▶" if self.is_collapsed else "▼"
-        self.header_widget.update(
-            Text(
-                f"{icon} 💭 Thinking ({len(self._thought_text.split())} words)",
-                style="bold #FF7A00",
-            )
+        word_count = len(self._thought_text.split())
+        status_label = (
+            f"({word_count} words • {self.duration_s:.1f}s)"
+            if self.duration_s > 0
+            else f"({word_count} words)"
         )
+
+        header_text = Text.assemble(
+            (f"{icon} 💭 Thinking ", "bold #FF7A00"),
+            (status_label, "dim #9CA3AF"),
+        )
+        self.header_widget.update(header_text)
 
     def _update_body(self) -> None:
         if not self.is_collapsed:
