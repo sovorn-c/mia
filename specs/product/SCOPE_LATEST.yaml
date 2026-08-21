@@ -1,4 +1,4 @@
-# specs/product/SCOPE_LATEST.yaml — Bounded PRD for Mia Native Orchestration Vertical Slice
+# specs/product/SCOPE_LATEST.yaml — Bounded PRD for Mia Native Orchestration
 core_value: >
   Make orchestration Mia's single execution architecture: every prompt enters a mode runtime,
   while the default one-node mode preserves today's fast Pi/Tau-style behavior and an explicit
@@ -11,7 +11,9 @@ summary: >
   interactive and headless CLIs use the same runtime. A built-in single mode remains the default;
   a built-in research mode runs one task-local architect specialist followed by the selected
   coordinator profile. Typed envelopes make every event attributable to its mode, run, task, and
-  agent. The legacy src/mia_agent/herd implementation is not an architectural input.
+  agent. The legacy src/mia_agent/herd implementation is not an architectural input. A small
+  follow-up aligns the inline REPL's essential slash-command descriptions with behavior that is
+  actually implemented, including durable manual compaction.
 
 in_scope:
   - id: "e03s01"
@@ -20,6 +22,12 @@ in_scope:
       Add validated mode/workflow definitions, one shared AgentHarness factory, an orchestration
       event envelope, a one-node compatibility path, a deterministic research workflow with a
       task-local specialist, durable child lineage, and explicit /mode and --mode selection.
+  - id: "e03s02"
+    name: "Essential Slash Command Contract Alignment"
+    description: >
+      Make command completion, help, and dispatch share one canonical list; implement real manual
+      context compaction; preserve state on invalid profile selection; report Git failures; and
+      remove unsupported active-turn cancellation from the advertised command suite.
 
 out_of_scope:
   - id: "oos-01"
@@ -40,6 +48,9 @@ out_of_scope:
   - id: "oos-06"
     name: "Legacy Herd migration"
     rationale: "src/mia_agent/herd and its Textual path are experimental/legacy and do not constrain the native runtime design."
+  - id: "oos-07"
+    name: "Concurrent input and active-turn cancellation"
+    rationale: "The serial inline REPL cannot accept /stop during a turn; a later lifecycle story must design concurrent input and cancellation before the command is advertised."
 
 constraints:
   - "Runtime: Python 3.12+ with strict Mypy and Ruff formatting."
@@ -58,6 +69,10 @@ success_criteria:
   - "Every runtime event identifies mode, workflow run, task, agent, and profile while retaining the original typed AgentEvent payload."
   - "Specialist failure or cancellation prevents later stages and emits a typed terminal error."
   - "Focused orchestration tests, the existing suite, Ruff, and strict Mypy pass offline."
+  - "Completion, help, and prefix matching expose the same 17 canonical slash commands."
+  - "Manual /compact changes active context and appends a durable compaction checkpoint."
+  - "Invalid profile selection and failed Git inspection report errors without partial state mutation or false success."
+  - "Unsupported /stop and /abort commands are not advertised until concurrent cancellation exists."
 
 references:
   - "specs/IMPACT_LATEST.md"

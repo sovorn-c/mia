@@ -1,21 +1,22 @@
 session:
-  active_flow: release_branch
+  active_flow: plan_work
   active_epic_id: e03
-  active_story_id: e03s01
+  active_story_id: e03s02
   target_version: 0.3.0
 handoff:
-  next_skill: survey-context
-  summary: 'e03s01 passed implementation, manual UAT, audit, security review, and release
-    verification. Full suite: 88 passed. Traceability gate was waived because this repository
-    has no trace matrix or trace-generation scripts. The feature is ready on main.'
+  next_skill: kickoff-branch
+  summary: 'e03s02 is planned as a four-task correction to make slash-command discovery
+    and behavior truthful: one canonical 17-command list, durable manual compaction,
+    safe profile validation, Git failure reporting, and explicit deferral of /stop.
+    Plan consistency passes with CRITICAL=0 HIGH=0 MED=0.'
 git:
   branch: main
 metrics:
   skill_timings:
     plan-work:
-      calls: 1
-      total_seconds: 19.0
-      avg_seconds: 19.0
+      calls: 2
+      total_seconds: 275.0
+      avg_seconds: 137.5
     develop-tdd:
       calls: 1
       total_seconds: 1735.0

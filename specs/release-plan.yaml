@@ -40,9 +40,9 @@ epics:
       risk_reduction: 13
       job_size: 8
       score: 5.9
-    status: "completed"
-    bcps_total: 5
-    stories_count: 1
+    status: "planned"
+    bcps_total: 9
+    stories_count: 2
     directory: "specs/epics/e03-native-orchestration"
 
 

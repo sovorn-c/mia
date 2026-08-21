@@ -1,13 +1,12 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.3.0
-updated_at: '2026-08-21T23:11:33Z'
+updated_at: '2026-08-21T23:23:33Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-08-21T23:11:33Z'
-  rationale: >-
-    This repository has no traceability matrix, blind-spot report, or generation scripts.
-    Manual refutation found no missing e03s01 verify evidence: the story records implementation
-    commits, all seven tasks have deterministic verify commands, and 88 tests pass.
+  rationale: 'This repository has no traceability matrix, blind-spot report, or generation scripts. Manual
+    refutation found no missing e03s01 verify evidence: the story records implementation commits, all
+    seven tasks have deterministic verify commands, and 88 tests pass.'
   heuristic_ratio: null
   downgrade_applied: false
 epics:
@@ -87,3 +86,11 @@ epics:
         tasks_total: 7
         tasks_passing: 7
         tasks_failing: 0
+      e03s02:
+        title: Essential Slash Command Contract Alignment
+        status: failing
+        bcps: 4
+        risk: P1
+        tasks_total: 4
+        tasks_passing: 0
+        tasks_failing: 4

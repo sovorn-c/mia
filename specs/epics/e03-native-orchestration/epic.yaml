@@ -4,8 +4,8 @@ slug: "native-orchestration"
 title: "Native Orchestration Runtime"
 type: "feat"
 context: "domain and infrastructure"
-status: "completed"
-bcps_total: 5
+status: "planned"
+bcps_total: 9
 
 stories:
   - id: e03s01
@@ -15,3 +15,11 @@ stories:
     risk: "P0"
     spec_file: "e03s01-native-orchestration-mode.md"
     tasks_file: "e03s01-tasks.yaml"
+
+  - id: e03s02
+    title: "Essential Slash Command Contract Alignment"
+    status: "failing"
+    bcps: 4
+    risk: "P1"
+    spec_file: "e03s02-essential-slash-command-contracts.md"
+    tasks_file: "e03s02-tasks.yaml"
