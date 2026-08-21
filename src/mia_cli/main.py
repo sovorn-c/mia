@@ -30,7 +30,7 @@ from mia_tools.fs import EditFileTool, ReadFileTool, WriteFileTool
 app = typer.Typer(
     name="mia",
     help="Mia (Modular Intelligent Agent) - High-Performance AI Coding Agent Harness.",
-    no_args_is_help=True,
+    no_args_is_help=False,
 )
 profile_app = typer.Typer(help="Manage agent profiles and presets.")
 sessions_app = typer.Typer(help="Inspect and manage saved session trees.")
