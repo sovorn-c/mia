@@ -1,4 +1,4 @@
-"""Clean, modern terminal input engine with Tab-completion and history (Pi & Tau inspired)."""
+"""Clean, modern terminal input engine with real-time inline slash command hints (Pi & Tau inspired)."""
 
 from __future__ import annotations
 
@@ -140,11 +140,12 @@ def interactive_select(
 
 
 class LiveInteractivePrompt:
-    """Rock-solid, zero-ghost-trail prompt reader with native Readline history and Tab completion."""
+    """Rock-solid interactive prompt with real-time inline slash command filtering and history."""
 
     def __init__(self, history_file: Path | None = None) -> None:
         self.history_file = history_file or (Path.home() / ".mia" / "history")
         self.history: list[str] = self._load_history()
+        self._history_idx: int = -1
         self._setup_readline()
 
     def _setup_readline(self) -> None:
@@ -183,20 +184,154 @@ class LiveInteractivePrompt:
         if self.history_file:
             try:
                 self.history_file.parent.mkdir(parents=True, exist_ok=True)
+                if self.history:
+                    self.history_file.write_text(
+                        "\n".join(self.history[-200:]) + "\n", encoding="utf-8"
+                    )
                 readline.write_history_file(str(self.history_file))
             except Exception:
                 pass
 
     def read_prompt(self, prompt_prefix: str = "🥕 mia › ") -> str:
-        """Read a single prompt line with clean history and zero cursor jumping."""
+        """Read a prompt line with real-time inline slash command hints that filter as you type."""
+        if not sys.stdin.isatty():
+            try:
+                return input(prompt_prefix).strip()
+            except EOFError:
+                raise
+
+        import termios
+        import tty
+
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+
+        buffer = ""
+        cursor_pos = 0
+        self._history_idx = -1
+
+        def redraw_line() -> None:
+            colored_pfx = f"\x1b[1;38;2;255;122;0m{prompt_prefix}\x1b[0m"
+
+            # Compute real-time inline matching hints if typing slash command
+            hint_str = ""
+            if buffer.startswith("/"):
+                query = buffer.split()[0].lower()
+                matches = [cmd for cmd, _ in COMMAND_HINTS if cmd.startswith(query)]
+                if matches:
+                    if len(matches) <= 4:
+                        hint_str = f" \x1b[2;37m({', '.join(matches)})\x1b[0m"
+                    else:
+                        top_matches = ", ".join(matches[:4])
+                        hint_str = f" \x1b[2;37m({top_matches}, ...)\x1b[0m"
+
+            sys.stdout.write(f"\r\x1b[2K{colored_pfx}{buffer}{hint_str}")
+            # Restore cursor to exact position in user's typed buffer
+            pfx_len = len(prompt_prefix)
+            col = pfx_len + cursor_pos + 1
+            sys.stdout.write(f"\x1b[{col}G")
+            sys.stdout.flush()
+
         try:
-            colored_prompt = f"\x1b[1;38;2;255;122;0m{prompt_prefix}\x1b[0m"
-            raw_input = input(colored_prompt).strip()
-            if raw_input:
-                self._save_history()
-            return raw_input
-        except EOFError:
-            raise
-        except KeyboardInterrupt:
-            sys.stdout.write("\n")
-            raise
+            tty.setcbreak(fd)
+            redraw_line()
+
+            while True:
+                char = sys.stdin.read(1)
+
+                # Ctrl+C
+                if char == "\x03":
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    raise KeyboardInterrupt
+
+                # Ctrl+D
+                if char == "\x04" and not buffer:
+                    sys.stdout.write("\n")
+                    sys.stdout.flush()
+                    raise EOFError
+
+                # Enter (\r or \n)
+                if char in ("\r", "\n"):
+                    colored_pfx = f"\x1b[1;38;2;255;122;0m{prompt_prefix}\x1b[0m"
+                    sys.stdout.write(f"\r\x1b[2K{colored_pfx}{buffer}\n")
+                    sys.stdout.flush()
+                    line = buffer.strip()
+                    if line and (not self.history or self.history[-1] != line):
+                        self.history.append(line)
+                        self._save_history()
+                    return line
+
+                # Backspace (\x7f or \x08)
+                if char in ("\x7f", "\x08"):
+                    if cursor_pos > 0:
+                        buffer = buffer[: cursor_pos - 1] + buffer[cursor_pos:]
+                        cursor_pos -= 1
+                        redraw_line()
+                    continue
+
+                # Tab (\t) -> Autocomplete matching slash command
+                elif char == "\t":
+                    if buffer.startswith("/"):
+                        query = buffer.split()[0].lower()
+                        matches = [cmd for cmd, _ in COMMAND_HINTS if cmd.startswith(query)]
+                        if len(matches) == 1:
+                            buffer = matches[0] + " "
+                            cursor_pos = len(buffer)
+                            redraw_line()
+                        elif len(matches) > 1:
+                            # Complete common prefix
+                            prefix = matches[0]
+                            for m in matches[1:]:
+                                while not m.startswith(prefix) and prefix:
+                                    prefix = prefix[:-1]
+                            if len(prefix) > len(buffer):
+                                buffer = prefix
+                                cursor_pos = len(buffer)
+                            redraw_line()
+                    continue
+
+                # ANSI Escape Sequences (Arrows)
+                elif char == "\x1b":
+                    seq1 = sys.stdin.read(1)
+                    if seq1 == "[":
+                        seq2 = sys.stdin.read(1)
+                        # Up arrow -> History prev
+                        if seq2 == "A":
+                            if self.history:
+                                if self._history_idx == -1:
+                                    self._history_idx = len(self.history) - 1
+                                elif self._history_idx > 0:
+                                    self._history_idx -= 1
+                                buffer = self.history[self._history_idx]
+                                cursor_pos = len(buffer)
+                                redraw_line()
+                        # Down arrow -> History next
+                        elif seq2 == "B":
+                            if self._history_idx != -1:
+                                if self._history_idx < len(self.history) - 1:
+                                    self._history_idx += 1
+                                    buffer = self.history[self._history_idx]
+                                else:
+                                    self._history_idx = -1
+                                    buffer = ""
+                                cursor_pos = len(buffer)
+                                redraw_line()
+                        # Left arrow
+                        elif seq2 == "D" and cursor_pos > 0:
+                            cursor_pos -= 1
+                            redraw_line()
+                        # Right arrow
+                        elif seq2 == "C" and cursor_pos < len(buffer):
+                            cursor_pos += 1
+                            redraw_line()
+                    continue
+
+                # Normal printable characters
+                elif char.isprintable():
+                    buffer = buffer[:cursor_pos] + char + buffer[cursor_pos:]
+                    cursor_pos += 1
+                    redraw_line()
+
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
