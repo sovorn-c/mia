@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from prompt_toolkit.document import Document
 
+from mia_agent.orchestration import OrchestrationErrorEvent, OrchestrationEventEnvelope
 from mia_agent.session.entries import MessageEntry
 from mia_agent.session.jsonl import JsonlSessionStore
 from mia_ai.providers.mock import MockProvider
@@ -127,6 +129,29 @@ def test_repl_mode_selection_and_invalid_mode(tmp_path: Path) -> None:
     assert repl.mode_name == "single"
     assert repl.handle_slash_command("/mode unknown") is True
     assert repl.mode_name == "single"
+
+
+@pytest.mark.asyncio
+async def test_repl_stops_status_on_orchestration_error(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+
+    async def error_events() -> AsyncIterator[OrchestrationEventEnvelope]:
+        yield OrchestrationEventEnvelope(
+            mode="research",
+            run_id="run-error",
+            task_id="specialist",
+            agent_id="specialist",
+            profile="architect",
+            event=OrchestrationErrorEvent(stage="specialist", error="specialist unavailable"),
+        )
+
+    with (
+        patch.object(repl.mode_runtime, "prompt", return_value=error_events()),
+        patch.object(repl.stream_renderer, "_stop_status") as stop_status,
+    ):
+        await repl.execute_turn("research this repository")
+
+    stop_status.assert_called_once()
 
 
 def test_repl_pi_style_auth_and_model_scoper(tmp_path: Path) -> None:

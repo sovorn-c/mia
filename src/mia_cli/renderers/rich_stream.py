@@ -6,7 +6,9 @@ import json
 import time
 from typing import Any
 
+import rich.spinner
 from rich.console import Console
+from rich.live import Live
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
@@ -21,6 +23,13 @@ from mia_agent.events import (
     TurnCompleteEvent,
     TurnStartEvent,
 )
+
+spinners_dict = getattr(rich.spinner, "SPINNERS", {})
+if "dot_cycle" not in spinners_dict:
+    spinners_dict["dot_cycle"] = {
+        "interval": 200,
+        "frames": [".  ", ".. ", "...", "   "],
+    }
 
 
 class CarrotBounceSpinner:
@@ -39,6 +48,41 @@ class CarrotBounceSpinner:
         return f"{frame} Thinking ({elapsed_seconds:.1f}s)..."
 
 
+class AnimatedWorkingStatus:
+    """Live renderable widget providing braille spinner + action label + dynamic . .. ... dot cycling + ticking elapsed seconds."""
+
+    def __init__(
+        self,
+        action: str = "Thinking",
+        turn_start_time: float = 0.0,
+        style: str = "bold #FF7A00",
+    ) -> None:
+        self.action = action
+        self.turn_start_time = turn_start_time
+        self.style = style
+        self.spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        self.dot_frames = [".  ", ".. ", "...", "   "]
+
+    def update(self, action: str, style: str = "bold #FF7A00") -> None:
+        self.action = action
+        self.style = style
+
+    def __rich__(self) -> Text:
+        now = time.time()
+        elapsed = max(0.0, now - self.turn_start_time)
+        spin_idx = int(elapsed * 10) % len(self.spinner_frames)
+        dot_idx = int(elapsed * 3) % len(self.dot_frames)
+        spin = self.spinner_frames[spin_idx]
+        dots = self.dot_frames[dot_idx]
+
+        return Text.assemble(
+            (f"{spin} ", self.style),
+            (f"{self.action}", self.style),
+            (f"{dots} ", self.style),
+            (f"({elapsed:.1f}s)", "dim #9CA3AF"),
+        )
+
+
 class RichStreamRenderer:
     """Consumes typed AgentEvents and renders minimalist inline output with live animated working status."""
 
@@ -55,35 +99,58 @@ class RichStreamRenderer:
         self.turn_start_time = 0.0
         self.thinking_buffer: list[str] = []
         self.turn_audit_log: list[dict[str, Any]] = []
-        self._active_status: Any = None
+        self._active_status: Live | None = None
+        self._status_widget: AnimatedWorkingStatus | None = None
 
-    def _start_status(self, text: str, spinner_style: str = "bold #FF7A00") -> None:
-        """Start or update animated status spinner with clean dots animation."""
+    def start_turn(self) -> None:
+        """Called immediately upon user submission (Enter) to start elapsed timing and animation."""
+        self.turn_count += 1
+        self.turn_start_time = time.time()
+        self.thinking_buffer.clear()
+        self.turn_audit_log.clear()
+        self._end_streams()
+        self.console.print()
+        self._start_status("Thinking")
+
+    def _start_status(self, action: str, style: str = "bold #FF7A00") -> None:
+        """Start or update live animated working status with dynamic cycling dots and live timer."""
         if not self.console.is_terminal:
             return
         if self._active_status is None:
-            self._active_status = self.console.status(
-                text, spinner="dots", spinner_style=spinner_style
+            self._status_widget = AnimatedWorkingStatus(
+                action=action,
+                turn_start_time=self.turn_start_time,
+                style=style,
+            )
+            self._active_status = Live(
+                self._status_widget,
+                console=self.console,
+                refresh_per_second=10,
+                transient=True,
             )
             self._active_status.start()
         else:
-            self._active_status.update(text, spinner_style=spinner_style)
+            if self._status_widget is not None:
+                self._status_widget.turn_start_time = self.turn_start_time
+                self._status_widget.update(action=action, style=style)
 
     def _stop_status(self) -> None:
         """Stop and clear active status spinner cleanly."""
         if self._active_status is not None:
             self._active_status.stop()
             self._active_status = None
+            self._status_widget = None
 
     def on_event(self, event: AgentEvent) -> None:
         """Handle a single AgentEvent and print minimalist output."""
         if isinstance(event, TurnStartEvent):
-            self.turn_count += 1
-            self.turn_start_time = time.time()
+            if self.turn_start_time <= 0:
+                self.turn_count += 1
+                self.turn_start_time = time.time()
             self.thinking_buffer.clear()
             self.turn_audit_log.clear()
             self._end_streams()
-            self._start_status("[bold #FF7A00]Thinking...[/bold #FF7A00]")
+            self._start_status("Thinking")
 
         elif isinstance(event, StepStartEvent):
             self._end_streams()
@@ -105,8 +172,7 @@ class RichStreamRenderer:
                         Text(event.thought_delta, style="dim italic #9CA3AF"), end=""
                     )
                 else:
-                    elapsed = max(0.0, time.time() - self.turn_start_time)
-                    self._start_status(f"[bold #FF7A00]Thinking ({elapsed:.1f}s)...[/bold #FF7A00]")
+                    self._start_status("Thinking")
 
             if event.delta_text:
                 self._stop_status()
@@ -135,8 +201,8 @@ class RichStreamRenderer:
                 tool_summary = event.tool_name
 
             self._start_status(
-                f"[bold #38BDF8]Running {tool_summary}...[/bold #38BDF8]",
-                spinner_style="bold #38BDF8",
+                f"Running {tool_summary}",
+                style="bold #38BDF8",
             )
             self.turn_audit_log.append(
                 {
@@ -177,8 +243,8 @@ class RichStreamRenderer:
                 self.turn_audit_log[-1]["duration_ms"] = event.duration_ms
                 self.turn_audit_log[-1]["output"] = output_str
 
-            # Resume thinking status for subsequent steps
-            self._start_status("[bold #FF7A00]Thinking...[/bold #FF7A00]")
+            # Resume thinking status with live elapsed timer for subsequent steps
+            self._start_status("Thinking")
 
         elif isinstance(event, StepEndEvent):
             self._end_streams()
@@ -188,11 +254,9 @@ class RichStreamRenderer:
             self._end_streams()
             cost_str = f" | ${event.total_cost_usd:.4f}" if event.total_cost_usd > 0 else ""
             elapsed = time.time() - self.turn_start_time if self.turn_start_time > 0 else 0.0
+            step_word = "1 step" if event.total_steps == 1 else f"{event.total_steps} steps"
             self.console.print(
-                f"\n[dim green]✓ Turn completed in {elapsed:.1f}s ({event.total_steps} step(s){cost_str})[/dim green]"
-            )
-            self.console.print(
-                "[dim #6B7280]💡 Press [bold white]Ctrl+O[/bold white] for full audit logs • [bold white]Ctrl+T[/bold white] for thinking trace[/dim #6B7280]\n"
+                f"\n[dim green]✓ Turn completed in {elapsed:.1f}s, [{step_word}]{cost_str}[/dim green]\n"
             )
 
     def render_audit_log(self) -> None:

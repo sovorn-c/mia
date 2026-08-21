@@ -53,6 +53,7 @@ async def _run_agent_loop(
         context_window=context_window,
     ):
         if isinstance(envelope.event, OrchestrationErrorEvent):
+            renderer._stop_status()
             console.print(
                 f"[bold red]Orchestration error ({envelope.event.stage}): "
                 f"{envelope.event.error}[/bold red]"

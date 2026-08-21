@@ -867,6 +867,7 @@ class MiaREPL:
             ):
                 event = envelope.event
                 if isinstance(event, OrchestrationErrorEvent):
+                    self.stream_renderer._stop_status()
                     self.console.print(
                         f"[bold red]Orchestration error ({event.stage}): {event.error}[/bold red]"
                     )

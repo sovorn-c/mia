@@ -4,25 +4,17 @@ from __future__ import annotations
 
 import contextlib
 import sys
+import time
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
-from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import CompleteEvent, Completer, Completion
 from prompt_toolkit.document import Document
-from prompt_toolkit.filters import is_done
 from prompt_toolkit.formatted_text import HTML, AnyFormattedText
 from prompt_toolkit.history import FileHistory, History, InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
-from prompt_toolkit.layout.containers import (
-    ConditionalContainer,
-    FloatContainer,
-    HSplit,
-    Window,
-)
-from prompt_toolkit.layout.controls import FormattedTextControl
-from prompt_toolkit.shortcuts import CompleteStyle
+from prompt_toolkit.shortcuts import PromptSession
 from prompt_toolkit.styles import Style
 
 COMMAND_HINTS: list[tuple[str, str]] = [
@@ -35,6 +27,7 @@ COMMAND_HINTS: list[tuple[str, str]] = [
     ("/cost", "Show session tokens & USD cost (alias: /stats, /tokens)"),
     ("/compact", "Trigger context window compaction (alias: /compress)"),
     ("/sessions", "List saved session trees (alias: /history)"),
+    ("/resume", "Resume a saved session; Ctrl+D/d deletes the selected session"),
     ("/tree", "Explore and fork session conversation branch (alias: /branch)"),
     ("/inspect", "Open post-turn detail audit viewer & diffs (alias: /logs)"),
     ("/thinking", "Toggle model reasoning trace visibility (alias: /trace)"),
@@ -167,8 +160,8 @@ class LivePromptSession:
     ) -> None:
         self.history_file = history_file or (Path.home() / ".mia" / "history")
         self.history = SafeFileHistory(str(self.history_file))
-        self.toolbar_callback = toolbar_callback
         self.completer = SlashCompleter()
+        self._last_escape_time = 0.0
         self.bindings = self._create_keybindings()
         self.session: PromptSession[str] = PromptSession(
             history=self.history,
@@ -176,28 +169,28 @@ class LivePromptSession:
             key_bindings=self.bindings,
             style=MIA_STYLE,
             complete_while_typing=True,
-            complete_style=CompleteStyle.COLUMN,
-            reserve_space_for_menu=0,
             input=input,
             output=output,
+            reserve_space_for_menu=8,
         )
 
-        if self.toolbar_callback and isinstance(self.session.layout.container, HSplit):
-            status_container = ConditionalContainer(
-                Window(
-                    FormattedTextControl(self.toolbar_callback),
-                    dont_extend_height=True,
-                    height=1,
-                ),
-                filter=~is_done,
-            )
-            c0 = self.session.layout.container.children[0]
-            main_input = getattr(c0, "alternative_content", None) or getattr(c0, "content", None)
-            if isinstance(main_input, FloatContainer) and isinstance(main_input.content, HSplit):
-                # Insert at index 2 (immediately below the default_buffer_window at index 1)
-                main_input.content.children.insert(2, status_container)
+    def _handle_escape(self, event: KeyPressEvent) -> None:
+        """Apply Pi-style escape behavior to the current prompt buffer."""
+        buffer = event.current_buffer
+        if buffer.complete_state:
+            buffer.cancel_completion()
+            self._last_escape_time = 0.0
+        elif buffer.text:
+            buffer.reset()
+            self._last_escape_time = 0.0
+        else:
+            now = time.monotonic()
+            if now - self._last_escape_time <= 0.5:
+                self._last_escape_time = 0.0
+                buffer.text = "/tree"
+                buffer.validate_and_handle()
             else:
-                self.session.layout.container.children.insert(1, status_container)
+                self._last_escape_time = now
 
     def _create_keybindings(self) -> KeyBindings:
         kb = KeyBindings()
@@ -216,16 +209,11 @@ class LivePromptSession:
         def _insert_newline_alt(event: KeyPressEvent) -> None:
             event.current_buffer.insert_text("\n")
 
-        # Esc: Cancel completion, or clear buffer, or open /tree if empty
+        # Esc: cancel completion/clear input. Double-Esc on an empty editor opens /tree,
+        # matching Pi's 500 ms guard against accidental tree navigation.
         @kb.add("escape")
         def _escape_handler(event: KeyPressEvent) -> None:
-            if event.current_buffer.complete_state:
-                event.current_buffer.cancel_completion()
-            elif event.current_buffer.text:
-                event.current_buffer.reset()
-            else:
-                event.current_buffer.text = "/tree"
-                event.current_buffer.validate_and_handle()
+            self._handle_escape(event)
 
         # Ctrl+O: Post-turn detail audit inspector shortcut
         @kb.add("c-o")
@@ -247,7 +235,7 @@ class LivePromptSession:
         bottom_toolbar: Any = None,
     ) -> str:
         """Async prompt user with floating slash completions, bracketed paste, and inline status info immediately below."""
-        if not sys.stdin.isatty():
+        if not sys.stdin.isatty() and not getattr(self.session, "_input", None):
             try:
                 return input(prompt_prefix).strip()
             except EOFError:
@@ -258,7 +246,7 @@ class LivePromptSession:
         try:
             result = await self.session.prompt_async(
                 formatted_prompt,
-                reserve_space_for_menu=0,
+                reserve_space_for_menu=8,
             )
             return result.strip()
         except KeyboardInterrupt:
@@ -273,7 +261,7 @@ class LivePromptSession:
         bottom_toolbar: Any = None,
     ) -> str:
         """Prompt user with floating slash completions, bracketed paste, and inline status info immediately below."""
-        if not sys.stdin.isatty():
+        if not sys.stdin.isatty() and not getattr(self.session, "_input", None):
             try:
                 return input(prompt_prefix).strip()
             except EOFError:
@@ -284,7 +272,7 @@ class LivePromptSession:
         try:
             result = self.session.prompt(
                 formatted_prompt,
-                reserve_space_for_menu=0,
+                reserve_space_for_menu=8,
             )
             return result.strip()
         except KeyboardInterrupt:
@@ -311,11 +299,9 @@ def interactive_select(
     title: str,
     options: list[tuple[str, str, str]],  # (id, label, description)
     default_idx: int = 0,
+    on_delete: Callable[[str], None] | None = None,
 ) -> str | None:
-    """Clean interactive selection menu supporting both instant numeric keys (1..N) and arrow keys (Up/Down + Enter).
-
-    Guarantees zero-flicker stability and clean terminal restoration.
-    """
+    """Select an option, optionally supporting confirmed Ctrl+D/d deletion."""
     if not options:
         return None
 
@@ -334,7 +320,7 @@ def interactive_select(
                 if raw.lower() == opt[0].lower() or raw.lower() == opt[1].lower():
                     return opt[0]
             return options[default_idx][0]
-        except (KeyboardInterrupt, EOFError):
+        except (KeyboardInterrupt, EOFError, OSError):
             return None
 
     import os
@@ -347,8 +333,9 @@ def interactive_select(
     current_idx = default_idx
 
     # Print Title Header
+    delete_hint = ", Ctrl+D/d delete" if on_delete else ""
     sys.stdout.write(
-        f"\n\x1b[1;38;2;255;122;0m🥕 {title}\x1b[0m \x1b[2;37m(Press 1-{num_options}, or use ↑/↓ + Enter, Esc to cancel)\x1b[0m\n"
+        f"\n\x1b[1;38;2;255;122;0m🥕 {title}\x1b[0m \x1b[2;37m(Press 1-{num_options}, or use ↑/↓ + Enter{delete_hint}, Esc to cancel)\x1b[0m\n"
     )
     sys.stdout.write("\x1b[38;2;45;51;66m" + "─" * 68 + "\x1b[0m\n")
 
@@ -364,6 +351,15 @@ def interactive_select(
             sys.stdout.write(f"\r\x1b[K{cursor}{line_str}\n")
         sys.stdout.flush()
 
+    def redraw_menu(option_count: int, extra_lines: int = 0) -> None:
+        """Clear the previous menu and render it at the same terminal position."""
+        sys.stdout.write(f"\x1b[{option_count}A")
+        line_count = option_count + extra_lines
+        for _ in range(line_count):
+            sys.stdout.write("\r\x1b[K\n")
+        sys.stdout.write(f"\x1b[{line_count}A")
+        render_all(current_idx)
+
     try:
         tty.setcbreak(fd)
         render_all(current_idx)
@@ -374,8 +370,36 @@ def interactive_select(
             if not raw_bytes:
                 continue
 
-            # Ctrl+C (\x03) or Ctrl+D (\x04)
-            if raw_bytes in (b"\x03", b"\x04"):
+            # Ctrl+D/d: request deletion when this selector explicitly allows it.
+            if on_delete and raw_bytes in (b"\x04", b"d", b"D"):
+                selected_id, selected_label, _ = options[current_idx]
+                sys.stdout.write(
+                    f"\r\x1b[KDelete '{selected_label}'? Press Enter to delete, Esc to cancel"
+                )
+                sys.stdout.flush()
+                confirmation = os.read(fd, 32)
+                if confirmation in (b"\r", b"\n"):
+                    try:
+                        on_delete(selected_id)
+                    except Exception as exc:
+                        sys.stdout.write(f"\r\x1b[KDelete failed: {exc}\n")
+                        sys.stdout.flush()
+                        return None
+                    old_count = num_options
+                    options.pop(current_idx)
+                    num_options -= 1
+                    if not options:
+                        sys.stdout.write(f"\r\x1b[KDeleted: {selected_label}\n\n")
+                        sys.stdout.flush()
+                        return None
+                    current_idx = min(current_idx, num_options - 1)
+                    redraw_menu(old_count, extra_lines=1)
+                else:
+                    redraw_menu(num_options, extra_lines=1)
+                continue
+
+            # Ctrl+C (\x03)
+            if raw_bytes == b"\x03":
                 sys.stdout.write("\n")
                 raise KeyboardInterrupt
 
