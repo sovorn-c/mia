@@ -946,7 +946,21 @@ class MiaREPL:
             )
 
         elif cmd in ("/compact", "/compress"):
-            self.console.print("[bold green]✓ Context compaction status verified.[/bold green]\n")
+            if self.harness is None:
+                self.console.print(
+                    "[yellow]No active context to compact; configure a model first.[/yellow]\n"
+                )
+            else:
+                result = self.harness.compact_context()
+                if result is None:
+                    self.console.print(
+                        "[yellow]Nothing to compact: no conversation history or compactor is configured.[/yellow]\n"
+                    )
+                else:
+                    self.console.print(
+                        "[bold green]✓ Context compacted: "
+                        f"{result.before_tokens:,} → {result.after_tokens:,} estimated tokens.[/bold green]\n"
+                    )
 
         elif cmd in ("/sessions", "/history"):
             session_dir = self.profile_mgr.get_session_dir(self.profile_name)

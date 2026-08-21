@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import AsyncIterator, Callable, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from mia_agent.events import (
@@ -16,13 +17,25 @@ from mia_agent.events import (
     TurnCompleteEvent,
     TurnStartEvent,
 )
-from mia_agent.session.compactor import ContextCompactor
+from mia_agent.session.compactor import (
+    ContextCompactor,
+    estimate_chat_messages_tokens,
+)
 from mia_agent.session.entries import CompactionEntry, LeafEntry, MessageEntry
 from mia_agent.session.jsonl import JsonlSessionStore
 from mia_agent.session.tree import SessionTree
 from mia_ai.providers.base import LLMProvider
 from mia_ai.types import ChatMessage, TokenUsage, ToolCall, ToolDefinition
 from mia_middleware.pipeline import ToolCallContext, ToolPipeline
+
+
+@dataclass(frozen=True, slots=True)
+class CompactionResult:
+    """Estimated outcome of an explicit context compaction."""
+
+    before_tokens: int
+    after_tokens: int
+    summary: str
 
 
 class AgentHarness:
@@ -71,6 +84,30 @@ class AgentHarness:
     def clear_history(self) -> None:
         """Clear all conversation history."""
         self._messages.clear()
+
+    def compact_context(self) -> CompactionResult | None:
+        """Compact active context and append a durable session checkpoint when configured."""
+        if self.compactor is None or not self._messages:
+            return None
+
+        before_tokens = estimate_chat_messages_tokens(self._messages)
+        compacted_messages, summary_text = self.compactor.compact_messages(self._messages)
+        self._messages = compacted_messages
+
+        if self.session_store:
+            compaction_entry = CompactionEntry(
+                parent_id=self._last_entry_id,
+                summary=summary_text,
+            )
+            self.session_store.append_entry(compaction_entry)
+            self._last_entry_id = compaction_entry.id
+            self.session_store.append_entry(LeafEntry(entry_id=compaction_entry.id))
+
+        return CompactionResult(
+            before_tokens=before_tokens,
+            after_tokens=estimate_chat_messages_tokens(self._messages),
+            summary=summary_text,
+        )
 
     def navigate_to(self, entry_id: str) -> list[ChatMessage]:
         """Move the active branch to an existing entry without rewriting session history."""

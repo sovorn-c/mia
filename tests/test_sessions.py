@@ -119,19 +119,24 @@ def test_harness_manual_compaction_updates_context_and_session(tmp_path: Path) -
     first = MessageEntry(message=ChatMessage(role="user", content="Build a parser"))
     second = MessageEntry(
         parent_id=first.id,
-        message=ChatMessage(role="assistant", content="A" * 1600),
+        message=ChatMessage(role="assistant", content="A" * 8000),
+    )
+    third = MessageEntry(
+        parent_id=second.id,
+        message=ChatMessage(role="user", content="Latest question"),
     )
     store = JsonlSessionStore(tmp_path / "manual-compact.jsonl")
     store.append_entry(first)
     store.append_entry(second)
-    messages = [first.message, second.message]
+    store.append_entry(third)
+    messages = [first.message, second.message, third.message]
     harness = AgentHarness(
         provider=MockProvider(),
         model="mock-model",
         messages=messages,
         session_store=store,
         compactor=ContextCompactor(keep_recent_tokens=200),
-        last_entry_id=second.id,
+        last_entry_id=third.id,
     )
 
     result = harness.compact_context()
@@ -143,10 +148,10 @@ def test_harness_manual_compaction_updates_context_and_session(tmp_path: Path) -
 
     entries = store.load_entries()
     compacted = next(entry for entry in entries if isinstance(entry, CompactionEntry))
-    assert compacted.parent_id == second.id
+    assert compacted.parent_id == third.id
     assert isinstance(entries[-1], LeafEntry)
     assert entries[-1].entry_id == compacted.id
-    assert [entry.id for entry in entries[:2]] == [first.id, second.id]
+    assert [entry.id for entry in entries[:3]] == [first.id, second.id, third.id]
 
 
 def test_context_compactor_threshold_and_compaction() -> None:
