@@ -112,6 +112,43 @@ def test_session_tree_cycle_detection() -> None:
         tree.get_path_to_entry("2")
 
 
+def test_harness_manual_compaction_updates_context_and_session(tmp_path: Path) -> None:
+    from mia_agent.harness import AgentHarness
+    from mia_ai.providers.mock import MockProvider
+
+    first = MessageEntry(message=ChatMessage(role="user", content="Build a parser"))
+    second = MessageEntry(
+        parent_id=first.id,
+        message=ChatMessage(role="assistant", content="A" * 1600),
+    )
+    store = JsonlSessionStore(tmp_path / "manual-compact.jsonl")
+    store.append_entry(first)
+    store.append_entry(second)
+    messages = [first.message, second.message]
+    harness = AgentHarness(
+        provider=MockProvider(),
+        model="mock-model",
+        messages=messages,
+        session_store=store,
+        compactor=ContextCompactor(keep_recent_tokens=200),
+        last_entry_id=second.id,
+    )
+
+    result = harness.compact_context()
+
+    assert result is not None
+    assert result.before_tokens == estimate_chat_messages_tokens(messages)
+    assert result.after_tokens < result.before_tokens
+    assert "Previous conversation summary" in str(harness.messages[0].content)
+
+    entries = store.load_entries()
+    compacted = next(entry for entry in entries if isinstance(entry, CompactionEntry))
+    assert compacted.parent_id == second.id
+    assert isinstance(entries[-1], LeafEntry)
+    assert entries[-1].entry_id == compacted.id
+    assert [entry.id for entry in entries[:2]] == [first.id, second.id]
+
+
 def test_context_compactor_threshold_and_compaction() -> None:
     compactor = ContextCompactor(
         context_window_tokens=1000,
