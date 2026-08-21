@@ -14,8 +14,8 @@ from mia_agent.auth.credentials import FileCredentialStore
 class MiaConfig(BaseModel):
     """User preferences and default model configuration."""
 
-    default_provider: str = "anthropic"
-    default_model: str = "claude-3-5-sonnet-20241022"
+    default_provider: str = "opencode-go"
+    default_model: str = "mimo-v2.5"
     base_urls: dict[str, str] = Field(default_factory=dict)
     max_steps_per_turn: int = 25
     temperature: float = 0.7
