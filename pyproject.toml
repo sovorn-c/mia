@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mia-ai"
+version = "0.1.0"
+description = "A hybrid Python coding-agent harness combining Pi's simplicity with DSH middleware guardrails."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "anyio>=4.0",
+    "httpx[socks]>=0.27",
+    "pydantic>=2.11",
+    "pygments>=2.18",
+    "rich>=13.0",
+    "textual>=8.2.8",
+    "typer>=0.12",
+]
+
+[project.scripts]
+mia = "mia_cli.main:app"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.10",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.5",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mia_ai", "src/mia_agent", "src/mia_middleware", "src/mia_tools", "src/mia_cli"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501", "SIM117"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+packages = ["mia_ai", "mia_agent", "mia_middleware", "mia_tools", "mia_cli"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra"
+

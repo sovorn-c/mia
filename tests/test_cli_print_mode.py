@@ -1,0 +1,74 @@
+"""Tests for Slice 8: Typer CLI and Rich Stream Renderer."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import patch
+
+from typer.testing import CliRunner
+
+from mia_agent.auth.credentials import FileCredentialStore
+from mia_agent.events import (
+    AssistantChunkEvent,
+    StepEndEvent,
+    StepStartEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+    TurnCompleteEvent,
+    TurnStartEvent,
+)
+from mia_cli.main import app
+from mia_cli.renderers.rich_stream import RichStreamRenderer
+
+runner = CliRunner()
+
+
+def test_cli_help() -> None:
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "Mia" in result.stdout or "Usage" in result.stdout
+
+
+def test_cli_profile_list() -> None:
+    result = runner.invoke(app, ["profile", "list"])
+    assert result.exit_code == 0
+    assert "coding" in result.stdout
+    assert "architect" in result.stdout
+    assert "minimal" in result.stdout
+
+
+def test_cli_login_flow(tmp_path: Path) -> None:
+    cred_path = tmp_path / "credentials.json"
+    with patch("mia_agent.auth.credentials.default_credentials_path", return_value=cred_path):
+        result = runner.invoke(app, ["login", "anthropic", "--key", "sk-ant-test-cli-key"])
+        assert result.exit_code == 0
+        assert "Successfully stored" in result.stdout
+
+        store = FileCredentialStore(path=cred_path)
+        assert store.get_api_key("anthropic") == "sk-ant-test-cli-key"
+
+
+def test_rich_stream_renderer_output() -> None:
+    renderer = RichStreamRenderer()
+
+    # Feed events
+    renderer.on_event(TurnStartEvent(turn_index=1, user_prompt="Hello"))
+    renderer.on_event(StepStartEvent(step_index=1))
+    renderer.on_event(AssistantChunkEvent(thought_delta="Thinking about greeting..."))
+    renderer.on_event(AssistantChunkEvent(delta_text="Hello world!"))
+    renderer.on_event(
+        ToolCallEvent(call_id="c1", tool_name="read_file", arguments={"path": "README.md"})
+    )
+    renderer.on_event(
+        ToolResultEvent(
+            call_id="c1",
+            tool_name="read_file",
+            output="File content",
+            is_error=False,
+            duration_ms=15.0,
+        )
+    )
+    renderer.on_event(StepEndEvent(step_index=1, input_tokens=10, output_tokens=5))
+    renderer.on_event(TurnCompleteEvent(total_steps=1, total_cost_usd=0.0001, stop_reason="stop"))
+
+    assert renderer.turn_count == 1
