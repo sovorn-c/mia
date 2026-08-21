@@ -62,7 +62,7 @@ tasks:
     verify: "grep -q 'Mode composes; Profile configures; Workflow coordinates; Agent executes; Plugin extends' specs/product/GLOSSARY_LATEST.yaml && grep -q 'Mode composes; Profile configures; Workflow coordinates; Agent executes; Plugin extends' specs/tech-architecture/tech-stack.md"
     risk: "P3"
     security: "none"
-    status: "failing"
+    status: "passing"
     allure:
       severity: "minor"
       categories: ["Documentation", "Architecture"]
