@@ -283,17 +283,7 @@ class MiaREPL:
         )
 
     def interactive_login(self, provider_hint: str | None = None) -> None:
-        """Step 1: Pure Provider Authentication Setup (Auth / API Keys with arrow-key navigation)."""
-        provider_options = [
-            ("opencode-go", "opencode-go", "OpenCode API Key [Recommended]"),
-            ("openrouter", "openrouter", "OpenRouter Multi-Model Gateway"),
-            ("gemini", "gemini", "Google Gemini API Key"),
-            ("openai", "openai", "OpenAI API Key / OAuth"),
-            ("anthropic", "anthropic", "Anthropic API Key"),
-            ("deepseek", "deepseek", "DeepSeek API Key"),
-            ("custom", "custom", "Custom OpenAI-Compatible / Local Endpoint"),
-        ]
-
+        """Step 1: Choose Authentication Method (API Key or Auth / OAuth)."""
         if provider_hint:
             clean_hint = provider_hint.strip().lower()
             selected_provider = clean_hint
@@ -308,18 +298,58 @@ class MiaREPL:
             base_url = preset["base_url"] if preset else "https://opencode.ai/zen/go/v1"
             chosen_model = preset["default_model"] if preset else "mimo-v2.5"
         else:
-            chosen = interactive_select(
-                "🔑 Mia Provider Authentication", provider_options, default_idx=0
-            )
-            if not chosen:
-                self.console.print("\n[yellow]Auth setup cancelled.[/yellow]\n")
+            # Top-level choice: API Key vs Auth
+            auth_methods = [
+                (
+                    "api_key",
+                    "API Key",
+                    "Paste API key (OpenCode, OpenRouter, Gemini, OpenAI, Claude, DeepSeek)",
+                ),
+                (
+                    "oauth",
+                    "Auth",
+                    "OAuth / Token login (OpenAI OAuth, Tau Auth)",
+                ),
+            ]
+            method = interactive_select("🔑 Mia Login", auth_methods, default_idx=0)
+            if not method:
+                self.console.print("\n[yellow]Login cancelled.[/yellow]\n")
                 return
-            selected_provider = chosen
-            preset = next(
-                (p for p in PROVIDER_CATALOG.values() if p["id"] == selected_provider), None
-            )
-            base_url = preset["base_url"] if preset else "https://opencode.ai/zen/go/v1"
-            chosen_model = preset["default_model"] if preset else "mimo-v2.5"
+
+            if method == "oauth":
+                oauth_providers = [
+                    ("openai", "openai", "OpenAI OAuth / Access Token"),
+                    ("tau", "tau", "Tau Token Auth"),
+                ]
+                selected_provider = (
+                    interactive_select("🔑 Select Auth Provider", oauth_providers, default_idx=0)
+                    or "openai"
+                )
+                preset = next(
+                    (p for p in PROVIDER_CATALOG.values() if p["id"] == selected_provider), None
+                )
+                base_url = preset["base_url"] if preset else "https://api.openai.com/v1"
+                chosen_model = preset["default_model"] if preset else "gpt-4o"
+            else:
+                provider_options = [
+                    ("opencode-go", "opencode-go", "OpenCode API Key [Recommended]"),
+                    ("openrouter", "openrouter", "OpenRouter Multi-Model Gateway"),
+                    ("gemini", "gemini", "Google Gemini API Key"),
+                    ("openai", "openai", "OpenAI API Key"),
+                    ("anthropic", "anthropic", "Anthropic Claude API Key"),
+                    ("deepseek", "deepseek", "DeepSeek API Key"),
+                    ("custom", "custom", "Custom OpenAI-Compatible / Local Endpoint"),
+                ]
+                chosen = interactive_select("🔑 Select Provider", provider_options, default_idx=0)
+                if not chosen:
+                    self.console.print("\n[yellow]Login cancelled.[/yellow]\n")
+                    return
+                selected_provider = chosen
+                preset = next(
+                    (p for p in PROVIDER_CATALOG.values() if p["id"] == selected_provider), None
+                )
+                base_url = preset["base_url"] if preset else "https://opencode.ai/zen/go/v1"
+                chosen_model = preset["default_model"] if preset else "mimo-v2.5"
 
         if selected_provider == "custom":
             try:
@@ -327,14 +357,14 @@ class MiaREPL:
                 if custom_url:
                     base_url = custom_url
             except (KeyboardInterrupt, EOFError):
-                self.console.print("\n[yellow]Auth setup cancelled.[/yellow]\n")
+                self.console.print("\n[yellow]Login cancelled.[/yellow]\n")
                 return
 
         try:
             prompt_str = (
-                f"Enter API key for {selected_provider} (press Enter if local/none): "
+                f"Enter API key / Token for {selected_provider} (press Enter if local/none): "
                 if selected_provider == "custom"
-                else f"Enter API key for {selected_provider}: "
+                else f"Enter API key / Token for {selected_provider}: "
             )
             try:
                 api_key = getpass.getpass(prompt_str).strip()
@@ -342,7 +372,7 @@ class MiaREPL:
                 api_key = input(prompt_str).strip()
 
             if not api_key and selected_provider != "custom":
-                self.console.print("[yellow]No API key entered. Auth aborted.[/yellow]\n")
+                self.console.print("[yellow]No API key entered. Login aborted.[/yellow]\n")
                 return
 
             if api_key:
@@ -372,7 +402,7 @@ class MiaREPL:
             )
 
         except (KeyboardInterrupt, EOFError):
-            self.console.print("\n[yellow]Auth setup cancelled.[/yellow]\n")
+            self.console.print("\n[yellow]Login cancelled.[/yellow]\n")
 
     def _prompt_model_scope(self, provider_id: str, base_url: str, default_model: str) -> None:
         """Step 2: Model Scope & Selection for an Authenticated Provider using Arrow Keys."""

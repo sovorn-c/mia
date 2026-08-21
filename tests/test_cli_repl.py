@@ -69,9 +69,9 @@ def test_repl_pi_style_auth_and_model_scoper(tmp_path: Path) -> None:
     repl.cred_store.path = cred_file
     repl.config_mgr.config_path = cfg_file
 
-    # Simulate: Pick Provider (opencode-go), Enter API Key
+    # Simulate: Pick Method (api_key), Pick Provider (opencode-go), Enter API Key
     with (
-        patch("builtins.input", side_effect=["opencode-go"]),
+        patch("builtins.input", side_effect=["api_key", "opencode-go"]),
         patch("getpass.getpass", return_value="sk-test-opencode-key-123"),
     ):
         repl.interactive_login()
