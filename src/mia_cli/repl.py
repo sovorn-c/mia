@@ -34,6 +34,7 @@ from mia_agent.session.jsonl import JsonlSessionStore
 from mia_ai.providers.anthropic import AnthropicProvider
 from mia_ai.providers.base import LLMProvider
 from mia_ai.providers.openai_compatible import OpenAICompatibleProvider
+from mia_cli.interactive_input import LiveInteractivePrompt
 from mia_middleware.pipeline import ToolPipeline
 from mia_middleware.security import SecurityGuardMiddleware
 from mia_middleware.telemetry import AuditLogMiddleware, CostBudgetMiddleware
@@ -186,6 +187,7 @@ class MiaREPL:
 
         self._history_file = Path.home() / ".mia" / "history"
         self._setup_readline()
+        self.prompt_reader = LiveInteractivePrompt(history_file=self._history_file)
         self._init_harness()
 
     def _setup_readline(self) -> None:
@@ -810,9 +812,8 @@ class MiaREPL:
 
         while True:
             try:
-                # Readline input with Carrot Orange prompt
-                prompt_prefix = "🥕 mia > "
-                user_input = input(prompt_prefix).strip()
+                # Live interactive character-by-character input with real-time '/' popup
+                user_input = self.prompt_reader.read_prompt("🥕 mia > ")
 
                 if not user_input:
                     continue

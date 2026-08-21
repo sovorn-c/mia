@@ -122,3 +122,15 @@ async def test_repl_execute_turn_with_tools(tmp_path: Path) -> None:
     assert (tmp_path / "hello.py").exists()
     assert (tmp_path / "hello.py").read_text() == "print('hello world')\n"
     assert repl.total_tokens > 0
+
+
+def test_live_interactive_prompt_non_tty(tmp_path: Path) -> None:
+    """Verify LiveInteractivePrompt correctly reads input in non-tty/test mode."""
+    from mia_cli.interactive_input import LiveInteractivePrompt
+
+    history_file = tmp_path / "history"
+    prompt_reader = LiveInteractivePrompt(history_file=history_file)
+
+    with patch("builtins.input", return_value="/help"):
+        res = prompt_reader.read_prompt()
+        assert res == "/help"
