@@ -22,7 +22,7 @@ tasks:
     verify: "uv run --offline pytest tests/test_orchestration.py -k factory && uv run --offline pytest tests/test_e2e_scenarios.py -k security_guardrail && printf 'no new security findings in affected paths\\n'"
     risk: "P0"
     security: "medium"
-    status: "failing"
+    status: "passing"
     allure:
       severity: "critical"
       categories: ["Orchestration", "Security Review", "Session", "integration"]
