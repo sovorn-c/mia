@@ -10,10 +10,9 @@ from typing import Any
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import CompleteEvent, Completer, Completion
 from prompt_toolkit.document import Document
-from prompt_toolkit.formatted_text import HTML, AnyFormattedText, to_formatted_text
+from prompt_toolkit.formatted_text import HTML, AnyFormattedText
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
-from prompt_toolkit.layout.processors import Processor, Transformation, TransformationInput
 from prompt_toolkit.shortcuts import CompleteStyle
 from prompt_toolkit.styles import Style
 
@@ -106,30 +105,14 @@ def format_status_toolbar(
     )
 
     return HTML(
-        f"<style fg='#9CA3AF'><b>📁 {workspace_name}</b> │ "
-        f"<b>🧠 {model_name}</b> │ "
+        f"<style fg='#9CA3AF'>  📁 <b>{workspace_name}</b> │ "
+        f"🧠 <b>{model_name}</b> │ "
         f"⚡ {tokens_str}/{window_str} ({pct_str}){thinking_badge} │ "
         f"<b>Esc:</b> Cancel/Tree • <b>Ctrl+O:</b> Logs • <b>/help</b></style>"
     )
 
 
 format_status_info = format_status_toolbar
-
-
-class InlineStatusProcessor(Processor):
-    """Render dynamic status info immediately below the active prompt line (not pinned to window bottom)."""
-
-    def __init__(self, callback: Callable[[], AnyFormattedText] | None = None) -> None:
-        self.callback = callback
-
-    def apply_transformation(self, ti: TransformationInput) -> Transformation:
-        if self.callback and ti.lineno == ti.document.line_count - 1:
-            fragments = list(ti.fragments)
-            fragments.append(("", "\n"))
-            for item in to_formatted_text(self.callback()):
-                fragments.append(item)
-            return Transformation(fragments)
-        return Transformation(ti.fragments)
 
 
 class LivePromptSession:
@@ -146,16 +129,14 @@ class LivePromptSession:
         self.toolbar_callback = toolbar_callback
         self.completer = SlashCompleter()
         self.bindings = self._create_keybindings()
-        self.status_processor = InlineStatusProcessor(callback=self.toolbar_callback)
         self.session: PromptSession[str] = PromptSession(
             history=self.history,
             completer=self.completer,
             key_bindings=self.bindings,
-            input_processors=[self.status_processor],
             style=MIA_STYLE,
             complete_while_typing=True,
             complete_style=CompleteStyle.COLUMN,
-            reserve_space_for_menu=8,
+            reserve_space_for_menu=0,
         )
 
     def _create_keybindings(self) -> KeyBindings:
@@ -205,19 +186,21 @@ class LivePromptSession:
         prompt_prefix: str = "› ",
         bottom_toolbar: Any = None,
     ) -> str:
-        """Async prompt user with floating slash completions, bracketed paste, and inline status info immediately below input."""
+        """Async prompt user with floating slash completions, bracketed paste, and adjusted bottom info."""
         if not sys.stdin.isatty():
             try:
                 return input(prompt_prefix).strip()
             except EOFError:
                 raise
 
+        toolbar_val = bottom_toolbar or (self.toolbar_callback() if self.toolbar_callback else None)
         formatted_prompt: AnyFormattedText = [("class:prompt", prompt_prefix)]
 
         try:
             result = await self.session.prompt_async(
                 formatted_prompt,
-                reserve_space_for_menu=6,
+                bottom_toolbar=toolbar_val,
+                reserve_space_for_menu=0,
             )
             return result.strip()
         except KeyboardInterrupt:
@@ -231,19 +214,21 @@ class LivePromptSession:
         prompt_prefix: str = "› ",
         bottom_toolbar: Any = None,
     ) -> str:
-        """Prompt user with floating slash completions, bracketed paste, and inline status info immediately below input."""
+        """Prompt user with floating slash completions, bracketed paste, and adjusted bottom info."""
         if not sys.stdin.isatty():
             try:
                 return input(prompt_prefix).strip()
             except EOFError:
                 raise
 
+        toolbar_val = bottom_toolbar or (self.toolbar_callback() if self.toolbar_callback else None)
         formatted_prompt: AnyFormattedText = [("class:prompt", prompt_prefix)]
 
         try:
             result = self.session.prompt(
                 formatted_prompt,
-                reserve_space_for_menu=6,
+                bottom_toolbar=toolbar_val,
+                reserve_space_for_menu=0,
             )
             return result.strip()
         except KeyboardInterrupt:
