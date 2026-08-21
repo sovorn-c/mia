@@ -102,10 +102,11 @@ Previous versions attempted character-by-character raw POSIX input (`setcbreak`)
 7. **`/cost`** (`/tokens`, `/stats`): Display real-time session tokens and estimated USD cost.
 8. **`/compact`** (`/compress`): Check token usage against context window and trigger compaction.
 9. **`/sessions`** (`/history`): List saved JSONL conversation trees.
-10. **`/init`** (`/bootstrap`): Scan repository architecture and verify `AGENTS.md`.
-11. **`/undo`** (`/revert`): Revert latest file change made by agent in this session.
-12. **`/clear`** (`/cls`): Clear screen and redraw clean single-line header banner.
-13. **`/quit`** (`/exit`): Save session and exit cleanly.
+10. **`/tree`** (`/branch`): Interactive tree navigator to jump to previous turn checkpoints and fork branches.
+11. **`/stop`** (`/abort`): Immediately halt and cancel an active running agent turn.
+12. **`/init`** (`/bootstrap`): Scan repository architecture and verify `AGENTS.md`.
+13. **`/clear`** (`/cls`): Clear screen and redraw clean single-line header banner.
+14. **`/quit`** (`/exit`): Save session and exit cleanly.
 
 ---
 
@@ -143,7 +144,7 @@ Mia uses a profile-driven execution model enforced via the `SecurityGuardMiddlew
 
 1. **`coding` Profile (Default):**
    * **Execution:** Autonomous execution with zero interrupting prompts.
-   * **Safety:** File modifications are immediately tracked in session history; users can inspect via `Ctrl+O` or revert with `/undo`.
+   * **Safety:** File modifications and turns are tracked in session JSONL history; users can inspect via `Ctrl+O` or branch back with `/tree`.
    * **Speed:** Fast and fluid developer loop.
 
 2. **`strict` Profile:**
@@ -155,5 +156,21 @@ Mia uses a profile-driven execution model enforced via the `SecurityGuardMiddlew
 
 4. **Universal Background Guardrail:**
    * `SecurityGuardMiddleware` actively blocks catastrophic or out-of-workspace actions (e.g. `rm -rf /`, directory traversal escapes, credential leaks) regardless of active profile.
+
+---
+
+## 7. Keyboard Shortcuts & Tree Navigation (Pi & Tau Standard)
+
+| Keybinding | Action | Behavior |
+| :--- | :--- | :--- |
+| **`Enter`** | Submit Prompt | Submits active prompt or executes slash command |
+| **`Shift+Enter`** | Multi-Line Newline | Inserts a newline without submitting |
+| **`Ctrl+C`** | Clear Input Buffer | Clears the current typed text in prompt without killing session |
+| **`Ctrl+D`** | Exit Session | Saves session JSONL tree and terminates cleanly |
+| **`Ctrl+O`** | Expand/Collapse Logs | Toggles detailed audit view of tool arguments and file diffs |
+| **`Ctrl+T`** | Toggle Thinking Trace | Toggles live visibility of model reasoning tokens |
+| **`Esc` (or `/tree`)** | Session Tree Fork | Opens interactive tree browser to jump to previous turn or fork branch |
+| **`/stop`** | Abort Turn | Halts the active LLM stream or running tool subprocess |
+
 
 
