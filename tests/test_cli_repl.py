@@ -185,3 +185,38 @@ def test_login_rejects_invalid_api_key(tmp_path: Path) -> None:
     # Credential should NOT be saved
     saved_key = repl.cred_store.get_api_key("opencode-go")
     assert saved_key is None
+
+
+def test_logout_command(tmp_path: Path) -> None:
+    """Verify /logout deletes stored credentials and resets model."""
+    cred_file = tmp_path / "credentials.json"
+    cfg_file = tmp_path / "config.json"
+    mock = MockProvider()
+    repl = MiaREPL(cwd=tmp_path, custom_provider=mock)
+    repl.cred_store.path = cred_file
+    repl.config_mgr.config_path = cfg_file
+
+    repl.cred_store.set_api_key("openai", "sk-openai-key")
+    repl.model_name = "gpt-4o"
+
+    repl.handle_logout("openai")
+    assert repl.cred_store.get_api_key("openai") is None
+    assert repl.model_name is None
+
+
+def test_openai_oauth_save_direct_token(tmp_path: Path) -> None:
+    """Verify OpenAIOAuthManager saves valid token."""
+    from unittest.mock import MagicMock
+
+    from mia_agent.auth.credentials import FileCredentialStore
+    from mia_agent.auth.openai_auth import OpenAIOAuthManager
+
+    cred_file = tmp_path / "credentials.json"
+    cred_store = FileCredentialStore(path=cred_file)
+    mgr = OpenAIOAuthManager(cred_store=cred_store)
+
+    with patch("httpx.get") as mock_get:
+        mock_get.return_value = MagicMock(status_code=200)
+        ok, msg = mgr.save_direct_token("oauth-test-token-123")
+        assert ok is True
+        assert cred_store.get_api_key("openai") == "oauth-test-token-123"

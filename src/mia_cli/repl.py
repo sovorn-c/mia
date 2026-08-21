@@ -19,6 +19,7 @@ from rich.text import Text
 
 from mia_agent.auth.config import ConfigManager, MiaConfig, validate_api_key
 from mia_agent.auth.credentials import FileCredentialStore
+from mia_agent.auth.openai_auth import OpenAIOAuthManager
 from mia_agent.events import (
     AssistantChunkEvent,
     StepEndEvent,
@@ -44,6 +45,7 @@ from mia_tools.fs import EditFileTool, ReadFileTool, WriteFileTool
 SLASH_COMMANDS = [
     "/help",
     "/login",
+    "/logout",
     "/model",
     "/profile",
     "/diff",
@@ -59,7 +61,8 @@ SLASH_COMMANDS = [
 
 COMMAND_DESCRIPTIONS: dict[str, str] = {
     "/help": "Show complete command menu, shortcuts & tools (alias: /?)",
-    "/login": "Interactive provider auth setup to add/update API keys (alias: /auth)",
+    "/login": "Authenticate AI provider via API key or OpenAI Auth (alias: /auth)",
+    "/logout": "Remove stored credentials & sign out of providers (alias: /signout)",
     "/model": "Interactive model picker & switcher scoped to authenticated providers (alias: /llm)",
     "/profile": "View or switch agent persona (alias: /role, /persona)",
     "/diff": "View git diff of session modifications with Monokai syntax (alias: /changes)",
@@ -75,6 +78,8 @@ COMMAND_DESCRIPTIONS: dict[str, str] = {
 COMMAND_ALIASES: dict[str, str] = {
     "/?": "/help",
     "/auth": "/login",
+    "/signout": "/logout",
+    "/disconnect": "/logout",
     "/llm": "/model",
     "/role": "/profile",
     "/persona": "/profile",
@@ -177,8 +182,19 @@ class MiaREPL:
         self.cred_store = FileCredentialStore()
         self.profile_mgr = ProfileManager()
         self.profile_name = profile
-        self.model_name: str | None = model or self.config_mgr.config.default_model or None
         self.custom_provider = custom_provider
+
+        # Never assume a model unless explicitly authenticated or provided
+        initial_model = model or self.config_mgr.config.default_model or None
+        if initial_model and not custom_provider:
+            inferred_prov = self.config_mgr.infer_provider(initial_model)
+            has_key = self.cred_store.get_api_key(inferred_prov) or os.environ.get(
+                f"{inferred_prov.upper()}_API_KEY"
+            )
+            if not has_key:
+                initial_model = None
+
+        self.model_name: str | None = initial_model
 
         self.session_id = f"session_{os.urandom(4).hex()}"
         self.harness: AgentHarness | None = None
@@ -283,7 +299,7 @@ class MiaREPL:
         )
 
     def interactive_login(self, provider_hint: str | None = None) -> None:
-        """Step 1: Choose Authentication Method (API Key or Auth / OAuth)."""
+        """Step 1: Choose Authentication Method (API Key or OpenAI Auth)."""
         if provider_hint:
             clean_hint = provider_hint.strip().lower()
             selected_provider = clean_hint
@@ -297,6 +313,7 @@ class MiaREPL:
             )
             base_url = preset["base_url"] if preset else "https://opencode.ai/zen/go/v1"
             chosen_model = preset["default_model"] if preset else "mimo-v2.5"
+            is_oauth = False
         else:
             # Top-level choice: API Key vs Auth
             auth_methods = [
@@ -308,7 +325,7 @@ class MiaREPL:
                 (
                     "oauth",
                     "Auth",
-                    "OpenAI OAuth / Session token login",
+                    "OpenAI OAuth / Browser or Token Login",
                 ),
             ]
             method = interactive_select("🔑 Mia Login", auth_methods, default_idx=0)
@@ -317,11 +334,13 @@ class MiaREPL:
                 return
 
             if method == "oauth":
+                is_oauth = True
                 selected_provider = "openai"
                 preset = next((p for p in PROVIDER_CATALOG.values() if p["id"] == "openai"), None)
                 base_url = preset["base_url"] if preset else "https://api.openai.com/v1"
                 chosen_model = preset["default_model"] if preset else "gpt-4o"
             else:
+                is_oauth = False
                 provider_options = [
                     ("opencode-go", "opencode-go", "OpenCode API Key [Recommended]"),
                     ("openrouter", "openrouter", "OpenRouter Multi-Model Gateway"),
@@ -351,54 +370,66 @@ class MiaREPL:
                 self.console.print("\n[yellow]Login cancelled.[/yellow]\n")
                 return
 
+        # 1. Handle OpenAI OAuth Flow
+        if is_oauth:
+            oauth_mgr = OpenAIOAuthManager(cred_store=self.cred_store)
+            self.console.print("\n[bold #FF7A00]Launching OpenAI OAuth...[/bold #FF7A00]")
+            self.console.print("[dim]Opening browser. If prompted, approve Mia access.[/dim]")
+
+            # Allow manual token paste or browser callback
+            try:
+                prompt_str = "Enter OpenAI OAuth / Session Token (or press Enter to open browser): "
+                manual_token = input(prompt_str).strip()
+                if manual_token:
+                    ok, msg = oauth_mgr.save_direct_token(manual_token)
+                    if not ok:
+                        self.console.print(f"\n[bold red]✗ Validation failed:[/bold red] {msg}\n")
+                        return
+                else:
+                    ok, msg, token = oauth_mgr.start_oauth_flow(timeout_seconds=60)
+                    if not ok:
+                        self.console.print(f"\n[bold red]✗ OAuth failed:[/bold red] {msg}\n")
+                        return
+            except (KeyboardInterrupt, EOFError):
+                self.console.print("\n[yellow]OAuth cancelled.[/yellow]\n")
+                return
+
+            self._save_auth_state(selected_provider, chosen_model, base_url)
+            self.console.print(
+                f"[bold green]✓ Validated & Authenticated {selected_provider} via Auth. Saved to ~/.mia/credentials.json[/bold green]\n"
+            )
+            return
+
+        # 2. Handle API Key Entry with Live Validation Probe
         try:
-            if selected_provider == "openai" and "oauth" in locals().get("method", ""):
-                prompt_str = "Enter OpenAI OAuth / Session Bearer Token: "
-            elif selected_provider == "custom":
-                prompt_str = f"Enter API key for {selected_provider} (press Enter if local/none): "
-            else:
-                prompt_str = f"Enter API key for {selected_provider}: "
+            prompt_str = (
+                f"Enter API key for {selected_provider} (press Enter if local/none): "
+                if selected_provider == "custom"
+                else f"Enter API key for {selected_provider}: "
+            )
             try:
                 api_key = getpass.getpass(prompt_str).strip()
             except Exception:
                 api_key = input(prompt_str).strip()
 
             if not api_key and selected_provider != "custom":
-                self.console.print("[yellow]No key entered. Login aborted.[/yellow]\n")
+                self.console.print("[yellow]No API key entered. Login aborted.[/yellow]\n")
                 return
 
-            # Live API Key Validation test
+            # Live Pre-Flight Key Validation Probe
             if api_key:
                 self.console.print(f"[dim]Testing {selected_provider} credentials...[/dim]")
                 is_valid, val_msg = validate_api_key(selected_provider, api_key, base_url)
                 if not is_valid:
                     self.console.print(f"\n[bold red]✗ Validation failed:[/bold red] {val_msg}")
                     self.console.print(
-                        "[yellow]Key was not saved. Please check your credentials and try again.[/yellow]\n"
+                        "[yellow]Credentials were NOT saved. Please check your key and try again.[/yellow]\n"
                     )
                     return
 
                 self.cred_store.set_api_key(selected_provider, api_key)
 
-            # Persist provider and default model into config
-            current_cfg = self.config_mgr.config
-            target_model = self.model_name or chosen_model
-            updated_cfg = MiaConfig(
-                default_provider=selected_provider,
-                default_model=target_model,
-                base_urls={**current_cfg.base_urls, selected_provider: base_url},
-                max_steps_per_turn=current_cfg.max_steps_per_turn,
-                temperature=current_cfg.temperature,
-                compaction_threshold_ratio=current_cfg.compaction_threshold_ratio,
-                context_window_tokens=current_cfg.context_window_tokens,
-                keep_recent_tokens=current_cfg.keep_recent_tokens,
-            )
-            self.config_mgr.save_config(updated_cfg)
-
-            self.model_name = target_model
-            self.config_mgr = ConfigManager()
-            self._init_harness()
-
+            self._save_auth_state(selected_provider, chosen_model, base_url)
             self.console.print(
                 f"[bold green]✓ Validated & Authenticated {selected_provider}. Saved to ~/.mia/credentials.json[/bold green]\n"
             )
@@ -406,38 +437,13 @@ class MiaREPL:
         except (KeyboardInterrupt, EOFError):
             self.console.print("\n[yellow]Login cancelled.[/yellow]\n")
 
-    def _prompt_model_scope(self, provider_id: str, base_url: str, default_model: str) -> None:
-        """Step 2: Model Scope & Selection for an Authenticated Provider using Arrow Keys."""
-        preset = next((p for p in PROVIDER_CATALOG.values() if p["id"] == provider_id), None)
-        models = preset["models"] if preset else []
-
-        model_options: list[tuple[str, str, str]] = [
-            (m, m, "Default model" if m == default_model else f"Model for {provider_id}")
-            for m in models
-        ]
-        model_options.append(("__custom__", "Custom Model", "Type custom model name..."))
-
-        selected = interactive_select(
-            f"🤖 Select Active Model for {provider_id}", model_options, default_idx=0
-        )
-        if not selected:
-            self.console.print("\n[yellow]Model selection cancelled.[/yellow]\n")
-            return
-
-        if selected == "__custom__":
-            try:
-                custom_m = input("Enter custom model name: ").strip()
-                selected_model = custom_m if custom_m else default_model
-            except (KeyboardInterrupt, EOFError):
-                self.console.print("\n[yellow]Model selection cancelled.[/yellow]\n")
-                return
-        else:
-            selected_model = selected
-
+    def _save_auth_state(self, provider_id: str, default_model: str, base_url: str) -> None:
+        """Persist default provider and model to config and reinitialize harness."""
         current_cfg = self.config_mgr.config
+        target_model = self.model_name or default_model
         updated_cfg = MiaConfig(
             default_provider=provider_id,
-            default_model=selected_model,
+            default_model=target_model,
             base_urls={**current_cfg.base_urls, provider_id: base_url},
             max_steps_per_turn=current_cfg.max_steps_per_turn,
             temperature=current_cfg.temperature,
@@ -446,12 +452,65 @@ class MiaREPL:
             keep_recent_tokens=current_cfg.keep_recent_tokens,
         )
         self.config_mgr.save_config(updated_cfg)
-
-        self.model_name = selected_model
+        self.model_name = target_model
         self.config_mgr = ConfigManager()
         self._init_harness()
 
-        self.console.print(f"[bold green]✓ Active model set to {self.model_name}[/bold green]\n")
+    def handle_logout(self, target_provider: str | None = None) -> None:
+        """Remove credentials and log out of providers cleanly."""
+        stored = self.cred_store.list_stored_providers()
+        if not stored:
+            self.console.print("[dim]No stored credentials to remove.[/dim]\n")
+            return
+
+        if target_provider:
+            clean = target_provider.strip().lower()
+            if clean in ("all", "*"):
+                for p in stored:
+                    self.cred_store.delete(p)
+                self.model_name = None
+                self.config_mgr.save_config(MiaConfig())
+                self._init_harness()
+                self.console.print(
+                    "[bold green]✓ Logged out of all providers. Credentials cleared.[/bold green]\n"
+                )
+            elif clean in stored:
+                self.cred_store.delete(clean)
+                if self.model_name and self.config_mgr.infer_provider(self.model_name) == clean:
+                    self.model_name = None
+                    self._init_harness()
+                self.console.print(
+                    f"[bold green]✓ Logged out of {clean}. Key removed from ~/.mia/credentials.json[/bold green]\n"
+                )
+            else:
+                self.console.print(f"[yellow]Provider '{clean}' is not authenticated.[/yellow]\n")
+            return
+
+        # Interactive logout selection
+        options = [(p, p, f"Remove saved credentials for {p}") for p in stored]
+        options.append(("all", "All Providers", "Clear all saved keys and reset session"))
+
+        chosen = interactive_select("🔑 Logout / Disconnect Provider", options, default_idx=0)
+        if not chosen:
+            return
+
+        if chosen == "all":
+            for p in stored:
+                self.cred_store.delete(p)
+            self.model_name = None
+            self.config_mgr.save_config(MiaConfig())
+            self._init_harness()
+            self.console.print(
+                "[bold green]✓ Logged out of all providers. All credentials cleared.[/bold green]\n"
+            )
+        else:
+            self.cred_store.delete(chosen)
+            if self.model_name and self.config_mgr.infer_provider(self.model_name) == chosen:
+                self.model_name = None
+                self._init_harness()
+            self.console.print(
+                f"[bold green]✓ Logged out of {chosen}. Key removed from ~/.mia/credentials.json[/bold green]\n"
+            )
 
     def interactive_model_picker(self) -> None:
         """Interactive Model Switcher (Pi-style) with Arrow Key Navigation."""
@@ -518,8 +577,8 @@ class MiaREPL:
 
     def print_banner(self) -> None:
         """Render clean, compact Claude Code/Pi-style banner."""
-        model_display = self.model_name if self.model_name else "Not Configured"
-        model_style = "bold #38BDF8" if self.model_name else "bold yellow"
+        model_display = self.model_name if self.model_name else "(none - run /login)"
+        model_style = "bold #38BDF8" if self.model_name else "dim yellow"
 
         banner_content = Text.assemble(
             (f"{self.cwd}  ", "dim #9CA3AF"),
@@ -565,7 +624,7 @@ class MiaREPL:
         if not self.harness:
             if not self.model_name:
                 self.console.print(
-                    "[yellow]⚠️  No model configured. Launching setup wizard first...[/yellow]\n"
+                    "[yellow]⚠️  No model configured. Launching login wizard first...[/yellow]\n"
                 )
                 self.interactive_login()
                 if not self.harness:
@@ -612,8 +671,6 @@ class MiaREPL:
                         in_thought = False
                         in_assistant = False
 
-                    # Claude Code style tool call header
-                    tool_desc = event.tool_name
                     args = event.arguments
                     if event.tool_name == "read_file":
                         tool_desc = f"Read file: [bold white]{args.get('path', '')}[/bold white]"
@@ -639,7 +696,6 @@ class MiaREPL:
                     )
                     self.console.print(f"{status} [dim]({event.duration_ms:.1f}ms)[/dim]")
 
-                    # If diff output, render with Monokai syntax highlighting
                     output_str = str(event.output)
                     if "--- a/" in output_str or "+++ b/" in output_str:
                         diff_syntax = Syntax(
@@ -680,6 +736,10 @@ class MiaREPL:
 
         elif cmd in ("/login", "/auth"):
             self.interactive_login(args)
+            return True
+
+        elif cmd in ("/logout", "/signout", "/disconnect"):
+            self.handle_logout(args)
             return True
 
         elif cmd in ("/quit", "/exit"):

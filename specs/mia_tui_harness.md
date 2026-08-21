@@ -8,54 +8,41 @@ A permanent, version-controlled specification for **Mia (Modular Intelligent Age
 
 | Concept | Responsibility | Storage & Resolution |
 |---|---|---|
-| **Provider Auth (`/login`)** | Configure API keys or tokens for AI providers (`opencode-go`, `openrouter`, `gemini`, `openai`, `anthropic`, `deepseek`, `custom`). | `~/.mia/credentials.json` |
-| **Model Scoping (`/model`)** | Interactive model switcher scoped dynamically to authenticated providers. | `~/.mia/config.json` (`default_model`) |
+| **API Key Login (`/login`)** | Configure API keys for AI providers (`opencode-go`, `openrouter`, `gemini`, `openai`, `anthropic`, `deepseek`, `custom`) with live validation probe. | `~/.mia/credentials.json` |
+| **OpenAI OAuth Login (`/login`)** | Interactive OAuth 2.0 PKCE / Session token browser authentication for OpenAI. | `~/.mia/credentials.json` |
+| **Logout (`/logout`)** | Disconnect and clear credentials for one or all providers. | `~/.mia/credentials.json` |
+| **Model Scoping (`/model`)** | Interactive model switcher scoped dynamically to authenticated providers with arrow navigation. | `~/.mia/config.json` (`default_model`) |
 | **`MiaREPL`** | The interactive stream-first terminal pair-programming harness. | Primary developer interface (`mia`) |
 | **`AgentHarness`** | Deterministic headless async brain executing multi-turn turns. | Execution loop in `src/mia_agent/harness.py` |
-| **`RichStreamRenderer`** | Unified terminal renderer for thoughts, tool calls, diffs, and markdown. | Live visual streaming in `src/mia_cli/repl.py` |
 
 ---
 
-## 2. The 2-Step Authentication & Scoped Model Switcher Workflow
+## 2. The 2-Option Login Flow with Pre-Flight Key Validation
 
 ```
-1. Step 1: Provider Authentication (/login)
-╭─ 🔑 Mia Provider Authentication ────────────────────────────────────────╮
-│ Select an AI Provider to authenticate:                                  │
-│  [1] opencode-go (OpenCode Zen API) [Recommended]                       │
-│  [2] openrouter  (OpenRouter Multi-Model Gateway)                       │
-│  [3] gemini      (Google Gemini API)                                    │
-│  [4] openai      (OpenAI API / OAuth)                                   │
-│  [5] anthropic   (Anthropic Claude API)                                 │
-│  [6] deepseek    (DeepSeek API)                                         │
-│  [7] custom      (Custom OpenAI-Compatible / Local / Ollama)            │
-╰─────────────────────────────────────────────────────────────────────────╯
-Select provider to authenticate [1-7]: 1
-Enter API key for opencode-go: ***********************************
-✓ Authenticated opencode-go. Saved to ~/.mia/credentials.json
+1. Step 1: Login Method Selection
+🔑 Mia Login (Use ↑/↓ arrows to navigate, Enter to select)
+🥕 API Key   │ Paste API key (OpenCode, OpenRouter, Gemini, OpenAI, Claude, DeepSeek)
+   Auth      │ OpenAI OAuth / Session token login
 
-2. Step 2: Immediate Model Scoping
-Available models for opencode-go:
-  [1] mimo-v2.5 (Default)
-  [2] qwen2.5-coder-32b-instruct
-  [3] deepseek-v3
-  [4] Custom / Enter model name
-Select active model [1-4 or type name] (default: 1): 1
-✓ Active model set to mimo-v2.5
+2. If API Key:
+🔑 Select Provider (Use ↑/↓ arrows to navigate, Enter to select)
+🥕 opencode-go │ OpenCode API Key [Recommended]
+   openrouter  │ OpenRouter Multi-Model Gateway
+   gemini      │ Google Gemini API Key
+   openai      │ OpenAI API Key
+   anthropic   │ Anthropic Claude API Key
+   deepseek    │ DeepSeek API Key
+   custom      │ Custom OpenAI-Compatible / Local Endpoint
 
-3. In-Session Model Switching (/model)
-╭─ 🤖 Scoped Model Switcher (Pi-Style) ───────────────────────────────────╮
-│ Index │ Provider    │ Model Name                                        │
-├───────┼─────────────┼───────────────────────────────────────────────────┤
-│ [1]   │ opencode-go │ mimo-v2.5 (Active)                                │
-│ [2]   │ opencode-go │ qwen2.5-coder-32b-instruct                        │
-│ [3]   │ opencode-go │ deepseek-v3                                       │
-│ [4]   │ deepseek    │ deepseek-chat                                     │
-│ [5]   │ deepseek    │ deepseek-reasoner                                 │
-│ [6]   │ any         │ Type custom model name...                         │
-╰───────┴─────────────┴───────────────────────────────────────────────────╯
-Select model [1-6 or type model name]: 2
-✓ Switched model to qwen2.5-coder-32b-instruct
+Enter API key: ***********************************
+Testing opencode-go credentials...
+✓ Validated & Authenticated opencode-go. Saved to ~/.mia/credentials.json
+
+3. If Auth:
+Launching OpenAI OAuth...
+Opening browser. If prompted, approve Mia access.
+✓ Validated & Authenticated openai via Auth. Saved to ~/.mia/credentials.json
 ```
 
 ---
@@ -65,7 +52,8 @@ Select model [1-6 or type model name]: 2
 | Command | Aliases | Purpose & Execution |
 |---|---|---|
 | **`/help`** | `/?` | Display interactive command menu, shortcuts & active tool permissions. |
-| **`/login`** | `/auth` | Authenticate an AI provider (`opencode-go`, `openrouter`, `gemini`, `openai`, `anthropic`, `deepseek`). |
+| **`/login`** | `/auth` | Authenticate an AI provider via API Key or OpenAI OAuth. |
+| **`/logout`** | `/signout`, `/disconnect` | Remove stored credentials for a provider or all providers. |
 | **`/model`** | `/llm` | Open interactive model switcher scoped to authenticated providers. |
 | **`/profile`** | `/role`, `/persona` | Switch agent persona (`coding`, `architect`, `code_mode`, `minimal`). |
 | **`/diff`** | `/changes` | Run `git diff` on the repository and render Monokai syntax-highlighted code diffs. |
@@ -81,17 +69,17 @@ Select model [1-6 or type model name]: 2
 
 ## 4. Work Breakdown Slices
 
-### Slice 1: Pi-Style Provider Authentication (`src/mia_cli/repl.py`)
-- [x] **Task 1.1:** Build provider authentication wizard for `opencode-go`, `openrouter`, `gemini`, `openai`, `anthropic`, `deepseek`, `custom`.
-- [x] **Task 1.2:** Store API keys atomically via `FileCredentialStore` in `~/.mia/credentials.json`.
-- [x] **Task 1.3:** First-run onboarding check: if no credentials exist, guide user through provider auth.
+### Slice 1: Authentication & Credential Management
+- [x] **Task 1.1:** 2-Option Login root (API Key vs OpenAI Auth).
+- [x] **Task 1.2:** Live Pre-flight Key Validation Probe before saving credentials.
+- [x] **Task 1.3:** OpenAI OAuth 2.0 PKCE browser authentication in `src/mia_agent/auth/openai_auth.py`.
+- [x] **Task 1.4:** Interactive `/logout` / `/signout` command to wipe credentials.
 
-### Slice 2: Scoped Model Switcher (`/model`)
-- [x] **Task 2.1:** Build `interactive_model_picker()` dynamically scanning authenticated providers.
-- [x] **Task 2.2:** Support selecting from catalog, typing custom model name, or direct `/model <name>`.
-- [x] **Task 2.3:** Save active model and base URL preferences to `~/.mia/config.json`.
+### Slice 2: Scoped Model Switcher (`/model`) & Clean Banner
+- [x] **Task 2.1:** Zero-assumption startup: `Model: (none - run /login)` until actually authenticated.
+- [x] **Task 2.2:** `interactive_model_picker()` dynamically scanning authenticated providers.
+- [x] **Task 2.3:** Carrot `🥕 ` pointer navigation for all interactive pickers.
 
 ### Slice 3: Verification & Quality Gate
-- [x] **Task 3.1:** Automated test suite in `tests/test_cli_repl.py` covering provider auth and model scoping.
+- [x] **Task 3.1:** Automated test suite in `tests/test_cli_repl.py` (63/63 passing).
 - [x] **Task 3.2:** 100% strict type checking (`mypy src`), formatting, and linting (`ruff`).
-- [x] **Task 3.3:** 100% passing tests (`pytest`).
