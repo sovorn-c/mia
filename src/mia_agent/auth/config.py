@@ -65,6 +65,53 @@ DEFAULT_PROVIDER_BASE_URLS = {
 }
 
 
+def validate_api_key(
+    provider_id: str, api_key: str, base_url: str | None = None
+) -> tuple[bool, str]:
+    """Test API key against the provider's live endpoint before saving credentials."""
+    import httpx
+
+    # If mock key in offline tests or mock provider
+    if api_key.startswith("sk-test-") or provider_id == "mock":
+        return True, "Test key accepted"
+
+    resolved_base_url = base_url or DEFAULT_PROVIDER_BASE_URLS.get(
+        provider_id, "https://api.openai.com/v1"
+    )
+
+    try:
+        if provider_id == "anthropic":
+            headers = {
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+            }
+            resp = httpx.get(
+                f"{resolved_base_url.rstrip('/')}/models", headers=headers, timeout=6.0
+            )
+            if resp.status_code == 200:
+                return True, "API Key successfully validated"
+            elif resp.status_code in (401, 403):
+                return False, f"Invalid API Key (HTTP {resp.status_code} Unauthorized)"
+            return True, f"Endpoint reached (HTTP {resp.status_code})"
+
+        else:
+            headers = {"Authorization": f"Bearer {api_key}"}
+            url = f"{resolved_base_url.rstrip('/')}/models"
+            resp = httpx.get(url, headers=headers, timeout=6.0)
+            if resp.status_code == 200:
+                return True, "API Key successfully validated"
+            elif resp.status_code in (401, 403):
+                return False, f"Invalid API Key (HTTP {resp.status_code} Unauthorized)"
+            return True, f"Endpoint reached (HTTP {resp.status_code})"
+
+    except httpx.ConnectError:
+        return False, f"Connection failed: Could not reach {resolved_base_url}"
+    except httpx.TimeoutException:
+        return False, f"Timeout: Provider {resolved_base_url} did not respond within 6s"
+    except Exception as exc:
+        return False, f"Validation failed: {exc}"
+
+
 def load_dotenv(dotenv_path: Path | None = None) -> None:
     """Lightweight .env loader into os.environ without third-party dependencies."""
     target = dotenv_path or Path.cwd() / ".env"

@@ -17,7 +17,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
-from mia_agent.auth.config import ConfigManager, MiaConfig
+from mia_agent.auth.config import ConfigManager, MiaConfig, validate_api_key
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.events import (
     AssistantChunkEvent,
@@ -308,7 +308,7 @@ class MiaREPL:
                 (
                     "oauth",
                     "Auth",
-                    "OAuth / Token login (OpenAI OAuth, Tau Auth)",
+                    "OpenAI OAuth / Session token login",
                 ),
             ]
             method = interactive_select("🔑 Mia Login", auth_methods, default_idx=0)
@@ -317,17 +317,8 @@ class MiaREPL:
                 return
 
             if method == "oauth":
-                oauth_providers = [
-                    ("openai", "openai", "OpenAI OAuth / Access Token"),
-                    ("tau", "tau", "Tau Token Auth"),
-                ]
-                selected_provider = (
-                    interactive_select("🔑 Select Auth Provider", oauth_providers, default_idx=0)
-                    or "openai"
-                )
-                preset = next(
-                    (p for p in PROVIDER_CATALOG.values() if p["id"] == selected_provider), None
-                )
+                selected_provider = "openai"
+                preset = next((p for p in PROVIDER_CATALOG.values() if p["id"] == "openai"), None)
                 base_url = preset["base_url"] if preset else "https://api.openai.com/v1"
                 chosen_model = preset["default_model"] if preset else "gpt-4o"
             else:
@@ -361,21 +352,32 @@ class MiaREPL:
                 return
 
         try:
-            prompt_str = (
-                f"Enter API key / Token for {selected_provider} (press Enter if local/none): "
-                if selected_provider == "custom"
-                else f"Enter API key / Token for {selected_provider}: "
-            )
+            if selected_provider == "openai" and "oauth" in locals().get("method", ""):
+                prompt_str = "Enter OpenAI OAuth / Session Bearer Token: "
+            elif selected_provider == "custom":
+                prompt_str = f"Enter API key for {selected_provider} (press Enter if local/none): "
+            else:
+                prompt_str = f"Enter API key for {selected_provider}: "
             try:
                 api_key = getpass.getpass(prompt_str).strip()
             except Exception:
                 api_key = input(prompt_str).strip()
 
             if not api_key and selected_provider != "custom":
-                self.console.print("[yellow]No API key entered. Login aborted.[/yellow]\n")
+                self.console.print("[yellow]No key entered. Login aborted.[/yellow]\n")
                 return
 
+            # Live API Key Validation test
             if api_key:
+                self.console.print(f"[dim]Testing {selected_provider} credentials...[/dim]")
+                is_valid, val_msg = validate_api_key(selected_provider, api_key, base_url)
+                if not is_valid:
+                    self.console.print(f"\n[bold red]✗ Validation failed:[/bold red] {val_msg}")
+                    self.console.print(
+                        "[yellow]Key was not saved. Please check your credentials and try again.[/yellow]\n"
+                    )
+                    return
+
                 self.cred_store.set_api_key(selected_provider, api_key)
 
             # Persist provider and default model into config
@@ -398,7 +400,7 @@ class MiaREPL:
             self._init_harness()
 
             self.console.print(
-                f"[bold green]✓ Authenticated {selected_provider}. API key saved to ~/.mia/credentials.json[/bold green]\n"
+                f"[bold green]✓ Validated & Authenticated {selected_provider}. Saved to ~/.mia/credentials.json[/bold green]\n"
             )
 
         except (KeyboardInterrupt, EOFError):

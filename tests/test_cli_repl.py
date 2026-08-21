@@ -151,3 +151,37 @@ def test_interactive_select_non_tty() -> None:
     with patch("builtins.input", return_value="opt_2"):
         res2 = interactive_select("Test Title", options)
         assert res2 == "opt_2"
+
+
+def test_validate_api_key_rejection(tmp_path: Path) -> None:
+    """Verify validate_api_key detects 401 Unauthorized responses."""
+    from unittest.mock import MagicMock
+
+    from mia_agent.auth.config import validate_api_key
+
+    with patch("httpx.get") as mock_get:
+        mock_get.return_value = MagicMock(status_code=401)
+        valid, msg = validate_api_key("opencode-go", "bad-key-12345")
+        assert valid is False
+        assert "401" in msg
+
+
+def test_login_rejects_invalid_api_key(tmp_path: Path) -> None:
+    """Verify login wizard does NOT save invalid API key."""
+    cred_file = tmp_path / "credentials.json"
+    cfg_file = tmp_path / "config.json"
+    mock = MockProvider()
+    repl = MiaREPL(cwd=tmp_path, custom_provider=mock)
+    repl.cred_store.path = cred_file
+    repl.config_mgr.config_path = cfg_file
+
+    with (
+        patch("mia_agent.auth.config.validate_api_key", return_value=(False, "Invalid Key")),
+        patch("builtins.input", side_effect=["api_key", "opencode-go"]),
+        patch("getpass.getpass", return_value="invalid-key-xyz"),
+    ):
+        repl.interactive_login()
+
+    # Credential should NOT be saved
+    saved_key = repl.cred_store.get_api_key("opencode-go")
+    assert saved_key is None
