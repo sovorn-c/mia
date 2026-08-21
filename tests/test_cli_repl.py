@@ -15,6 +15,7 @@ from mia_agent.session.jsonl import JsonlSessionStore
 from mia_ai.providers.mock import MockProvider
 from mia_ai.types import ToolCall
 from mia_cli.interactive_input import (
+    COMMAND_HINTS,
     LiveInteractivePrompt,
     LivePromptSession,
     SlashCompleter,
@@ -40,6 +41,19 @@ def test_slash_completer_and_menu() -> None:
     doc_text = Document(text="hello", cursor_position=5)
     completions_empty = list(completer.get_completions(doc_text, complete_event=MagicMock()))
     assert len(completions_empty) == 0
+
+
+def test_command_discovery_has_one_truthful_canonical_list() -> None:
+    from mia_cli.repl import COMMAND_ALIASES, COMMAND_DESCRIPTIONS, SLASH_COMMANDS
+
+    canonical = [command for command, _ in COMMAND_HINTS]
+
+    assert len(canonical) == 17
+    assert "/mode" in canonical
+    assert "/stop" not in canonical
+    assert SLASH_COMMANDS == canonical
+    assert list(COMMAND_DESCRIPTIONS) == canonical
+    assert "/abort" not in COMMAND_ALIASES
 
 
 def test_format_status_toolbar() -> None:
