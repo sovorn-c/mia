@@ -14,7 +14,12 @@ from prompt_toolkit.filters import is_done
 from prompt_toolkit.formatted_text import HTML, AnyFormattedText
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
-from prompt_toolkit.layout.containers import ConditionalContainer, HSplit, Window
+from prompt_toolkit.layout.containers import (
+    ConditionalContainer,
+    FloatContainer,
+    HSplit,
+    Window,
+)
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.shortcuts import CompleteStyle
 from prompt_toolkit.styles import Style
@@ -151,8 +156,13 @@ class LivePromptSession:
                 ),
                 filter=~is_done,
             )
-            # Insert status container at index 1 (immediately below the main input buffer)
-            self.session.layout.container.children.insert(1, status_container)
+            c0 = self.session.layout.container.children[0]
+            main_input = getattr(c0, "alternative_content", None) or getattr(c0, "content", None)
+            if isinstance(main_input, FloatContainer) and isinstance(main_input.content, HSplit):
+                # Insert at index 2 (immediately below the default_buffer_window at index 1)
+                main_input.content.children.insert(2, status_container)
+            else:
+                self.session.layout.container.children.insert(1, status_container)
 
     def _create_keybindings(self) -> KeyBindings:
         kb = KeyBindings()
