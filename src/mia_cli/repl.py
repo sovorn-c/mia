@@ -770,7 +770,7 @@ class MiaREPL:
     def print_command_menu(self, filter_prefix: str | None = None) -> None:
         """Render the 17 canonical commands with descriptions and aliases."""
         table = Table(
-            title="🥕 Mia Essential Slash Commands",
+            title="🥕 Mia 17 Canonical Slash Commands",
             border_style="#2D3342",
             show_header=True,
             header_style="bold #FF7A00",
@@ -985,7 +985,7 @@ class MiaREPL:
                     f" - Git Repository: {'[green]Yes[/green]' if has_git else '[yellow]No[/yellow]'}\n"
                     f" - AGENTS.md Guidelines: {'[green]Found[/green]' if has_agents else '[dim]None[/dim]'}\n"
                     f" - README.md: {'[green]Found[/green]' if has_readme else '[dim]None[/dim]'}",
-                    title="[bold #FF7A00]Repository Context[/bold #FF7A00]",
+                    title="[bold #FF7A00]Basic Repository Context[/bold #FF7A00]", 
                     border_style="#2D3342",
                 )
             )

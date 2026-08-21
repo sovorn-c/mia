@@ -57,7 +57,7 @@ def test_command_discovery_has_one_truthful_canonical_list() -> None:
     assert "/abort" not in COMMAND_ALIASES
 
 
-def test_help_and_init_describe_only_implemented_behavior(tmp_path: Path) -> None:
+def test_help_contract_describes_only_implemented_behavior(tmp_path: Path) -> None:
     repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
     repl.console = Console(record=True, width=120)
 
