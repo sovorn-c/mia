@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -15,11 +15,6 @@ from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.orchestration import ModeRuntime, OrchestrationErrorEvent
 from mia_agent.profiles.manager import ProfileManager
 from mia_cli.renderers.rich_stream import RichStreamRenderer
-from mia_middleware.pipeline import ToolPipeline
-from mia_middleware.security import SecurityGuardMiddleware
-from mia_middleware.telemetry import AuditLogMiddleware, CostBudgetMiddleware
-from mia_tools.bash import BashTool
-from mia_tools.fs import EditFileTool, ReadFileTool, WriteFileTool
 
 app = typer.Typer(
     name="mia",
@@ -33,28 +28,6 @@ app.add_typer(profile_app, name="profile")
 app.add_typer(sessions_app, name="sessions")
 
 console = Console()
-
-
-def get_default_tools(cwd: Path | None = None) -> list[object]:
-    """Instantiate standard built-in coding tools."""
-    return [
-        ReadFileTool(cwd=cwd),
-        WriteFileTool(cwd=cwd),
-        EditFileTool(cwd=cwd),
-        BashTool(cwd=cwd),
-    ]
-
-
-def build_pipeline_from_profile(profile_middlewares: list[str]) -> ToolPipeline:
-    """Instantiate middleware pipeline from profile specification."""
-    middlewares: list[Any] = []
-    if "security_guard" in profile_middlewares:
-        middlewares.append(SecurityGuardMiddleware())
-    if "cost_budget" in profile_middlewares:
-        middlewares.append(CostBudgetMiddleware())
-    if "audit_log" in profile_middlewares:
-        middlewares.append(AuditLogMiddleware())
-    return ToolPipeline(middlewares)
 
 
 async def _run_agent_loop(
