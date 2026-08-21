@@ -42,6 +42,7 @@ MIA_STYLE = Style.from_dict(
         "completion-menu.completion": "bg:default #9CA3AF",
         "completion-menu.completion.current": "bold bg:default #FF7A00",
         "completion-menu.meta": "bg:default #6B7280 italic",
+        "completion-menu.meta.completion": "bg:default #6B7280 italic",
         "completion-menu.meta.completion.current": "bold bg:default #FF7A00 italic",
         "completion-menu.multi-column-meta": "bg:default #6B7280",
         "scrollbar": "bg:default",
@@ -276,6 +277,7 @@ def interactive_select(
         except (KeyboardInterrupt, EOFError):
             return None
 
+    import os
     import termios
     import tty
 
@@ -286,7 +288,7 @@ def interactive_select(
 
     # Print Title Header
     sys.stdout.write(
-        f"\n\x1b[1;38;2;255;122;0m🥕 {title}\x1b[0m \x1b[2;37m(Press 1-{num_options}, or use ↑/↓ + Enter)\x1b[0m\n"
+        f"\n\x1b[1;38;2;255;122;0m🥕 {title}\x1b[0m \x1b[2;37m(Press 1-{num_options}, or use ↑/↓ + Enter, Esc to cancel)\x1b[0m\n"
     )
     sys.stdout.write("\x1b[38;2;45;51;66m" + "─" * 68 + "\x1b[0m\n")
 
@@ -307,22 +309,45 @@ def interactive_select(
         render_all(current_idx)
 
         while True:
-            char = sys.stdin.read(1)
+            # Read atomic raw bytes directly from fd to avoid Python TextIOWrapper buffer desync
+            raw_bytes = os.read(fd, 32)
+            if not raw_bytes:
+                continue
 
-            # Ctrl+C or Ctrl+D
-            if char in ("\x03", "\x04"):
+            # Ctrl+C (\x03) or Ctrl+D (\x04)
+            if raw_bytes in (b"\x03", b"\x04"):
                 sys.stdout.write("\n")
                 raise KeyboardInterrupt
 
-            # Enter
-            if char in ("\r", "\n"):
+            # Standalone Escape key (Esc) -> cancel selection cleanly
+            if raw_bytes == b"\x1b":
+                sys.stdout.write("\n\x1b[2;37m(Selection cancelled)\x1b[0m\n\n")
+                sys.stdout.flush()
+                return None
+
+            # Up Arrow (\x1b[A or \x1bOA)
+            if raw_bytes in (b"\x1b[A", b"\x1bOA"):
+                current_idx = (current_idx - 1) % num_options
+                sys.stdout.write(f"\x1b[{num_options}A")
+                render_all(current_idx)
+                continue
+
+            # Down Arrow (\x1b[B or \x1bOB)
+            if raw_bytes in (b"\x1b[B", b"\x1bOB"):
+                current_idx = (current_idx + 1) % num_options
+                sys.stdout.write(f"\x1b[{num_options}A")
+                render_all(current_idx)
+                continue
+
+            # Enter (\r or \n)
+            if raw_bytes in (b"\r", b"\n"):
                 sys.stdout.write(f"\n\x1b[1;32m✓ Selected: {options[current_idx][1]}\x1b[0m\n\n")
                 sys.stdout.flush()
                 return options[current_idx][0]
 
             # Direct single-number key entry (1..9)
-            if char.isdigit():
-                num = int(char)
+            if raw_bytes.isdigit():
+                num = int(raw_bytes.decode(errors="ignore"))
                 if 1 <= num <= num_options:
                     current_idx = num - 1
                     sys.stdout.write(
@@ -330,31 +355,6 @@ def interactive_select(
                     )
                     sys.stdout.flush()
                     return options[current_idx][0]
-
-            # ANSI Arrow Navigation or Standalone Escape (Esc to cancel/go back)
-            if char == "\x1b":
-                import select
-
-                r, _, _ = select.select([sys.stdin], [], [], 0.05)
-                if not r:
-                    # Standalone Esc pressed -> cancel selection cleanly
-                    sys.stdout.write("\n\x1b[2;37m(Selection cancelled)\x1b[0m\n\n")
-                    sys.stdout.flush()
-                    return None
-
-                seq1 = sys.stdin.read(1)
-                if seq1 == "[":
-                    r2, _, _ = select.select([sys.stdin], [], [], 0.05)
-                    if r2:
-                        seq2 = sys.stdin.read(1)
-                        if seq2 == "A":  # Up Arrow
-                            current_idx = (current_idx - 1) % num_options
-                            sys.stdout.write(f"\x1b[{num_options}A")
-                            render_all(current_idx)
-                        elif seq2 == "B":  # Down Arrow
-                            current_idx = (current_idx + 1) % num_options
-                            sys.stdout.write(f"\x1b[{num_options}A")
-                            render_all(current_idx)
 
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
