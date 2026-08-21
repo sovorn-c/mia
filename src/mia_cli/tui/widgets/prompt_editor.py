@@ -1,4 +1,4 @@
-"""Production-grade multi-line prompt editor with auto-growth, history, and keybindings."""
+"""Production-grade multi-line prompt editor with priority keybindings and history."""
 
 from __future__ import annotations
 
@@ -6,10 +6,62 @@ from typing import Any
 
 from rich.text import Text
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.events import Key
 from textual.message import Message
 from textual.widgets import Static, TextArea
+
+
+class PromptTextArea(TextArea):
+    """Subclassed TextArea with priority bindings for instant Enter-submission and history."""
+
+    BINDINGS = [
+        Binding("enter", "submit_prompt", "Submit", priority=True),
+        Binding("shift+enter", "insert_newline", "Newline", priority=True),
+        Binding("up", "history_prev", "Previous", priority=True),
+        Binding("down", "history_next", "Next", priority=True),
+    ]
+
+    class Submitted(Message):
+        """Emitted when Enter is pressed to submit text."""
+
+        def __init__(self, text: str) -> None:
+            super().__init__()
+            self.text = text
+
+    class HistoryNavigation(Message):
+        """Emitted when navigating history with Up/Down."""
+
+        def __init__(self, direction: str) -> None:
+            super().__init__()
+            self.direction = direction
+
+    def action_submit_prompt(self) -> None:
+        """Handle Enter key: submit prompt if text is non-empty."""
+        content = self.text.strip()
+        if content:
+            self.post_message(self.Submitted(content))
+            self.text = ""
+
+    def action_insert_newline(self) -> None:
+        """Handle Shift+Enter key: insert literal newline."""
+        self.insert("\n")
+
+    def action_history_prev(self) -> None:
+        """Navigate to previous command history if cursor is on line 0."""
+        cursor_line = self.cursor_location[0]
+        if cursor_line == 0:
+            self.post_message(self.HistoryNavigation("up"))
+        else:
+            self.action_cursor_up()
+
+    def action_history_next(self) -> None:
+        """Navigate to next command history if cursor is on last line."""
+        cursor_line = self.cursor_location[0]
+        if cursor_line >= self.document.line_count - 1:
+            self.post_message(self.HistoryNavigation("down"))
+        else:
+            self.action_cursor_down()
 
 
 class MiaPromptEditor(Vertical):
@@ -17,20 +69,22 @@ class MiaPromptEditor(Vertical):
 
     DEFAULT_CSS = """
     MiaPromptEditor {
+        dock: bottom;
         height: auto;
         min-height: 4;
         max-height: 10;
-        background: #181B22;
-        border: solid #2D3342;
+        background: #14171F;
+        border-top: solid #2B303B;
         padding: 0 1;
     }
 
     MiaPromptEditor:focus-within {
-        border: solid #FF7A00;
+        border-top: solid #FF7A00;
     }
 
     #editor-row {
         height: auto;
+        min-height: 3;
     }
 
     .editor-prefix {
@@ -41,16 +95,17 @@ class MiaPromptEditor(Vertical):
         padding-top: 0;
     }
 
-    #prompt-textarea {
+    PromptTextArea {
         height: auto;
         min-height: 2;
         max-height: 8;
-        background: #181B22;
+        background: #14171F;
         border: none;
         color: #F3F4F6;
+        padding: 0;
     }
 
-    #prompt-textarea:focus {
+    PromptTextArea:focus {
         border: none;
     }
 
@@ -85,7 +140,7 @@ class MiaPromptEditor(Vertical):
         self._history_idx: int = -1
 
         self.prefix_widget = Static(Text("🥕 > ", style="bold #FF7A00"), classes="editor-prefix")
-        self.textarea = TextArea(
+        self.textarea = PromptTextArea(
             text="",
             id="prompt-textarea",
             language=None,
@@ -103,6 +158,10 @@ class MiaPromptEditor(Vertical):
             yield self.textarea
         yield self.hint_widget
 
+    def on_mount(self) -> None:
+        """Focus the input editor automatically when mounted."""
+        self.textarea.focus()
+
     def set_target(self, target_agent: str) -> None:
         """Update target agent and hint bar."""
         self.default_target = target_agent
@@ -118,55 +177,17 @@ class MiaPromptEditor(Vertical):
             ),
         )
 
-    def on_key(self, event: Key) -> None:
-        """Handle Enter to submit and Up/Down history cycling."""
-        # Enter submits prompt (Shift+Enter inserts newline in TextArea)
-        if event.key == "enter":
-            event.prevent_default()
-            event.stop()
-            self._submit_current_text()
-            return
-
-        # Up arrow -> history previous
-        if event.key == "up" and self._history:
-            cursor_location = self.textarea.cursor_location
-            if cursor_location[0] == 0:  # On first line
-                event.prevent_default()
-                event.stop()
-                if self._history_idx == -1:
-                    self._history_idx = len(self._history) - 1
-                elif self._history_idx > 0:
-                    self._history_idx -= 1
-                self.textarea.text = self._history[self._history_idx]
-                self.textarea.move_cursor((self.textarea.document.line_count - 1, 0))
-                return
-
-        # Down arrow -> history next
-        if event.key == "down" and self._history:
-            cursor_location = self.textarea.cursor_location
-            if cursor_location[0] >= self.textarea.document.line_count - 1:  # On last line
-                event.prevent_default()
-                event.stop()
-                if self._history_idx != -1:
-                    if self._history_idx < len(self._history) - 1:
-                        self._history_idx += 1
-                        self.textarea.text = self._history[self._history_idx]
-                    else:
-                        self._history_idx = -1
-                        self.textarea.text = ""
-                return
-
-    def _submit_current_text(self) -> None:
-        raw_text = self.textarea.text.strip()
+    def on_prompt_text_area_submitted(self, message: PromptTextArea.Submitted) -> None:
+        """Handle submission from the inner PromptTextArea."""
+        raw_text = message.text.strip()
         if not raw_text:
             return
 
-        # Record into history buffer
+        # Save to history buffer
         self._history.append(raw_text)
         self._history_idx = -1
-        self.textarea.text = ""
 
-        # Check for slash commands (/model, /profile, /compact, /clear, /help, /quit)
+        # Check for slash command (/model, /profile, /compact, /clear, /help, /quit)
         if raw_text.startswith("/") and "\n" not in raw_text:
             parts = raw_text[1:].split(" ", 1)
             cmd = parts[0].lower().strip()
@@ -191,3 +212,26 @@ class MiaPromptEditor(Vertical):
 
         if prompt:
             self.post_message(self.PromptSubmitted(target_agent=target, prompt_text=prompt))
+
+    def on_prompt_text_area_history_navigation(
+        self, message: PromptTextArea.HistoryNavigation
+    ) -> None:
+        """Handle Up/Down arrow history cycling."""
+        if not self._history:
+            return
+
+        if message.direction == "up":
+            if self._history_idx == -1:
+                self._history_idx = len(self._history) - 1
+            elif self._history_idx > 0:
+                self._history_idx -= 1
+            self.textarea.text = self._history[self._history_idx]
+            self.textarea.move_cursor((self.textarea.document.line_count - 1, 0))
+        elif message.direction == "down":
+            if self._history_idx != -1:
+                if self._history_idx < len(self._history) - 1:
+                    self._history_idx += 1
+                    self.textarea.text = self._history[self._history_idx]
+                else:
+                    self._history_idx = -1
+                    self.textarea.text = ""

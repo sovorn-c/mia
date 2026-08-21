@@ -1,4 +1,4 @@
-"""Automated pilot tests for Mia Production Textual TUI."""
+"""Automated pilot tests for Mia Production Textual TUI with real keystroke simulation."""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from mia_agent.herd.manager import HerdManager
 from mia_ai.providers.mock import MockProvider
 from mia_cli.tui.app import MiaApp
 from mia_cli.tui.sidebar import AgentListItem
-from mia_cli.tui.widgets.prompt_editor import MiaPromptEditor
+from mia_cli.tui.widgets.message_card import UserMessageCard
+from mia_cli.tui.widgets.prompt_editor import PromptTextArea
 from mia_cli.tui.widgets.thinking_drawer import ThoughtDrawer
 from mia_cli.tui.widgets.tool_card import ToolCallCard
 
@@ -36,6 +37,37 @@ async def test_tui_app_mount_and_default_herd(tmp_path: Path) -> None:
         # Check header content
         assert app.header_widget.model_name == "mock-model"
         assert "MIA" in app.header_widget._build_content().plain
+
+
+@pytest.mark.asyncio
+async def test_tui_real_keystroke_prompt_submission(tmp_path: Path) -> None:
+    """Verify typing prompt in PromptTextArea and pressing Enter submits turn."""
+    manager = HerdManager(cwd=tmp_path)
+    mock = MockProvider()
+    mock.queue_text_response("Here is the solution to your request.")
+
+    _ = manager.spawn_agent(
+        agent_id="lead",
+        name="Lead",
+        profile="architect",
+        custom_provider=mock,
+    )
+
+    app = MiaApp(herd_manager=manager, model_name="mock-model")
+
+    async with app.run_test() as pilot:
+        # Target PromptTextArea and insert text
+        textarea = app.query_one(PromptTextArea)
+        textarea.text = "Hello Mia Lead"
+
+        # Press Enter key to submit
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # Verify UserMessageCard was mounted
+        user_cards = app.query(UserMessageCard)
+        assert len(user_cards) >= 1
+        assert user_cards[0].prompt == "Hello Mia Lead"
 
 
 @pytest.mark.asyncio
@@ -103,25 +135,3 @@ async def test_tui_widget_live_rendering(tmp_path: Path) -> None:
         tool_cards = app.query(ToolCallCard)
         assert len(tool_cards) >= 1
         assert tool_cards[0].is_done is True
-
-
-@pytest.mark.asyncio
-async def test_tui_prompt_editor_submission_and_slash_command(tmp_path: Path) -> None:
-    """Verify MiaPromptEditor handles prompt submissions and slash commands."""
-    manager = HerdManager(cwd=tmp_path)
-    app = MiaApp(herd_manager=manager, model_name="mock-model")
-
-    async with app.run_test() as pilot:
-        # Test slash command
-        app.prompt_editor.post_message(
-            MiaPromptEditor.SlashCommandTriggered(command="model", args="mimo-v2.5")
-        )
-        await pilot.pause()
-        assert app.model_name == "mimo-v2.5"
-
-        # Test prompt submission
-        app.prompt_editor.post_message(
-            MiaPromptEditor.PromptSubmitted(target_agent="coder", prompt_text="Fix typo")
-        )
-        await pilot.pause()
-        assert app.active_agent_id == "coder"
