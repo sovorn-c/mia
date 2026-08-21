@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from pathlib import Path
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -165,6 +166,24 @@ def test_invalid_profile_preserves_active_runtime(tmp_path: Path) -> None:
     output = repl.console.export_text()
     assert "not found" in output
     assert "Available profiles" in output
+
+
+def test_diff_reports_git_failure_instead_of_clean_tree(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+    failed_diff = subprocess.CompletedProcess(
+        args=["git", "diff"],
+        returncode=128,
+        stdout="",
+        stderr="fatal: not a git repository",
+    )
+
+    with patch("mia_cli.repl.subprocess.run", return_value=failed_diff):
+        assert repl.handle_slash_command("/diff") is True
+
+    output = repl.console.export_text()
+    assert "not a git repository" in output
+    assert "Working tree clean" not in output
 
 
 def test_repl_mode_selection_and_invalid_mode(tmp_path: Path) -> None:
