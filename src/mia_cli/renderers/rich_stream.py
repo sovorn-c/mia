@@ -57,15 +57,17 @@ class RichStreamRenderer:
         self.turn_audit_log: list[dict[str, Any]] = []
         self._active_status: Any = None
 
-    def _start_status(self, text: str) -> None:
-        """Start or update animated status spinner."""
+    def _start_status(self, text: str, spinner_style: str = "bold #FF7A00") -> None:
+        """Start or update animated status spinner with clean dots animation."""
         if not self.console.is_terminal:
             return
         if self._active_status is None:
-            self._active_status = self.console.status(text, spinner="dots")
+            self._active_status = self.console.status(
+                text, spinner="dots", spinner_style=spinner_style
+            )
             self._active_status.start()
         else:
-            self._active_status.update(text)
+            self._active_status.update(text, spinner_style=spinner_style)
 
     def _stop_status(self) -> None:
         """Stop and clear active status spinner cleanly."""
@@ -81,7 +83,7 @@ class RichStreamRenderer:
             self.thinking_buffer.clear()
             self.turn_audit_log.clear()
             self._end_streams()
-            self._start_status("[bold #FF7A00]🥕 Thinking...[/bold #FF7A00]")
+            self._start_status("[bold #FF7A00]Thinking...[/bold #FF7A00]")
 
         elif isinstance(event, StepStartEvent):
             self._end_streams()
@@ -104,9 +106,7 @@ class RichStreamRenderer:
                     )
                 else:
                     elapsed = max(0.0, time.time() - self.turn_start_time)
-                    self._start_status(
-                        f"[bold #FF7A00]🥕 Thinking ({elapsed:.1f}s)...[/bold #FF7A00]"
-                    )
+                    self._start_status(f"[bold #FF7A00]Thinking ({elapsed:.1f}s)...[/bold #FF7A00]")
 
             if event.delta_text:
                 self._stop_status()
@@ -132,7 +132,10 @@ class RichStreamRenderer:
             else:
                 tool_summary = event.tool_name
 
-            self._start_status(f"[bold #38BDF8]⚙ Running {tool_summary}...[/bold #38BDF8]")
+            self._start_status(
+                f"[bold #38BDF8]Running {tool_summary}...[/bold #38BDF8]",
+                spinner_style="bold #38BDF8",
+            )
             self.turn_audit_log.append(
                 {
                     "tool_name": event.tool_name,
@@ -173,7 +176,7 @@ class RichStreamRenderer:
                 self.turn_audit_log[-1]["output"] = output_str
 
             # Resume thinking status for subsequent steps
-            self._start_status("[bold #FF7A00]🥕 Thinking...[/bold #FF7A00]")
+            self._start_status("[bold #FF7A00]Thinking...[/bold #FF7A00]")
 
         elif isinstance(event, StepEndEvent):
             self._end_streams()

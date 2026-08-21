@@ -48,9 +48,10 @@ MIA_STYLE = Style.from_dict(
         "scrollbar": "bg:default",
         "scrollbar.background": "bg:default",
         "scrollbar.button": "bg:default #FF7A00",
-        "bottom-toolbar": "bg:default #9CA3AF",
-        "bottom-toolbar.accent": "bold #FF7A00",
-        "bottom-toolbar.dim": "#6B7280",
+        "bottom-toolbar": "noreverse bg:default #9CA3AF",
+        "bottom-toolbar.text": "noreverse bg:default #9CA3AF",
+        "bottom-toolbar.accent": "bold bg:default #FF7A00",
+        "bottom-toolbar.dim": "bg:default #6B7280",
     }
 )
 
