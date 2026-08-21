@@ -1,13 +1,13 @@
 # specs/state.yaml — Active session state
 session:
-  active_flow: "verify_work"
+  active_flow: "audit_code"
   active_epic_id: "e02"
   active_story_id: "e02s04"
   target_version: "0.2.0"
 
 handoff:
-  next_skill: "audit-code"
-  summary: "Epic e02 passed all verify-work multi-phase gates. 67/67 tests passing, strict Mypy passing (0 errors), Ruff lint and formatting clean. Verification evidence saved to specs/verifications/e02s04-verify.yaml."
+  next_skill: "commit-message"
+  summary: "audit-code self-review passed across all categories: Supply Chain, Types, SOLID, Tests, and Style. 67/67 tests passing, strict Mypy clean."
 
 git:
   branch: "main"
