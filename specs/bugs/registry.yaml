@@ -1,0 +1,9 @@
+bugs:
+  - bug_id: BUG-001
+    date: 2026-08-22
+    status: open
+    severity: medium
+    priority: P1
+    scope: cli
+    summary: /scoped-models prints models but does not open a selector or save scope state
+    file: specs/bugs/BUG-001.md

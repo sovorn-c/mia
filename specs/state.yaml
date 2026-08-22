@@ -1,13 +1,16 @@
 session:
-  active_flow: commit_message
+  active_flow: fix_bug
   active_epic_id: e03
   active_story_id: e03s02
   target_version: 0.3.0
+  bug_cycle:
+    current_step: 1
+    completed_steps: []
+    bug_id: BUG-001
 handoff:
-  next_skill: commit-message
-  summary: e03s02 in-flight adjustments are implemented, audited, and manually confirmed.
-    Connected-provider models, /scoped-models, shortcuts, and direct session resume pass
-    all quality gates and 100 tests. Branch is ready for commit review and merge.
+  next_skill: investigate-bug
+  summary: BUG-001 is open. /scoped-models prints models instead of opening a
+    Pi-style selectable, savable scope selector. Baseline quality gates pass.
 git:
   branch: e03s02-essential-slash-command-contracts
 metrics:
