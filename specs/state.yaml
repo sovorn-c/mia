@@ -1,13 +1,13 @@
 session:
-  active_flow: verify_work
+  active_flow: commit_message
   active_epic_id: e03
   active_story_id: e03s02
   target_version: 0.3.0
 handoff:
-  next_skill: verify-work
-  summary: e03s02 in-flight adjustments implemented and audited; connected-provider
-    models, /scoped-models, shortcuts, and direct session resume are complete. All
-    automated verify-work gates and 100 tests pass; user manual UAT confirmation remains.
+  next_skill: commit-message
+  summary: e03s02 in-flight adjustments are implemented, audited, and manually confirmed.
+    Connected-provider models, /scoped-models, shortcuts, and direct session resume pass
+    all quality gates and 100 tests. Branch is ready for commit review and merge.
 git:
   branch: e03s02-essential-slash-command-contracts
 metrics:

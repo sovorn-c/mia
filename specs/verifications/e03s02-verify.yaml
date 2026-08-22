@@ -1,7 +1,7 @@
 story_id: e03s02
 verified_at: "2026-08-22T00:41:06Z"
 verifier: verify-work
-status: in_progress
+status: passing
 risk: P1
 branch: e03s02-essential-slash-command-contracts
 phases:
@@ -62,7 +62,7 @@ phases:
     passed: true
     actual: "Each behavior has separate RED/GREEN commits; isolation checks passed for original command fixes plus connected providers, scoped models, shortcuts, stale discovery state, and direct session resume."
   manual:
-    user_confirmation: pending
+    user_confirmation: confirmed
     steps:
       - step: "Run /help in the inline REPL."
         expected: "18 Canonical Slash Commands appears; /mode and /scoped-models are listed; /stop is absent."
@@ -83,6 +83,7 @@ phases:
       - step: "Run /quit and copy the printed resume command."
         expected: "Output includes the active session ID and `mia --session <id>` reopens it."
     automated_cli_smoke: passed
+    actual: "User confirmed all listed manual behaviors."
   gaps:
     closed: true
     note: "Verify-work found invalid --session paths leaked a traceback; fixed by 006c889 with regression coverage. Audit also closed duplicate-provider model IDs and stale scopes."
