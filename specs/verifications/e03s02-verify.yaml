@@ -75,7 +75,7 @@ phases:
       - step: "Open prompt completion for /mo."
         expected: "/mode is offered; /stop is not offered."
       - step: "Connect at least two providers and run /model."
-        expected: "All Providers and each connected provider are offered; unconnected providers are absent."
+        expected: "One model selector lists models from every connected provider; unconnected providers are absent."
       - step: "Run /scoped-models <model-a>,<model-b>, then press Ctrl+P twice."
         expected: "The active model cycles in configured order and wraps."
       - step: "Press Ctrl+L and Shift+Tab."

@@ -327,10 +327,13 @@ def test_connected_provider_models_are_all_discovered_without_unconnected(tmp_pa
         patch("mia_cli.repl.discover_provider_models", side_effect=models_for),
         patch(
             "mia_cli.repl.interactive_select",
-            side_effect=["all", "openai::openai-model"],
-        ),
+            return_value="openai::openai-model",
+        ) as select,
     ):
         repl.interactive_model_picker()
+
+    select.assert_called_once()
+    assert select.call_args.args[0] == "🤖 Switch Active Model"
 
     assert discovered == ["deepseek", "openai", "gemini"]
     assert repl.model_name == "openai-model"
@@ -346,6 +349,32 @@ def test_connected_provider_models_are_all_discovered_without_unconnected(tmp_pa
 
     assert repl.available_model_sources == {"deepseek::deepseek-model": "deepseek"}
     assert repl.scoped_models == ["deepseek::deepseek-model"]
+
+
+def test_custom_connected_model_is_in_model_picker(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.cred_store.path = tmp_path / "credentials.json"
+    repl.config_mgr.config_path = tmp_path / "config.json"
+    repl.config_mgr.save_config(
+        repl.config_mgr.config.model_copy(
+            update={
+                "default_provider": "custom",
+                "default_model": "local-model",
+                "base_urls": {"custom": "http://localhost:11434/v1"},
+            }
+        )
+    )
+    repl.model_name = "local-model"
+
+    with (
+        patch.dict("os.environ", {}, clear=True),
+        patch("mia_cli.repl.discover_provider_models", return_value=["other-local-model"]),
+        patch("mia_cli.repl.interactive_select", return_value="custom::local-model") as select,
+    ):
+        repl.interactive_model_picker()
+
+    assert select.call_args.args[1][0][0] == "custom::local-model"
+    assert repl.model_name == "local-model"
 
 
 def test_scoped_models_command_sets_cycle_scope(tmp_path: Path) -> None:

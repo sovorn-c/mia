@@ -274,7 +274,7 @@ The user reopened this active story rather than creating a new epic.
 ### Behavioral Adjustments
 
 - `/model` MUST aggregate models from every connected provider by default and MUST NOT show unconnected providers. Connected means a stored API-key/OAuth entry or a recognized non-empty environment credential.
-- When multiple providers are connected, `/model` retains an explicit all-providers or one-provider scope choice.
+- `/model` has one selector containing models from every connected provider; it does not add a provider-scope selector. Provider/model identity remains visible in each option.
 - `/scoped-models` MUST expose and update the ordered model cycle scope. Ctrl+P cycles the scope without opening the picker.
 - Shift+Tab toggles Mia's existing thinking-trace display. Ctrl+Tab is not a distinct standard terminal key and prompt_toolkit rejects `c-tab`; Pi's actual thinking key is Shift+Tab. This slice does not claim to change provider reasoning effort.
 - `/quit`, EOF, and Ctrl+C exit paths MUST show the active session ID and `mia --session <id>`.
@@ -292,8 +292,8 @@ The user reopened this active story rather than creating a new epic.
 
 ```gherkin
 Given two connected providers and other known but unconnected providers
-When the user opens `/model` and chooses All Providers
-Then Mia discovers and lists models from both connected providers
+When the user opens `/model`
+Then Mia discovers and lists models from both connected providers in one selector
 And does not query or list any unconnected provider
 ```
 

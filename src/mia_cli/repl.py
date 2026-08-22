@@ -445,6 +445,13 @@ class MiaREPL:
         for provider in (entry["id"] for entry in PROVIDER_CATALOG.values()):
             if provider not in connected and self._provider_api_key(provider):
                 connected.append(provider)
+        config = self.config_mgr.config
+        if (
+            config.default_provider == "custom"
+            and "custom" not in connected
+            and config.base_urls.get("custom")
+        ):
+            connected.append("custom")
         return connected
 
     def _save_model_selection(self, provider_id: str, model: str) -> None:
@@ -481,26 +488,8 @@ class MiaREPL:
             self.interactive_login()
             return
 
-        # If multiple providers authenticated, ask user if they want to scope by provider or view all
+        # Pi's /model selector shows every model; /scoped-models owns Ctrl+P filtering.
         target_providers = authenticated_pids
-        if len(authenticated_pids) > 1:
-            scope_options = [(p, p, f"Discover models from {p}") for p in authenticated_pids]
-            scope_options.insert(
-                0,
-                (
-                    "all",
-                    "All Providers",
-                    "List models across all authenticated providers",
-                ),
-            )
-            chosen_scope = interactive_select(
-                "🔍 Scope Model Provider (Pi-Style)", scope_options, default_idx=0
-            )
-            if not chosen_scope:
-                return
-            if chosen_scope != "all":
-                target_providers = [chosen_scope]
-
         self.console.print("[dim]Fetching live models from provider(s)...[/dim]")
 
         model_options: list[tuple[str, str, str]] = []
@@ -512,10 +501,18 @@ class MiaREPL:
             key = self._provider_api_key(pid)
             base_url = self.config_mgr.config.base_urls.get(pid)
             live_models = discover_provider_models(pid, api_key=key, base_url=base_url)
+            if (
+                pid == self.config_mgr.config.default_provider
+                and self.model_name
+                and self.model_name not in live_models
+            ):
+                live_models = [self.model_name, *live_models]
 
             for model in live_models:
                 option_id = f"{pid}::{model}"
-                is_active = model == self.model_name
+                is_active = (
+                    pid == self.config_mgr.config.default_provider and model == self.model_name
+                )
                 desc = f"Provider: {pid} (Active)" if is_active else f"Provider: {pid}"
                 if is_active:
                     default_idx = len(model_options)
