@@ -331,6 +331,16 @@ def test_connected_provider_models_are_all_discovered_without_unconnected(tmp_pa
     assert repl.model_name == "openai-model"
     assert repl.config_mgr.config.default_provider == "openai"
 
+    repl.cred_store.delete("openai")
+    with (
+        patch.dict("os.environ", {}, clear=True),
+        patch("mia_cli.repl.discover_provider_models", side_effect=models_for),
+        patch("mia_cli.repl.interactive_select", return_value="deepseek::deepseek-model"),
+    ):
+        repl.interactive_model_picker()
+
+    assert repl.available_model_sources == {"deepseek-model": "deepseek"}
+
 
 def test_scoped_models_command_sets_cycle_scope(tmp_path: Path) -> None:
     repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
