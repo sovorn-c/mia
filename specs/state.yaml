@@ -1,19 +1,15 @@
 session:
-  active_flow: fix_bug
+  active_flow: commit_message
   active_epic_id: e03
   active_story_id: e03s02
   target_version: 0.3.0
-  bug_cycle:
-    current_step: 5
-    completed_steps: [1, 2, 3, 4]
-    bug_id: BUG-001
 handoff:
-  next_skill: release-branch
-  summary: BUG-001 is fixed and validated. /scoped-models now opens a vertical checkbox
+  next_skill: commit-message
+  summary: BUG-001 is fixed and landed. /scoped-models now opens a vertical checkbox
     selector, saves ordered scope state, supports cancel, and preserves scope across login.
-    Full quality gates and manual PTY UAT pass; release-branch is next.
+    Full quality gates and manual PTY UAT pass.
 git:
-  branch: e03s02-essential-slash-command-contracts
+  branch: main
 metrics:
   skill_timings:
     plan-work:
