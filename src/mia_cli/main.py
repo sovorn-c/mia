@@ -190,6 +190,9 @@ def main_callback(
 ) -> None:
     """Default callback: launch interactive Mia REPL harness."""
     if ctx.invoked_subcommand is None:
+        if session and (Path(session).name != session or session in {".", ".."}):
+            raise typer.BadParameter("must be a session ID, not a path", param_hint="--session")
+
         from mia_cli.repl import MiaREPL
 
         repl = MiaREPL(model=model, profile=profile, session_id=session)
