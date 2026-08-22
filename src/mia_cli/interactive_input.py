@@ -23,6 +23,7 @@ COMMAND_HINTS: list[tuple[str, str]] = [
     ("/logout", "Remove stored credentials (alias: /signout)"),
     ("/mode", "Show or select the orchestration mode"),
     ("/model", "Switch the active model (alias: /llm)"),
+    ("/scoped-models", "Show or set models used by Ctrl+P cycling"),
     ("/profile", "Show or switch the coordinator profile (alias: /role, /persona)"),
     ("/diff", "Show the Git diff or report Git errors (alias: /changes)"),
     ("/cost", "Show session token and cost totals (alias: /stats, /tokens)"),

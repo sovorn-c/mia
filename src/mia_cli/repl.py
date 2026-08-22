@@ -160,6 +160,8 @@ class MiaREPL:
                 initial_model = None
 
         self.model_name: str | None = initial_model
+        self.available_model_sources: dict[str, str] = {}
+        self.scoped_models: list[str] = []
         self.session_id = session_id or f"session_{os.urandom(4).hex()}"
         self.agent_runtime: AgentRuntime | None = None
         self.harness: AgentHarness | None = None
@@ -500,6 +502,10 @@ class MiaREPL:
                     default_idx = len(model_options)
                 model_options.append((option_id, model, desc))
                 model_provider_map[option_id] = pid
+                self.available_model_sources[model] = pid
+
+        if not self.scoped_models:
+            self.scoped_models = list(self.available_model_sources)
 
         model_options.append(
             ("__custom__", "Custom Model", "Type any custom or unlisted model ID...")
@@ -768,7 +774,7 @@ class MiaREPL:
     def print_command_menu(self, filter_prefix: str | None = None) -> None:
         """Render the 17 canonical commands with descriptions and aliases."""
         table = Table(
-            title="🥕 Mia 17 Canonical Slash Commands",
+            title=f"🥕 Mia {len(SLASH_COMMANDS)} Canonical Slash Commands",
             border_style="#2D3342",
             show_header=True,
             header_style="bold #FF7A00",
@@ -897,6 +903,28 @@ class MiaREPL:
                 self.console.print(
                     f"[bold green]✓ Switched active model to {self.model_name}[/bold green]\n"
                 )
+
+        elif cmd == "/scoped-models":
+            if not args:
+                current = ", ".join(self.scoped_models) or "(none; run /model first)"
+                self.console.print(f"[bold #FF7A00]Scoped models:[/bold #FF7A00] {current}\n")
+            elif args.lower() == "all":
+                self.scoped_models = list(self.available_model_sources)
+                self.console.print(
+                    f"[bold green]✓ Scoped {len(self.scoped_models)} available models.[/bold green]\n"
+                )
+            else:
+                requested = [model.strip() for model in args.split(",") if model.strip()]
+                unknown = [model for model in requested if model not in self.available_model_sources]
+                if unknown:
+                    self.console.print(
+                        f"[yellow]Unknown available models: {', '.join(unknown)}. Run /model first.[/yellow]\n"
+                    )
+                else:
+                    self.scoped_models = requested
+                    self.console.print(
+                        f"[bold green]✓ Scoped {len(requested)} models for Ctrl+P.[/bold green]\n"
+                    )
 
         elif cmd in ("/profile", "/role", "/persona"):
             if not args:
