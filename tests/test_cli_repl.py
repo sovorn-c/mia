@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from prompt_toolkit.document import Document
@@ -185,6 +186,27 @@ def test_repl_slash_commands_suite(tmp_path: Path) -> None:
     assert repl.handle_slash_command("/profile architect") is True
     assert repl.profile_name == "architect"
     assert repl.handle_slash_command("/quit") is False
+
+
+def test_session_resume_hint_is_shown_on_quit_and_eof(tmp_path: Path) -> None:
+    repl = MiaREPL(
+        cwd=tmp_path,
+        custom_provider=MockProvider(),
+        session_id="session_resume_me",
+    )
+    repl.console = Console(record=True, width=120)
+
+    assert repl.handle_slash_command("/quit") is False
+    quit_output = repl.console.export_text()
+    assert "session_resume_me" in quit_output
+    assert "mia --session session_resume_me" in quit_output
+
+    repl.console = Console(record=True, width=120)
+    repl.prompt_session.read_prompt_async = AsyncMock(side_effect=EOFError)
+    asyncio.run(repl.run_async())
+    eof_output = repl.console.export_text()
+    assert "session_resume_me" in eof_output
+    assert "mia --session session_resume_me" in eof_output
 
 
 def test_invalid_profile_preserves_active_runtime(tmp_path: Path) -> None:
