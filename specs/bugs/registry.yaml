@@ -1,9 +1,17 @@
 bugs:
   - bug_id: BUG-001
     date: 2026-08-22
-    status: open
+    status: fixed
     severity: medium
     priority: P1
     scope: cli
     summary: /scoped-models prints models but does not open a selector or save scope state
     file: specs/bugs/BUG-001.md
+    files_changed:
+      - src/mia_agent/auth/config.py
+      - src/mia_cli/interactive_input.py
+      - src/mia_cli/repl.py
+      - tests/test_cli_repl.py
+    approach: Vertical checkbox selector with config-backed ordered scope and cancel-safe persistence
+    risk_level: medium
+    commit_message: "fix(cli): add saved scoped model selector"
