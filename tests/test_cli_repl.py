@@ -23,6 +23,7 @@ from mia_cli.interactive_input import (
     LivePromptSession,
     SlashCompleter,
     format_status_toolbar,
+    interactive_multi_select,
     interactive_select,
 )
 from mia_cli.renderers.rich_stream import CarrotBounceSpinner
@@ -615,6 +616,21 @@ async def test_live_prompt_session_async_non_tty(tmp_path: Path) -> None:
     with patch("builtins.input", return_value="async hello"):
         res = await session.read_prompt_async()
         assert res == "async hello"
+
+
+def test_interactive_multi_select_non_tty() -> None:
+    options = [
+        ("openai::gpt-4o", "openai: gpt-4o", ""),
+        ("deepseek::deepseek-chat", "deepseek: deepseek-chat", ""),
+    ]
+    with patch("builtins.input", return_value="2,1"):
+        assert interactive_multi_select("Select models", options) == [
+            "deepseek::deepseek-chat",
+            "openai::gpt-4o",
+        ]
+
+    with patch("builtins.input", return_value=""):
+        assert interactive_multi_select("Select models", options) is None
 
 
 def test_interactive_select_non_tty() -> None:
