@@ -5,7 +5,7 @@ title: "Native Orchestration Runtime"
 type: "feat"
 context: "domain and infrastructure"
 status: "planned"
-bcps_total: 9
+bcps_total: 12
 
 stories:
   - id: e03s01
@@ -18,8 +18,8 @@ stories:
 
   - id: e03s02
     title: "Essential Slash Command Contract Alignment"
-    status: "passing"
-    bcps: 4
+    status: "in_progress"
+    bcps: 7
     risk: "P1"
     spec_file: "e03s02-essential-slash-command-contracts.md"
     tasks_file: "e03s02-tasks.yaml"

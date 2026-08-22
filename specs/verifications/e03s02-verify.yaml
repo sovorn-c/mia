@@ -1,7 +1,7 @@
 story_id: e03s02
 verified_at: "2026-08-21T23:49:17Z"
 verifier: develop-tdd
-status: passing
+status: in_progress
 risk: P1
 branch: e03s02-essential-slash-command-contracts
 phases:

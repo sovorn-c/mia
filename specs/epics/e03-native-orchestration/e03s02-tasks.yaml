@@ -3,8 +3,8 @@ spec: "e03s02-essential-slash-command-contracts.md"
 title: "Essential Slash Command Contract Alignment"
 type: "fix"
 context: "domain and infrastructure"
-status: passing
-bcps: 4
+status: in_progress
+bcps: 7
 risk: "P1"
 
 tasks:
@@ -51,3 +51,33 @@ tasks:
     allure:
       severity: "high"
       categories: ["Documentation", "Quality Gate", "full-suite"]
+
+  - id: "t05"
+    description: "Discover models from every connected provider and no unconnected provider, preserve optional provider filtering, and add a session-local /scoped-models contract."
+    verify: "uv run --offline pytest tests/test_cli_repl.py -k 'connected_provider_models or scoped_models_command'"
+    risk: "P1"
+    security: "medium"
+    status: "failing"
+    allure:
+      severity: "high"
+      categories: ["CLI", "Authentication", "Models"]
+
+  - id: "t06"
+    description: "Add Pi-compatible Ctrl+L model selection, Ctrl+P scoped-model cycling, and Shift+Tab thinking-trace toggling without consuming ordinary Tab completion."
+    verify: "uv run --offline pytest tests/test_cli_repl.py -k 'model_and_thinking_keybindings or scoped_model_cycle'"
+    risk: "P1"
+    security: "low"
+    status: "failing"
+    allure:
+      severity: "high"
+      categories: ["CLI", "Input", "Models"]
+
+  - id: "t07"
+    description: "Show the active session ID and direct resume command on every interactive exit path, and support top-level mia --session <id>."
+    verify: "uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py -k 'session_resume_hint or top_level_session'"
+    risk: "P1"
+    security: "low"
+    status: "failing"
+    allure:
+      severity: "high"
+      categories: ["CLI", "Session", "Resume"]

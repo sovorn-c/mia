@@ -1,14 +1,13 @@
 session:
-  active_flow: verify_work
+  active_flow: develop_tdd
   active_epic_id: e03
   active_story_id: e03s02
   target_version: 0.3.0
 handoff:
-  next_skill: verify-work
-  summary: 'e03s02 implementation complete: canonical 17-command metadata, real manual
-    compaction, safe profile validation, Git failure reporting, and truthful command
-    documentation. Four tasks pass; 93 tests, Ruff, strict Mypy, compileall, and plan
-    checks pass. Manual UAT is pending.'
+  next_skill: develop-tdd
+  summary: 'e03s02 reopened in place for connected-provider model discovery, scoped
+    model cycling and Pi-compatible shortcuts, plus explicit session resume hints and
+    top-level --session. Existing four tasks remain passing; t05-t07 are pending.'
 git:
   branch: e03s02-essential-slash-command-contracts
 metrics:

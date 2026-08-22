@@ -8,7 +8,7 @@
 - **Risk:** P1
 - **Context:** domain and infrastructure
 - **BCPs:** 4
-- **Status:** passing
+- **Status:** in_progress
 
 ## 2. User Story
 
@@ -260,3 +260,57 @@ And architecture documentation uses the same bounded contract
 ### Red-Flag Check
 
 Caught and rejected these rationalizations: leaving `/compact` as a harmless placeholder; keeping `/stop` because it may work later; adding a command framework to solve list duplication; mutating `AgentHarness._messages` from the REPL; treating `git diff` empty stdout as success without checking its exit code; and expanding `/init` into repository indexing inside this small correction.
+
+## 21. In-Flight Adjustments
+
+The user reopened this active story rather than creating a new epic.
+
+### Defects
+
+- Environment-backed provider discovery checks only `<PROVIDER>_API_KEY`, missing configured aliases such as `GOOGLE_API_KEY`, `MIMO_API_KEY`, and `OPENCODE_API_KEY`.
+- Exit output does not identify the session that was saved or provide a direct resume command.
+- Top-level interactive `mia` has no `--session` option even though `MiaREPL` and the runtime factory already accept a session ID.
+
+### Behavioral Adjustments
+
+- `/model` MUST aggregate models from every connected provider by default and MUST NOT show unconnected providers. Connected means a stored API-key/OAuth entry or a recognized non-empty environment credential.
+- When multiple providers are connected, `/model` retains an explicit all-providers or one-provider scope choice.
+- `/scoped-models` MUST expose and update the ordered model cycle scope. Ctrl+P cycles the scope without opening the picker.
+- Shift+Tab toggles Mia's existing thinking-trace display. Ctrl+Tab is not a distinct standard terminal key and prompt_toolkit rejects `c-tab`; Pi's actual thinking key is Shift+Tab. This slice does not claim to change provider reasoning effort.
+- `/quit`, EOF, and Ctrl+C exit paths MUST show the active session ID and `mia --session <id>`.
+- `mia --session <id>` MUST launch the interactive REPL with the specified durable session.
+
+### Small Additions
+
+- Add `/scoped-models` to canonical command metadata.
+- Add Ctrl+L as the Pi-compatible model-picker shortcut while retaining `/model`.
+- Keep scoped-model state session-local; persistence across Mia restarts is deferred until settings schema work is justified.
+
+### Added Acceptance Scenarios
+
+#### SC-e03s02-P1-07: Model discovery is connected-provider scoped
+
+```gherkin
+Given two connected providers and other known but unconnected providers
+When the user opens `/model` and chooses All Providers
+Then Mia discovers and lists models from both connected providers
+And does not query or list any unconnected provider
+```
+
+#### SC-e03s02-P1-08: Scoped models support fast keyboard cycling
+
+```gherkin
+Given an ordered scoped-model list
+When the user presses Ctrl+P repeatedly
+Then Mia selects the next scoped model and wraps at the end
+And Shift+Tab toggles thinking-trace visibility
+```
+
+#### SC-e03s02-P1-09: Exiting makes session recovery explicit
+
+```gherkin
+Given an active interactive session
+When the user quits through `/quit`, EOF, or Ctrl+C
+Then Mia prints the session ID and `mia --session <id>`
+And launching that command passes the ID into the interactive REPL
+```
