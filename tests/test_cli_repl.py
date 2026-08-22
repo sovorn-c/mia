@@ -345,6 +345,7 @@ def test_connected_provider_models_are_all_discovered_without_unconnected(tmp_pa
         repl.interactive_model_picker()
 
     assert repl.available_model_sources == {"deepseek::deepseek-model": "deepseek"}
+    assert repl.scoped_models == ["deepseek::deepseek-model"]
 
 
 def test_scoped_models_command_sets_cycle_scope(tmp_path: Path) -> None:
@@ -356,10 +357,7 @@ def test_scoped_models_command_sets_cycle_scope(tmp_path: Path) -> None:
     }
 
     assert (
-        repl.handle_slash_command(
-            "/scoped-models openai::gpt-4o, deepseek::deepseek-chat"
-        )
-        is True
+        repl.handle_slash_command("/scoped-models openai::gpt-4o, deepseek::deepseek-chat") is True
     )
     assert repl.scoped_models == ["openai::gpt-4o", "deepseek::deepseek-chat"]
 
