@@ -523,6 +523,9 @@ class MiaREPL:
                 model_provider_map[option_id] = pid
                 self.available_model_sources[option_id] = pid
 
+        self.scoped_models = [
+            model_id for model_id in self.scoped_models if model_id in self.available_model_sources
+        ]
         if not self.scoped_models:
             self.scoped_models = list(self.available_model_sources)
 
