@@ -23,7 +23,7 @@ COMMAND_HINTS: list[tuple[str, str]] = [
     ("/logout", "Remove stored credentials (alias: /signout)"),
     ("/mode", "Show or select the orchestration mode"),
     ("/model", "Switch the active model (alias: /llm)"),
-    ("/scoped-models", "Show or set models used by Ctrl+P cycling"),
+    ("/scoped-models", "Discover and set models used by Ctrl+P cycling"),
     ("/profile", "Show or switch the coordinator profile (alias: /role, /persona)"),
     ("/diff", "Show the Git diff or report Git errors (alias: /changes)"),
     ("/cost", "Show session token and cost totals (alias: /stats, /tokens)"),
@@ -361,12 +361,13 @@ def interactive_select(
     def render_all(selected_idx: int) -> None:
         for i, (_id, label, desc) in enumerate(options):
             num_prefix = f" {i + 1}. "
+            separator = f" \x1b[2m│\x1b[0m {desc}" if desc else ""
             if i == selected_idx:
                 cursor = "🥕 "
-                line_str = f"\x1b[1;38;2;255;122;0m{num_prefix}{label:<18}\x1b[0m \x1b[2m│\x1b[0m \x1b[38;2;243;244;246m{desc}\x1b[0m"
+                line_str = f"\x1b[1;38;2;255;122;0m{num_prefix}{label:<18}\x1b[0m{separator}"
             else:
                 cursor = "   "
-                line_str = f"\x1b[38;2;156;163;175m{num_prefix}{label:<18}\x1b[0m \x1b[2m│\x1b[0m \x1b[2;37m{desc}\x1b[0m"
+                line_str = f"\x1b[38;2;156;163;175m{num_prefix}{label:<18}\x1b[0m{separator}"
             sys.stdout.write(f"\r\x1b[K{cursor}{line_str}\n")
         sys.stdout.flush()
 

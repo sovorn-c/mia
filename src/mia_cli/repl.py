@@ -461,11 +461,45 @@ class MiaREPL:
             )
         )
 
+    def _model_label(self, model_id: str) -> str:
+        provider, model = model_id.split("::", 1)
+        return f"{provider}: {model}"
+
+    def _discover_connected_models(self) -> dict[str, str]:
+        """Discover models from connected providers for the scoped-model list."""
+        providers = self._connected_providers()
+        if not providers:
+            self.available_model_sources = {}
+            self.scoped_models = []
+            return {}
+
+        self.console.print("[dim]Fetching live models from provider(s)...[/dim]")
+        sources: dict[str, str] = {}
+        config = self.config_mgr.config
+        for provider in providers:
+            models = discover_provider_models(
+                provider,
+                api_key=self._provider_api_key(provider),
+                base_url=config.base_urls.get(provider),
+            )
+            if (
+                provider == config.default_provider
+                and self.model_name
+                and self.model_name not in models
+            ):
+                models = [self.model_name, *models]
+            for model in models:
+                sources[f"{provider}::{model}"] = provider
+
+        self.available_model_sources = sources
+        self.scoped_models = [model_id for model_id in self.scoped_models if model_id in sources]
+        return sources
+
     def cycle_scoped_model(self) -> None:
         """Select the next scoped model, wrapping at the end."""
         if not self.scoped_models:
             self.console.print(
-                "[yellow]No scoped models. Run /model, then /scoped-models.[/yellow]\n"
+                "[yellow]No scoped models. Run /scoped-models to discover connected models.[/yellow]\n"
             )
             return
         active_id = f"{self.config_mgr.config.default_provider}::{self.model_name}"
@@ -478,57 +512,32 @@ class MiaREPL:
         self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
 
     def interactive_model_picker(self) -> None:
-        """List models from connected providers and switch the active model."""
-        authenticated_pids = self._connected_providers()
-
-        if not authenticated_pids:
+        """Select the active model from the discovered scoped-model list."""
+        if not self.scoped_models:
             self.console.print(
-                "[yellow]No providers authenticated yet. Launching /login setup...[/yellow]\n"
+                "[yellow]No scoped models. Run /scoped-models to discover connected models first.[/yellow]\n"
             )
-            self.interactive_login()
             return
 
-        # Pi's /model selector shows every model; /scoped-models owns Ctrl+P filtering.
-        target_providers = authenticated_pids
-        self.console.print("[dim]Fetching live models from provider(s)...[/dim]")
-
         model_options: list[tuple[str, str, str]] = []
-        model_provider_map: dict[str, str] = {}
-        self.available_model_sources = {}
         default_idx = 0
+        config = self.config_mgr.config
+        for model_id in self.scoped_models:
+            provider_id = self.available_model_sources.get(model_id)
+            if not provider_id:
+                continue
+            model = model_id.split("::", 1)[1]
+            is_active = provider_id == config.default_provider and model == self.model_name
+            if is_active:
+                default_idx = len(model_options)
+            label = self._model_label(model_id) + (" (Active)" if is_active else "")
+            model_options.append((model_id, label, ""))
 
-        for pid in target_providers:
-            key = self._provider_api_key(pid)
-            base_url = self.config_mgr.config.base_urls.get(pid)
-            live_models = discover_provider_models(pid, api_key=key, base_url=base_url)
-            if (
-                pid == self.config_mgr.config.default_provider
-                and self.model_name
-                and self.model_name not in live_models
-            ):
-                live_models = [self.model_name, *live_models]
-
-            for model in live_models:
-                option_id = f"{pid}::{model}"
-                is_active = (
-                    pid == self.config_mgr.config.default_provider and model == self.model_name
-                )
-                desc = f"Provider: {pid} (Active)" if is_active else f"Provider: {pid}"
-                if is_active:
-                    default_idx = len(model_options)
-                model_options.append((option_id, model, desc))
-                model_provider_map[option_id] = pid
-                self.available_model_sources[option_id] = pid
-
-        self.scoped_models = [
-            model_id for model_id in self.scoped_models if model_id in self.available_model_sources
-        ]
-        if not self.scoped_models:
-            self.scoped_models = list(self.available_model_sources)
-
-        model_options.append(
-            ("__custom__", "Custom Model", "Type any custom or unlisted model ID...")
-        )
+        if not model_options:
+            self.console.print(
+                "[yellow]No scoped models. Run /scoped-models to refresh the list.[/yellow]\n"
+            )
+            return
 
         selected = interactive_select(
             "🤖 Switch Active Model", model_options, default_idx=default_idx
@@ -536,30 +545,11 @@ class MiaREPL:
         if not selected:
             return
 
-        if selected == "__custom__":
-            try:
-                custom_m = input(
-                    "Enter custom model name (e.g. gpt-4o, claude-3-7-sonnet): "
-                ).strip()
-                if custom_m:
-                    self.model_name = custom_m
-                    inferred_prov = self.config_mgr.infer_provider(custom_m)
-                    self._save_model_selection(
-                        inferred_prov or self.config_mgr.config.default_provider,
-                        custom_m,
-                    )
-                    self._init_harness()
-                    self.console.print(
-                        f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n"
-                    )
-            except (KeyboardInterrupt, EOFError):
-                return
-        else:
-            provider_id = model_provider_map[selected]
-            self.model_name = selected.split("::", 1)[1]
-            self._save_model_selection(provider_id, self.model_name)
-            self._init_harness()
-            self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
+        provider_id = self.available_model_sources[selected]
+        self.model_name = selected.split("::", 1)[1]
+        self._save_model_selection(provider_id, self.model_name)
+        self._init_harness()
+        self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
 
     def _session_file(self, session_id: str | None = None) -> Path:
         """Return the JSONL path for the active profile and session."""
@@ -931,22 +921,32 @@ class MiaREPL:
                 )
 
         elif cmd == "/scoped-models":
-            if not args:
-                current = ", ".join(self.scoped_models) or "(none; run /model first)"
-                self.console.print(f"[bold #FF7A00]Scoped models:[/bold #FF7A00] {current}\n")
+            had_scope = bool(self.scoped_models)
+            model_sources = self._discover_connected_models()
+            if not model_sources:
+                self.console.print(
+                    "[yellow]No connected providers or discoverable models.[/yellow]\n"
+                )
+            elif not args:
+                if not had_scope:
+                    self.scoped_models = list(model_sources)
+                labels = ", ".join(self._model_label(model_id) for model_id in self.scoped_models)
+                self.console.print(f"[bold #FF7A00]Scoped models:[/bold #FF7A00] {labels}\n")
             elif args.lower() == "all":
-                self.scoped_models = list(self.available_model_sources)
+                self.scoped_models = list(model_sources)
                 self.console.print(
                     f"[bold green]✓ Scoped {len(self.scoped_models)} available models.[/bold green]\n"
                 )
             else:
                 requested = [model.strip() for model in args.split(",") if model.strip()]
-                unknown = [
-                    model for model in requested if model not in self.available_model_sources
-                ]
+                aliases = {
+                    self._model_label(model_id).lower(): model_id for model_id in model_sources
+                }
+                requested = [aliases.get(model.lower(), model) for model in requested]
+                unknown = [model for model in requested if model not in model_sources]
                 if unknown:
                     self.console.print(
-                        f"[yellow]Unknown available models: {', '.join(unknown)}. Run /model first.[/yellow]\n"
+                        f"[yellow]Unknown models: {', '.join(unknown)}. Run /scoped-models to refresh.[/yellow]\n"
                     )
                 else:
                     self.scoped_models = requested

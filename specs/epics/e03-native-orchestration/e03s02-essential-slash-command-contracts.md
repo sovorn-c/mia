@@ -275,7 +275,7 @@ The user reopened this active story rather than creating a new epic.
 
 - `/model` MUST aggregate models from every connected provider by default and MUST NOT show unconnected providers. Connected means a stored API-key/OAuth entry or a recognized non-empty environment credential.
 - `/model` has one selector containing models from every connected provider; it does not add a provider-scope selector. Provider/model identity remains visible in each option.
-- `/scoped-models` MUST expose and update the ordered model cycle scope. Ctrl+P cycles the scope without opening the picker.
+- `/scoped-models` MUST discover connected-provider models and expose/update the ordered model cycle scope. `/model` selects only from that scope; Ctrl+P cycles it without opening the picker.
 - Shift+Tab toggles Mia's existing thinking-trace display. Ctrl+Tab is not a distinct standard terminal key and prompt_toolkit rejects `c-tab`; Pi's actual thinking key is Shift+Tab. This slice does not claim to change provider reasoning effort.
 - `/quit`, EOF, and Ctrl+C exit paths MUST show the active session ID and `mia --session <id>`.
 - `mia --session <id>` MUST launch the interactive REPL with the specified durable session.

@@ -96,7 +96,7 @@ The inline REPL exposes **18 canonical commands**. Completion, help, and unique-
 3. **`/logout`** (`/signout`, `/disconnect`): Remove stored credentials.
 4. **`/mode`**: Show or select the explicit `single` or `research` orchestration mode.
 5. **`/model`** (`/llm`): Discover models from all connected providers in one selector, then switch the active model.
-6. **`/scoped-models`**: Show or set the ordered models used by Ctrl+P cycling.
+6. **`/scoped-models`**: Discover connected models and show or set the ordered list used by Ctrl+P cycling; `/model` selects from this list.
 7. **`/profile`** (`/role`, `/persona`): Show or switch the coordinator profile.
 8. **`/diff`** (`/changes`): Show the Git diff or report Git errors.
 9. **`/cost`** (`/tokens`, `/stats`): Show session token and cost totals.
