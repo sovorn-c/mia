@@ -338,12 +338,17 @@ def interactive_multi_select(
             return None
 
     import os
+    import select
+    import shutil
     import termios
     import tty
 
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
     current_idx = 0
+    terminal_lines = shutil.get_terminal_size((80, 24)).lines
+    viewport_size = max(1, min(len(options), terminal_lines - 4))
+    window_start = 0
 
     sys.stdout.write(
         f"\n\x1b[1;38;2;255;122;0m🥕 {title}\x1b[0m "
@@ -351,8 +356,17 @@ def interactive_multi_select(
     )
     sys.stdout.write("\x1b[38;2;45;51;66m" + "─" * 68 + "\x1b[0m\n")
 
-    def render_all() -> None:
-        for index, (option_id, label, desc) in enumerate(options):
+    def keep_current_visible() -> None:
+        nonlocal window_start
+        if current_idx < window_start:
+            window_start = current_idx
+        elif current_idx >= window_start + viewport_size:
+            window_start = current_idx - viewport_size + 1
+
+    def render() -> None:
+        end = min(window_start + viewport_size, len(options))
+        for index in range(window_start, end):
+            option_id, label, desc = options[index]
             marker = "[x]" if option_id in selected else "[ ]"
             cursor = "🥕 " if index == current_idx else "   "
             color = "1;38;2;255;122;0m" if index == current_idx else "38;2;156;163;175m"
@@ -360,11 +374,28 @@ def interactive_multi_select(
             sys.stdout.write(f"\r\x1b[K{cursor}\x1b[{color}{marker} {label}\x1b[0m{suffix}\n")
         sys.stdout.flush()
 
+    def read_key() -> bytes:
+        key = os.read(fd, 1)
+        if key != b"\x1b":
+            return key
+        readable, _, _ = select.select([fd], [], [], 0.05)
+        if not readable:
+            return key
+        prefix = os.read(fd, 1)
+        if prefix not in (b"[", b"O"):
+            return key
+        readable, _, _ = select.select([fd], [], [], 0.05)
+        if not readable:
+            return key
+        return key + prefix + os.read(fd, 1)
+
     try:
         tty.setcbreak(fd)
-        render_all()
+        render()
         while True:
-            raw_bytes = os.read(fd, 32)
+            raw_bytes = read_key()
+            if not raw_bytes:
+                continue
             if raw_bytes == b"\x1b":
                 sys.stdout.write("\n\x1b[2;37m(Selection cancelled)\x1b[0m\n\n")
                 return None
@@ -388,8 +419,9 @@ def interactive_multi_select(
                 return [option_id for option_id in option_ids if option_id in selected]
             else:
                 continue
-            sys.stdout.write(f"\x1b[{len(options)}A")
-            render_all()
+            keep_current_visible()
+            sys.stdout.write(f"\x1b[{viewport_size}A")
+            render()
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
