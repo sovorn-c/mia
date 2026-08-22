@@ -370,15 +370,12 @@ class MiaREPL:
     def _save_auth_state(self, provider_id: str, base_url: str) -> None:
         """Persist provider credentials and base URL."""
         current_cfg = self.config_mgr.config
-        updated_cfg = MiaConfig(
-            default_provider=provider_id,
-            default_model=self.model_name or "",
-            base_urls={**current_cfg.base_urls, provider_id: base_url},
-            max_steps_per_turn=current_cfg.max_steps_per_turn,
-            temperature=current_cfg.temperature,
-            compaction_threshold_ratio=current_cfg.compaction_threshold_ratio,
-            context_window_tokens=current_cfg.context_window_tokens,
-            keep_recent_tokens=current_cfg.keep_recent_tokens,
+        updated_cfg = current_cfg.model_copy(
+            update={
+                "default_provider": provider_id,
+                "default_model": self.model_name or "",
+                "base_urls": {**current_cfg.base_urls, provider_id: base_url},
+            }
         )
         self.config_mgr.save_config(updated_cfg)
         self._init_harness()
