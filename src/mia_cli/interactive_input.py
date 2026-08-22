@@ -216,10 +216,28 @@ class LivePromptSession:
         def _escape_handler(event: KeyPressEvent) -> None:
             self._handle_escape(event)
 
+        # Pi-style model selection and scoped-model cycling.
+        @kb.add("c-l")
+        def _model_picker_shortcut(event: KeyPressEvent) -> None:
+            event.current_buffer.text = "/model"
+            event.current_buffer.validate_and_handle()
+
+        @kb.add("c-p")
+        def _model_cycle_shortcut(event: KeyPressEvent) -> None:
+            event.current_buffer.text = "/model next"
+            event.current_buffer.validate_and_handle()
+
         # Ctrl+O: Post-turn detail audit inspector shortcut
         @kb.add("c-o")
         def _inspect_shortcut(event: KeyPressEvent) -> None:
             event.current_buffer.text = "/inspect"
+            event.current_buffer.validate_and_handle()
+
+        # Shift+Tab is Pi's thinking shortcut. Ctrl+Tab is indistinguishable from Tab
+        # in standard terminal input, so binding it would break completion.
+        @kb.add("s-tab")
+        def _thinking_cycle_shortcut(event: KeyPressEvent) -> None:
+            event.current_buffer.text = "/thinking"
             event.current_buffer.validate_and_handle()
 
         # Ctrl+T: Toggle thinking trace shortcut

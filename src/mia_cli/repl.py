@@ -452,6 +452,24 @@ class MiaREPL:
             )
         )
 
+    def cycle_scoped_model(self) -> None:
+        """Select the next scoped model, wrapping at the end."""
+        if not self.scoped_models:
+            self.console.print(
+                "[yellow]No scoped models. Run /model, then /scoped-models.[/yellow]\n"
+            )
+            return
+        current = (
+            self.scoped_models.index(self.model_name)
+            if self.model_name in self.scoped_models
+            else -1
+        )
+        self.model_name = self.scoped_models[(current + 1) % len(self.scoped_models)]
+        provider_id = self.available_model_sources[self.model_name]
+        self._save_model_selection(provider_id, self.model_name)
+        self._init_harness()
+        self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
+
     def interactive_model_picker(self) -> None:
         """List models from connected providers and switch the active model."""
         authenticated_pids = self._connected_providers()
@@ -897,6 +915,8 @@ class MiaREPL:
         elif cmd in ("/model", "/llm"):
             if not args:
                 self.interactive_model_picker()
+            elif args.lower() == "next":
+                self.cycle_scoped_model()
             else:
                 self.model_name = args
                 self._init_harness()
@@ -915,7 +935,9 @@ class MiaREPL:
                 )
             else:
                 requested = [model.strip() for model in args.split(",") if model.strip()]
-                unknown = [model for model in requested if model not in self.available_model_sources]
+                unknown = [
+                    model for model in requested if model not in self.available_model_sources
+                ]
                 if unknown:
                     self.console.print(
                         f"[yellow]Unknown available models: {', '.join(unknown)}. Run /model first.[/yellow]\n"
