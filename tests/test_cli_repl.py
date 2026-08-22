@@ -50,8 +50,9 @@ def test_command_discovery_has_one_truthful_canonical_list() -> None:
 
     canonical = [command for command, _ in COMMAND_HINTS]
 
-    assert len(canonical) == 17
+    assert len(canonical) == 18
     assert "/mode" in canonical
+    assert "/scoped-models" in canonical
     assert "/stop" not in canonical
     assert canonical == SLASH_COMMANDS
     assert canonical == list(COMMAND_DESCRIPTIONS)
@@ -64,7 +65,7 @@ def test_help_contract_describes_only_implemented_behavior(tmp_path: Path) -> No
 
     repl.handle_slash_command("/help")
     help_output = repl.console.export_text()
-    assert "17 Canonical Slash Commands" in help_output
+    assert "18 Canonical Slash Commands" in help_output
     assert "shortcuts" not in help_output
     assert "/mode" in help_output
     assert "/stop" not in help_output
@@ -273,6 +274,21 @@ def test_connected_provider_models_are_all_discovered_without_unconnected(tmp_pa
     assert discovered == ["deepseek", "openai", "gemini"]
     assert repl.model_name == "openai-model"
     assert repl.config_mgr.config.default_provider == "openai"
+
+
+def test_scoped_models_command_sets_cycle_scope(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.available_model_sources = {
+        "gpt-4o": "openai",
+        "deepseek-chat": "deepseek",
+        "gemini-pro": "gemini",
+    }
+
+    assert repl.handle_slash_command("/scoped-models gpt-4o, deepseek-chat") is True
+    assert repl.scoped_models == ["gpt-4o", "deepseek-chat"]
+
+    assert repl.handle_slash_command("/scoped-models all") is True
+    assert repl.scoped_models == ["gpt-4o", "deepseek-chat", "gemini-pro"]
 
 
 def test_repl_scoped_model_picker(tmp_path: Path) -> None:
