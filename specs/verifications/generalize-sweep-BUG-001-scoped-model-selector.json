@@ -1,0 +1,11 @@
+{
+  "defect_class": "print-only interactive command",
+  "grep_pattern": "Scoped models:",
+  "match_count": 0,
+  "sweep_scope": "src/mia_cli",
+  "patched_in_pr": [
+    "src/mia_cli/repl.py:/scoped-models now invokes interactive_multi_select and saves scope"
+  ],
+  "tracked_issues": [],
+  "verification_script": "unavailable: scripts/verify-generalize-sweep.sh is not present in this repository"
+}
