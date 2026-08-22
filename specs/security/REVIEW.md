@@ -27,3 +27,10 @@
 - Disconnected providers and their scoped models are pruned on the next discovery pass.
 - Top-level `--session` accepts IDs only; path components are rejected before session filesystem resolution. The CLI emits a bounded Typer error without traceback, and rendered IDs are Rich-escaped.
 - No shell interpolation, unsafe deserialization, new network endpoint, dependency, or secret-bearing log was introduced.
+
+## BUG-001 Addendum
+
+- **Scope:** `/scoped-models` interactive multi-selection and config-backed scope persistence.
+- **Verdict:** PASS — no security impact identified.
+- The selector accepts model IDs from provider discovery and persists them as ordinary JSON strings; no selected model ID is executed as a command or used as a filesystem path.
+- Escape/cancel preserves the previous scope, and config updates use Pydantic-validated `MiaConfig` data.
