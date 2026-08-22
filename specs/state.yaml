@@ -21,10 +21,9 @@ metrics:
       total_seconds: 3577.0
       avg_seconds: 1192.3333333333333
     verify-work:
-      calls: 1
-      total_seconds: 569.0
-      avg_seconds: 569.0
-      _start: '2026-08-22T00:38:53Z'
+      calls: 2
+      total_seconds: 815.0
+      avg_seconds: 407.5
     audit-code:
       calls: 1
       total_seconds: 342.0
