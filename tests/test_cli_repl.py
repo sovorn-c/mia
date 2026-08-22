@@ -303,8 +303,9 @@ def test_repl_pi_style_auth_and_model_scoper(tmp_path: Path) -> None:
     assert saved_key == "sk-test-opencode-key-123"
     assert repl.model_name is None
 
-    # Discover the scope first, then /model only selects from it.
-    repl.handle_slash_command("/scoped-models")
+    # Discover and save the scope first, then /model only selects from it.
+    with patch("mia_cli.repl.interactive_multi_select", return_value=["opencode-go::mimo-v2.5"]):
+        repl.handle_slash_command("/scoped-models")
     with patch("builtins.input", return_value="1"):
         repl.interactive_model_picker()
     assert repl.model_name == "mimo-v2.5"
@@ -327,15 +328,20 @@ def test_connected_provider_models_are_all_discovered_without_unconnected(tmp_pa
     with (
         patch.dict("os.environ", {"GOOGLE_API_KEY": "google-key"}, clear=True),
         patch("mia_cli.repl.discover_provider_models", side_effect=models_for),
+        patch(
+            "mia_cli.repl.interactive_multi_select",
+            return_value=[
+                "deepseek::deepseek-model",
+                "openai::openai-model",
+                "gemini::gemini-model",
+            ],
+        ),
     ):
         repl.handle_slash_command("/scoped-models")
 
     output = repl.console.export_text()
     assert "Fetching live models" not in output
-    assert "Scoped models:" in output
-    assert "deepseek: deepseek-model\n" in output
-    assert "openai: openai-model\n" in output
-    assert "gemini: gemini-model\n" in output
+    assert "Saved 3 scoped models." in output
     assert discovered == ["deepseek", "openai", "gemini"]
     assert repl.scoped_models == [
         "deepseek::deepseek-model",
@@ -385,6 +391,10 @@ def test_custom_connected_model_is_in_model_picker(tmp_path: Path) -> None:
     with (
         patch.dict("os.environ", {}, clear=True),
         patch("mia_cli.repl.discover_provider_models", return_value=["other-local-model"]),
+        patch(
+            "mia_cli.repl.interactive_multi_select",
+            return_value=["custom::local-model"],
+        ),
     ):
         repl.handle_slash_command("/scoped-models")
 
@@ -440,18 +450,30 @@ def test_scoped_models_command_discovers_and_sets_cycle_scope(tmp_path: Path) ->
             side_effect=lambda provider, **_: models[provider],
         ),
     ):
-        assert (
-            repl.handle_slash_command("/scoped-models openai: gpt-4o, deepseek: deepseek-chat")
-            is True
-        )
+        with patch(
+            "mia_cli.repl.interactive_multi_select",
+            return_value=["openai::gpt-4o", "deepseek::deepseek-chat"],
+        ):
+            assert (
+                repl.handle_slash_command("/scoped-models openai: gpt-4o, deepseek: deepseek-chat")
+                is True
+            )
         assert repl.scoped_models == ["openai::gpt-4o", "deepseek::deepseek-chat"]
 
-        assert repl.handle_slash_command("/scoped-models all") is True
+        with patch(
+            "mia_cli.repl.interactive_multi_select",
+            return_value=[
+                "openai::gpt-4o",
+                "deepseek::deepseek-chat",
+                "gemini::gemini-pro",
+            ],
+        ):
+            assert repl.handle_slash_command("/scoped-models all") is True
 
     assert repl.scoped_models == [
+        "openai::gpt-4o",
         "deepseek::deepseek-chat",
         "gemini::gemini-pro",
-        "openai::gpt-4o",
     ]
 
 
@@ -466,7 +488,10 @@ def test_repl_scoped_model_picker(tmp_path: Path) -> None:
 
     repl.cred_store.set_api_key("deepseek", "sk-test-deepseek")
 
-    with patch.dict("os.environ", {}, clear=True):
+    with (
+        patch.dict("os.environ", {}, clear=True),
+        patch("mia_cli.repl.interactive_multi_select", return_value=["deepseek::deepseek-chat"]),
+    ):
         repl.handle_slash_command("/scoped-models")
     with patch("builtins.input", return_value="1"):
         repl.interactive_model_picker()

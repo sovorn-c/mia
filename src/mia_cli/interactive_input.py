@@ -314,6 +314,86 @@ class LiveInteractivePrompt:
         return self._session.read_prompt(prompt_prefix)
 
 
+def interactive_multi_select(
+    title: str,
+    options: list[tuple[str, str, str]],
+    selected_ids: Iterable[str] = (),
+) -> list[str] | None:
+    """Select multiple vertical options; Enter saves and Escape cancels."""
+    if not options:
+        return []
+
+    option_ids = [option[0] for option in options]
+    selected = set(selected_ids).intersection(option_ids)
+    if not sys.stdin.isatty():
+        try:
+            raw = input(f"{title} (comma-separated numbers, Enter saves, Esc cancels): ").strip()
+            if not raw:
+                return None
+            numbers = [int(value.strip()) for value in raw.split(",")]
+            if not all(1 <= number <= len(options) for number in numbers):
+                return None
+            return [options[number - 1][0] for number in numbers]
+        except (ValueError, KeyboardInterrupt, EOFError, OSError):
+            return None
+
+    import os
+    import termios
+    import tty
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    current_idx = 0
+
+    sys.stdout.write(
+        f"\n\x1b[1;38;2;255;122;0m🥕 {title}\x1b[0m "
+        "\x1b[2;37m(Space toggle, ↑/↓ move, Enter save, Esc cancel)\x1b[0m\n"
+    )
+    sys.stdout.write("\x1b[38;2;45;51;66m" + "─" * 68 + "\x1b[0m\n")
+
+    def render_all() -> None:
+        for index, (option_id, label, desc) in enumerate(options):
+            marker = "[x]" if option_id in selected else "[ ]"
+            cursor = "🥕 " if index == current_idx else "   "
+            color = "1;38;2;255;122;0m" if index == current_idx else "38;2;156;163;175m"
+            suffix = f" \x1b[2m│\x1b[0m {desc}" if desc else ""
+            sys.stdout.write(f"\r\x1b[K{cursor}\x1b[{color}{marker} {label}\x1b[0m{suffix}\n")
+        sys.stdout.flush()
+
+    try:
+        tty.setcbreak(fd)
+        render_all()
+        while True:
+            raw_bytes = os.read(fd, 32)
+            if raw_bytes == b"\x1b":
+                sys.stdout.write("\n\x1b[2;37m(Selection cancelled)\x1b[0m\n\n")
+                return None
+            if raw_bytes == b"\x03":
+                raise KeyboardInterrupt
+            if raw_bytes in (b"\x1b[A", b"\x1bOA"):
+                current_idx = (current_idx - 1) % len(options)
+            elif raw_bytes in (b"\x1b[B", b"\x1bOB"):
+                current_idx = (current_idx + 1) % len(options)
+            elif raw_bytes == b" ":
+                option_id = options[current_idx][0]
+                if option_id in selected:
+                    selected.remove(option_id)
+                else:
+                    selected.add(option_id)
+            elif raw_bytes == b"\x01":
+                selected = set(option_ids)
+            elif raw_bytes == b"\x18":
+                selected.clear()
+            elif raw_bytes in (b"\r", b"\n"):
+                return [option_id for option_id in option_ids if option_id in selected]
+            else:
+                continue
+            sys.stdout.write(f"\x1b[{len(options)}A")
+            render_all()
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+
 def interactive_select(
     title: str,
     options: list[tuple[str, str, str]],  # (id, label, description)

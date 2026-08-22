@@ -16,6 +16,7 @@ class MiaConfig(BaseModel):
 
     default_provider: str = ""
     default_model: str = ""
+    scoped_models: list[str] = Field(default_factory=list)
     base_urls: dict[str, str] = Field(default_factory=dict)
     max_steps_per_turn: int = 25
     temperature: float = 0.7

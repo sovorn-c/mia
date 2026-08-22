@@ -40,7 +40,12 @@ from mia_agent.session.entries import LeafEntry, MessageEntry, SessionInfoEntry
 from mia_agent.session.jsonl import JsonlSessionStore
 from mia_agent.session.tree import SessionTree
 from mia_ai.providers.base import LLMProvider
-from mia_cli.interactive_input import COMMAND_HINTS, LivePromptSession, interactive_select
+from mia_cli.interactive_input import (
+    COMMAND_HINTS,
+    LivePromptSession,
+    interactive_multi_select,
+    interactive_select,
+)
 from mia_cli.renderers.rich_stream import RichStreamRenderer
 
 SLASH_COMMANDS = [command for command, _ in COMMAND_HINTS]
@@ -161,7 +166,7 @@ class MiaREPL:
 
         self.model_name: str | None = initial_model
         self.available_model_sources: dict[str, str] = {}
-        self.scoped_models: list[str] = []
+        self.scoped_models: list[str] = list(self.config_mgr.config.scoped_models)
         if session_id and (Path(session_id).name != session_id or session_id in {".", ".."}):
             raise ValueError("Invalid session ID")
         self.session_id = session_id or f"session_{os.urandom(4).hex()}"
@@ -459,6 +464,11 @@ class MiaREPL:
             self.config_mgr.config.model_copy(
                 update={"default_provider": provider_id, "default_model": model}
             )
+        )
+
+    def _save_scoped_models(self) -> None:
+        self.config_mgr.save_config(
+            self.config_mgr.config.model_copy(update={"scoped_models": list(self.scoped_models)})
         )
 
     def _model_label(self, model_id: str) -> str:
@@ -920,25 +930,17 @@ class MiaREPL:
                 )
 
         elif cmd == "/scoped-models":
-            had_scope = bool(self.scoped_models)
             model_sources = self._discover_connected_models()
+            previous_scope = list(self.scoped_models)
             if not model_sources:
                 self.console.print(
                     "[yellow]No connected providers or discoverable models.[/yellow]\n"
                 )
-            elif not args:
-                if not had_scope:
-                    self.scoped_models = list(model_sources)
-                self.console.print("[bold #FF7A00]Scoped models:[/bold #FF7A00]")
-                for model_id in self.scoped_models:
-                    self.console.print(f"  {self._model_label(model_id)}")
-                self.console.print()
-            elif args.lower() == "all":
+                return True
+
+            if args.lower() == "all" or not self.scoped_models:
                 self.scoped_models = list(model_sources)
-                self.console.print(
-                    f"[bold green]✓ Scoped {len(self.scoped_models)} available models.[/bold green]\n"
-                )
-            else:
+            elif args:
                 requested = [model.strip() for model in args.split(",") if model.strip()]
                 aliases = {
                     self._model_label(model_id).lower(): model_id for model_id in model_sources
@@ -949,11 +951,24 @@ class MiaREPL:
                     self.console.print(
                         f"[yellow]Unknown models: {', '.join(unknown)}. Run /scoped-models to refresh.[/yellow]\n"
                     )
-                else:
-                    self.scoped_models = requested
-                    self.console.print(
-                        f"[bold green]✓ Scoped {len(requested)} models for Ctrl+P.[/bold green]\n"
-                    )
+                    return True
+                self.scoped_models = requested
+
+            options = [(model_id, self._model_label(model_id), "") for model_id in model_sources]
+            selected = interactive_multi_select(
+                "Select models for Ctrl+P",
+                options,
+                selected_ids=self.scoped_models,
+            )
+            if selected is None or not selected:
+                self.scoped_models = previous_scope
+                self.console.print("[dim]Scope unchanged.[/dim]\n")
+            else:
+                self.scoped_models = selected
+                self._save_scoped_models()
+                self.console.print(
+                    f"[bold green]✓ Saved {len(selected)} scoped models.[/bold green]\n"
+                )
 
         elif cmd in ("/profile", "/role", "/persona"):
             if not args:
