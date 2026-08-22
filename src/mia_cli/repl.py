@@ -162,6 +162,8 @@ class MiaREPL:
         self.model_name: str | None = initial_model
         self.available_model_sources: dict[str, str] = {}
         self.scoped_models: list[str] = []
+        if session_id and (Path(session_id).name != session_id or session_id in {".", ".."}):
+            raise ValueError("Invalid session ID")
         self.session_id = session_id or f"session_{os.urandom(4).hex()}"
         self.agent_runtime: AgentRuntime | None = None
         self.harness: AgentHarness | None = None
@@ -741,6 +743,10 @@ class MiaREPL:
         except Exception as exc:
             self.console.print(f"[red]Failed to resume session: {exc}[/red]\n")
 
+    def _print_session_resume_hint(self) -> None:
+        self.console.print(f"[dim]Session ID: {escape(self.session_id)}[/dim]")
+        self.console.print(f"[dim]Resume with: mia --session {escape(self.session_id)}[/dim]\n")
+
     def print_banner(self) -> None:
         """Render clean, compact top status banner with full session telemetry."""
         model_display = self.model_name if self.model_name else "(none - run /login)"
@@ -887,6 +893,7 @@ class MiaREPL:
 
         elif cmd in ("/quit", "/exit"):
             self.console.print("[dim]Saving session tree... Goodbye![/dim]")
+            self._print_session_resume_hint()
             return False
 
         elif cmd in ("/clear", "/cls"):
@@ -1109,4 +1116,5 @@ class MiaREPL:
 
             except (KeyboardInterrupt, EOFError):
                 self.console.print("\n[dim]Exiting Mia session... Goodbye![/dim]")
+                self._print_session_resume_hint()
                 break
