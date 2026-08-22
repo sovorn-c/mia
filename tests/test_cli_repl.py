@@ -101,6 +101,40 @@ def test_carrot_bounce_spinner() -> None:
     assert "Thinking (1.5s)..." in frame1
 
 
+def test_model_and_thinking_keybindings_dispatch_pi_commands() -> None:
+    from prompt_toolkit.keys import Keys
+
+    session = LivePromptSession()
+    expected = {
+        Keys.ControlL: "/model",
+        Keys.ControlP: "/model next",
+        Keys.BackTab: "/thinking",
+    }
+
+    for key, command in expected.items():
+        binding = session.bindings.get_bindings_for_keys((key,))[-1]
+        buffer = MagicMock()
+        event = MagicMock(current_buffer=buffer)
+        binding.handler(event)
+        assert buffer.text == command
+        buffer.validate_and_handle.assert_called_once_with()
+
+
+def test_scoped_model_cycle_switches_and_wraps(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.config_mgr.config_path = tmp_path / "config.json"
+    repl.available_model_sources = {"gpt-4o": "openai", "deepseek-chat": "deepseek"}
+    repl.scoped_models = ["gpt-4o", "deepseek-chat"]
+    repl.model_name = "gpt-4o"
+
+    assert repl.handle_slash_command("/model next") is True
+    assert repl.model_name == "deepseek-chat"
+    assert repl.config_mgr.config.default_provider == "deepseek"
+
+    assert repl.handle_slash_command("/model next") is True
+    assert repl.model_name == "gpt-4o"
+
+
 def test_double_escape_opens_tree_only_on_second_press() -> None:
     session = LivePromptSession()
     buffer = MagicMock()
