@@ -57,7 +57,8 @@ tasks:
     verify: "uv run --offline pytest tests/test_cli_repl.py -k 'connected_provider_models or scoped_models_command'"
     risk: "P1"
     security: "medium"
-    status: "failing"
+    status: "passing"
+    evidence: "4ec0653 and 788e473; connected provider aliases, all-provider discovery, source-safe model IDs, and scoped-model command tests pass."
     allure:
       severity: "high"
       categories: ["CLI", "Authentication", "Models"]
