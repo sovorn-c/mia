@@ -637,7 +637,9 @@ def test_interactive_multi_select_non_tty() -> None:
         assert interactive_multi_select("Select models", options) is None
 
 
-def test_interactive_multi_select_tty_navigation_and_scroll(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_interactive_multi_select_tty_navigation_and_scroll(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     options = [(f"model-{index}", f"model-{index}", "") for index in range(30)]
     input_bytes = bytearray(b"\x1b[B" * 22 + b"\r")
     output = io.StringIO()
