@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import io
+import os
+import select
 import subprocess
+import sys
 from collections.abc import AsyncIterator
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -631,6 +635,37 @@ def test_interactive_multi_select_non_tty() -> None:
 
     with patch("builtins.input", return_value=""):
         assert interactive_multi_select("Select models", options) is None
+
+
+def test_interactive_multi_select_tty_navigation_and_scroll(monkeypatch: pytest.MonkeyPatch) -> None:
+    options = [(f"model-{index}", f"model-{index}", "") for index in range(30)]
+    input_bytes = bytearray(b"\x1b[B" * 22 + b"\r")
+    output = io.StringIO()
+
+    class FakeStdin:
+        def isatty(self) -> bool:
+            return True
+
+        def fileno(self) -> int:
+            return 123
+
+    def fake_read(_fd: int, _size: int) -> bytes:
+        if not input_bytes:
+            return b""
+        value = bytes((input_bytes[0],))
+        del input_bytes[0]
+        return value
+
+    monkeypatch.setattr(sys, "stdin", FakeStdin())
+    monkeypatch.setattr(sys, "stdout", output)
+    monkeypatch.setattr(os, "read", fake_read)
+    monkeypatch.setattr(select, "select", lambda *_: ([123], [], []))
+    monkeypatch.setattr("termios.tcgetattr", lambda _fd: [])
+    monkeypatch.setattr("termios.tcsetattr", lambda *_: None)
+    monkeypatch.setattr("tty.setcbreak", lambda _fd: None)
+
+    assert interactive_multi_select("Select models", options) == []
+    assert "🥕 \x1b[1;38;2;255;122;0m[ ] model-22" in output.getvalue()
 
 
 def test_interactive_select_non_tty() -> None:
