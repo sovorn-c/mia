@@ -507,6 +507,7 @@ class MiaREPL:
 
         model_options: list[tuple[str, str, str]] = []
         model_provider_map: dict[str, str] = {}
+        self.available_model_sources = {}
         default_idx = 0
 
         for pid in target_providers:
