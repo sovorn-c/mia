@@ -3,7 +3,7 @@ spec: "e03s02-essential-slash-command-contracts.md"
 title: "Essential Slash Command Contract Alignment"
 type: "fix"
 context: "domain and infrastructure"
-status: in_progress
+status: failing
 bcps: 7
 risk: "P1"
 

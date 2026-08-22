@@ -8,7 +8,7 @@
 - **Risk:** P1
 - **Context:** domain and infrastructure
 - **BCPs:** 4
-- **Status:** in_progress
+- **Status:** failing
 
 ## 2. User Story
 

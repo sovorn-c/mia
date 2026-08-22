@@ -88,7 +88,7 @@ epics:
         tasks_failing: 0
       e03s02:
         title: Essential Slash Command Contract Alignment
-        status: in_progress
+        status: failing
         bcps: 7
         risk: P1
         tasks_total: 7
