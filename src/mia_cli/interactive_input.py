@@ -18,23 +18,24 @@ from prompt_toolkit.shortcuts import PromptSession
 from prompt_toolkit.styles import Style
 
 COMMAND_HINTS: list[tuple[str, str]] = [
-    ("/help", "Show command menu, shortcuts & tools (alias: /?)"),
-    ("/login", "Authenticate AI provider via API key or Auth (alias: /auth)"),
-    ("/logout", "Remove stored credentials & sign out (alias: /signout)"),
-    ("/model", "Switch active LLM scoped to authenticated providers (alias: /llm)"),
-    ("/profile", "Switch agent persona (coding, architect, minimal)"),
-    ("/diff", "View git diff of session modifications (alias: /changes)"),
-    ("/cost", "Show session tokens & USD cost (alias: /stats, /tokens)"),
-    ("/compact", "Trigger context window compaction (alias: /compress)"),
+    ("/help", "Show the command menu and aliases (alias: /?)"),
+    ("/login", "Authenticate an AI provider (alias: /auth)"),
+    ("/logout", "Remove stored credentials (alias: /signout)"),
+    ("/mode", "Show or select the orchestration mode"),
+    ("/model", "Switch the active model (alias: /llm)"),
+    ("/scoped-models", "Show or set models used by Ctrl+P cycling"),
+    ("/profile", "Show or switch the coordinator profile (alias: /role, /persona)"),
+    ("/diff", "Show the Git diff or report Git errors (alias: /changes)"),
+    ("/cost", "Show session token and cost totals (alias: /stats, /tokens)"),
+    ("/compact", "Compact active context when history is available (alias: /compress)"),
     ("/sessions", "List saved session trees (alias: /history)"),
-    ("/resume", "Resume a saved session; Ctrl+D/d deletes the selected session"),
-    ("/tree", "Explore and fork session conversation branch (alias: /branch)"),
-    ("/inspect", "Open post-turn detail audit viewer & diffs (alias: /logs)"),
+    ("/resume", "Resume or delete a saved session"),
+    ("/tree", "Explore and fork the session tree (alias: /branch)"),
+    ("/inspect", "Show post-turn audit details (alias: /logs)"),
     ("/thinking", "Toggle model reasoning trace visibility (alias: /trace)"),
-    ("/stop", "Halt the active running agent turn (alias: /abort)"),
-    ("/init", "Inspect repository context & AGENTS.md (alias: /bootstrap)"),
-    ("/clear", "Clear terminal screen and redraw banner (alias: /cls)"),
-    ("/quit", "Save session tree and exit cleanly (alias: /exit)"),
+    ("/init", "Check for basic repository context files (alias: /bootstrap)"),
+    ("/clear", "Clear the terminal and redraw the banner (alias: /cls)"),
+    ("/quit", "Save the session and exit (alias: /exit)"),
 ]
 
 MIA_STYLE = Style.from_dict(
@@ -215,10 +216,28 @@ class LivePromptSession:
         def _escape_handler(event: KeyPressEvent) -> None:
             self._handle_escape(event)
 
+        # Pi-style model selection and scoped-model cycling.
+        @kb.add("c-l")
+        def _model_picker_shortcut(event: KeyPressEvent) -> None:
+            event.current_buffer.text = "/model"
+            event.current_buffer.validate_and_handle()
+
+        @kb.add("c-p")
+        def _model_cycle_shortcut(event: KeyPressEvent) -> None:
+            event.current_buffer.text = "/model next"
+            event.current_buffer.validate_and_handle()
+
         # Ctrl+O: Post-turn detail audit inspector shortcut
         @kb.add("c-o")
         def _inspect_shortcut(event: KeyPressEvent) -> None:
             event.current_buffer.text = "/inspect"
+            event.current_buffer.validate_and_handle()
+
+        # Shift+Tab is Pi's thinking shortcut. Ctrl+Tab is indistinguishable from Tab
+        # in standard terminal input, so binding it would break completion.
+        @kb.add("s-tab")
+        def _thinking_cycle_shortcut(event: KeyPressEvent) -> None:
+            event.current_buffer.text = "/thinking"
             event.current_buffer.validate_and_handle()
 
         # Ctrl+T: Toggle thinking trace shortcut

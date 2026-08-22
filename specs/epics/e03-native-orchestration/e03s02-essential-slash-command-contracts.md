@@ -8,7 +8,7 @@
 - **Risk:** P1
 - **Context:** domain and infrastructure
 - **BCPs:** 4
-- **Status:** failing
+- **Status:** passing
 
 ## 2. User Story
 
@@ -159,7 +159,7 @@ Focused tests MUST assert canonical metadata consistency and observable outcomes
 1. Add failing contract tests that require one canonical metadata source, `/mode` completion, truthful `/help` and `/init` descriptions, and no advertised `/stop` or `/abort` → verify: `uv run --offline pytest tests/test_cli_repl.py -k 'command_metadata or slash_completer or help_contract'`
 2. Add failing harness and REPL tests, then implement forced manual compaction with before/after token evidence and append-only `CompactionEntry` lineage while preserving automatic compaction → verify: `uv run --offline pytest tests/test_agent_loop.py tests/test_sessions.py tests/test_cli_repl.py -k 'compact'`
 3. Add failing command tests, then validate profiles before mutation and treat non-zero `git diff` as failure rather than a clean tree → verify: `uv run --offline pytest tests/test_cli_repl.py -k 'invalid_profile or diff_failure'`
-4. Synchronize the essential command architecture and deferred cancellation boundary, then run all project gates before changing any task to passing → verify: `grep -q '17 canonical commands' specs/tech-architecture/tech-stack.md && grep -q 'Deferred active-turn cancellation' specs/tech-architecture/tech-stack.md && uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest`
+4. Synchronize the essential command architecture and deferred cancellation boundary, then run all project gates before changing any task to passing → verify: `grep -q '18 canonical commands' specs/tech-architecture/tech-stack.md && grep -q 'Deferred active-turn cancellation' specs/tech-architecture/tech-stack.md && uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest`
 
 ## 17. Acceptance Criteria
 
@@ -168,7 +168,7 @@ Focused tests MUST assert canonical metadata consistency and observable outcomes
 ```gherkin
 Given Mia's canonical command metadata
 When completion, help, and unique-prefix matching enumerate commands
-Then all three expose the same 17 canonical names in the same order
+Then all three expose the same 18 canonical names in the same order
 And `/mode` is offered by completion
 And `/stop` and `/abort` are not advertised
 ```
@@ -225,7 +225,7 @@ And architecture documentation uses the same bounded contract
 
 ## 18. Verification Script (Step-by-Step)
 
-1. Run `uv run --offline pytest tests/test_cli_repl.py -k 'command_metadata or slash_completer or help_contract'` and confirm command discovery uses one canonical 17-command list with `/mode` and without `/stop`.
+1. Run `uv run --offline pytest tests/test_cli_repl.py -k 'command_metadata or slash_completer or help_contract'` and confirm command discovery uses one canonical 18-command list with `/mode` and `/scoped-models`, without `/stop`.
 2. Create deterministic history with `MockProvider`, run `/compact`, and run `uv run --offline pytest tests/test_agent_loop.py tests/test_sessions.py tests/test_cli_repl.py -k 'compact'`; confirm in-memory reduction and append-only checkpoint evidence.
 3. Run `uv run --offline pytest tests/test_cli_repl.py -k 'invalid_profile or diff_failure'`; confirm both failures remain local and do not print false success.
 4. Run the full REPL tests and confirm existing auth, model, mode, resume, tree, inspect, thinking, clear, and quit behavior remains compatible.
@@ -243,10 +243,10 @@ And architecture documentation uses the same bounded contract
 
 ## 20. Definition of Done and Slopcheck
 
-- All four tasks in `e03s02-tasks.yaml` start `failing` and change to `passing` only after their verify commands exit zero.
-- All six acceptance scenarios have deterministic automated evidence except the final completion-menu visual smoke check.
+- All seven tasks in `e03s02-tasks.yaml` change to `passing` only after their verify commands exit zero.
+- All nine acceptance scenarios have deterministic automated evidence except the final completion-menu visual smoke check.
 - `specs/verifications/e03s02-verify.yaml` records final command outcomes.
-- Impact, scope, release index, epic manifest, execution status, and architecture agree on the 17-command contract and deferred cancellation.
+- Impact, scope, release index, epic manifest, execution status, and architecture agree on the 18-command contract and deferred cancellation.
 - Plan consistency reports `CRITICAL=0 HIGH=0 MED=0` before implementation.
 - No unresolved P0/P1 defect or security finding remains in affected paths.
 
@@ -260,3 +260,57 @@ And architecture documentation uses the same bounded contract
 ### Red-Flag Check
 
 Caught and rejected these rationalizations: leaving `/compact` as a harmless placeholder; keeping `/stop` because it may work later; adding a command framework to solve list duplication; mutating `AgentHarness._messages` from the REPL; treating `git diff` empty stdout as success without checking its exit code; and expanding `/init` into repository indexing inside this small correction.
+
+## 21. In-Flight Adjustments
+
+The user reopened this active story rather than creating a new epic.
+
+### Defects
+
+- Environment-backed provider discovery checks only `<PROVIDER>_API_KEY`, missing configured aliases such as `GOOGLE_API_KEY`, `MIMO_API_KEY`, and `OPENCODE_API_KEY`.
+- Exit output does not identify the session that was saved or provide a direct resume command.
+- Top-level interactive `mia` has no `--session` option even though `MiaREPL` and the runtime factory already accept a session ID.
+
+### Behavioral Adjustments
+
+- `/model` MUST aggregate models from every connected provider by default and MUST NOT show unconnected providers. Connected means a stored API-key/OAuth entry or a recognized non-empty environment credential.
+- When multiple providers are connected, `/model` retains an explicit all-providers or one-provider scope choice.
+- `/scoped-models` MUST expose and update the ordered model cycle scope. Ctrl+P cycles the scope without opening the picker.
+- Shift+Tab toggles Mia's existing thinking-trace display. Ctrl+Tab is not a distinct standard terminal key and prompt_toolkit rejects `c-tab`; Pi's actual thinking key is Shift+Tab. This slice does not claim to change provider reasoning effort.
+- `/quit`, EOF, and Ctrl+C exit paths MUST show the active session ID and `mia --session <id>`.
+- `mia --session <id>` MUST launch the interactive REPL with the specified durable session.
+
+### Small Additions
+
+- Add `/scoped-models` to canonical command metadata.
+- Add Ctrl+L as the Pi-compatible model-picker shortcut while retaining `/model`.
+- Keep scoped-model state session-local; persistence across Mia restarts is deferred until settings schema work is justified.
+
+### Added Acceptance Scenarios
+
+#### SC-e03s02-P1-07: Model discovery is connected-provider scoped
+
+```gherkin
+Given two connected providers and other known but unconnected providers
+When the user opens `/model` and chooses All Providers
+Then Mia discovers and lists models from both connected providers
+And does not query or list any unconnected provider
+```
+
+#### SC-e03s02-P1-08: Scoped models support fast keyboard cycling
+
+```gherkin
+Given an ordered scoped-model list
+When the user presses Ctrl+P repeatedly
+Then Mia selects the next scoped model and wraps at the end
+And Shift+Tab toggles thinking-trace visibility
+```
+
+#### SC-e03s02-P1-09: Exiting makes session recovery explicit
+
+```gherkin
+Given an active interactive session
+When the user quits through `/quit`, EOF, or Ctrl+C
+Then Mia prints the session ID and `mia --session <id>`
+And launching that command passes the ID into the interactive REPL
+```

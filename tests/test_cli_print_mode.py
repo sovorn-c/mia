@@ -29,6 +29,27 @@ def test_cli_help() -> None:
     assert "Mia" in result.stdout or "Usage" in result.stdout
 
 
+def test_top_level_session_option_resumes_interactive_repl() -> None:
+    with patch("mia_cli.repl.MiaREPL") as repl_class:
+        result = runner.invoke(app, ["--session", "session_abc123"])
+
+    assert result.exit_code == 0
+    repl_class.assert_called_once_with(
+        model=None,
+        profile="coding",
+        session_id="session_abc123",
+    )
+    repl_class.return_value.run.assert_called_once_with()
+
+
+def test_top_level_session_rejects_path_without_traceback() -> None:
+    result = runner.invoke(app, ["--session", "../outside"])
+
+    assert result.exit_code == 2
+    assert "Invalid value for --session" in result.output
+    assert "Traceback" not in result.output
+
+
 def test_cli_run_exposes_mode_selection() -> None:
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0

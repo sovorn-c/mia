@@ -69,10 +69,12 @@ success_criteria:
   - "Every runtime event identifies mode, workflow run, task, agent, and profile while retaining the original typed AgentEvent payload."
   - "Specialist failure or cancellation prevents later stages and emits a typed terminal error."
   - "Focused orchestration tests, the existing suite, Ruff, and strict Mypy pass offline."
-  - "Completion, help, and prefix matching expose the same 17 canonical slash commands."
+  - "Completion, help, and prefix matching expose the same 18 canonical slash commands."
   - "Manual /compact changes active context and appends a durable compaction checkpoint."
   - "Invalid profile selection and failed Git inspection report errors without partial state mutation or false success."
   - "Unsupported /stop and /abort commands are not advertised until concurrent cancellation exists."
+  - "Model discovery includes every connected provider and excludes unconnected providers; /scoped-models controls Ctrl+P cycling."
+  - "Interactive exit output identifies the session and top-level mia --session resumes it."
 
 references:
   - "specs/IMPACT_LATEST.md"

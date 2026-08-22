@@ -11,12 +11,14 @@ from pathlib import Path
 from typing import Any
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
 from mia_agent.auth.config import (
+    ENV_API_KEY_MAP,
     ConfigManager,
     MiaConfig,
     discover_provider_models,
@@ -38,53 +40,11 @@ from mia_agent.session.entries import LeafEntry, MessageEntry, SessionInfoEntry
 from mia_agent.session.jsonl import JsonlSessionStore
 from mia_agent.session.tree import SessionTree
 from mia_ai.providers.base import LLMProvider
-from mia_cli.interactive_input import (
-    LivePromptSession,
-    interactive_select,
-)
+from mia_cli.interactive_input import COMMAND_HINTS, LivePromptSession, interactive_select
 from mia_cli.renderers.rich_stream import RichStreamRenderer
 
-SLASH_COMMANDS = [
-    "/help",
-    "/login",
-    "/logout",
-    "/mode",
-    "/model",
-    "/profile",
-    "/diff",
-    "/cost",
-    "/compact",
-    "/sessions",
-    "/resume",
-    "/tree",
-    "/inspect",
-    "/thinking",
-    "/stop",
-    "/init",
-    "/clear",
-    "/quit",
-]
-
-COMMAND_DESCRIPTIONS: dict[str, str] = {
-    "/help": "Show complete command menu, shortcuts & tools (alias: /?)",
-    "/login": "Authenticate AI provider via API key or OpenAI Auth (alias: /auth)",
-    "/logout": "Remove stored credentials & sign out of providers (alias: /signout)",
-    "/mode": "Show or select the orchestration mode used for prompts",
-    "/model": "Interactive model picker & switcher scoped to authenticated providers (alias: /llm)",
-    "/profile": "View or switch agent persona (alias: /role, /persona)",
-    "/diff": "View git diff of session modifications with Monokai syntax (alias: /changes)",
-    "/cost": "Show real-time session tokens and estimated USD cost (alias: /stats, /tokens)",
-    "/compact": "Check/trigger context window compaction (alias: /compress)",
-    "/sessions": "List saved JSONL session history trees (alias: /history)",
-    "/resume": "Resume a saved session; Ctrl+D/d deletes the selected saved session",
-    "/tree": "Explore and fork session conversation branch (alias: /branch)",
-    "/inspect": "Open post-turn detail audit viewer and file diffs (alias: /logs)",
-    "/thinking": "Toggle display of model reasoning / thinking tokens (alias: /trace)",
-    "/stop": "Halt the active running agent turn (alias: /abort)",
-    "/init": "Inspect repository context, rules & AGENTS.md (alias: /bootstrap)",
-    "/clear": "Clear terminal screen and redraw banner (alias: /cls)",
-    "/quit": "Save session tree and exit cleanly (alias: /exit)",
-}
+SLASH_COMMANDS = [command for command, _ in COMMAND_HINTS]
+COMMAND_DESCRIPTIONS: dict[str, str] = dict(COMMAND_HINTS)
 
 COMMAND_ALIASES: dict[str, str] = {
     "/?": "/help",
@@ -102,7 +62,6 @@ COMMAND_ALIASES: dict[str, str] = {
     "/branch": "/tree",
     "/logs": "/inspect",
     "/trace": "/thinking",
-    "/abort": "/stop",
     "/bootstrap": "/init",
     "/cls": "/clear",
     "/exit": "/quit",
@@ -201,6 +160,10 @@ class MiaREPL:
                 initial_model = None
 
         self.model_name: str | None = initial_model
+        self.available_model_sources: dict[str, str] = {}
+        self.scoped_models: list[str] = []
+        if session_id and (Path(session_id).name != session_id or session_id in {".", ".."}):
+            raise ValueError("Invalid session ID")
         self.session_id = session_id or f"session_{os.urandom(4).hex()}"
         self.agent_runtime: AgentRuntime | None = None
         self.harness: AgentHarness | None = None
@@ -470,24 +433,46 @@ class MiaREPL:
                 f"[bold green]✓ Logged out of {chosen}. Key removed from ~/.mia/credentials.json[/bold green]\n"
             )
 
+    def _provider_api_key(self, provider_id: str) -> str | None:
+        stored = self.cred_store.get_api_key(provider_id)
+        if stored:
+            return stored
+        env_names = ENV_API_KEY_MAP.get(provider_id, [f"{provider_id.upper()}_API_KEY"])
+        return next((os.environ[name] for name in env_names if os.environ.get(name)), None)
+
+    def _connected_providers(self) -> list[str]:
+        connected = self.cred_store.list_stored_providers()
+        for provider in (entry["id"] for entry in PROVIDER_CATALOG.values()):
+            if provider not in connected and self._provider_api_key(provider):
+                connected.append(provider)
+        return connected
+
+    def _save_model_selection(self, provider_id: str, model: str) -> None:
+        self.config_mgr.save_config(
+            self.config_mgr.config.model_copy(
+                update={"default_provider": provider_id, "default_model": model}
+            )
+        )
+
+    def cycle_scoped_model(self) -> None:
+        """Select the next scoped model, wrapping at the end."""
+        if not self.scoped_models:
+            self.console.print(
+                "[yellow]No scoped models. Run /model, then /scoped-models.[/yellow]\n"
+            )
+            return
+        active_id = f"{self.config_mgr.config.default_provider}::{self.model_name}"
+        current = self.scoped_models.index(active_id) if active_id in self.scoped_models else -1
+        selected_id = self.scoped_models[(current + 1) % len(self.scoped_models)]
+        provider_id = self.available_model_sources[selected_id]
+        self.model_name = selected_id.split("::", 1)[1]
+        self._save_model_selection(provider_id, self.model_name)
+        self._init_harness()
+        self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
+
     def interactive_model_picker(self) -> None:
-        """Interactive Model Switcher with dynamic live model discovery and provider scoping (Pi-Style)."""
-        stored_providers = self.cred_store.list_stored_providers()
-        all_known = [
-            "opencode-go",
-            "openrouter",
-            "gemini",
-            "openai",
-            "anthropic",
-            "deepseek",
-            "custom",
-        ]
-        authenticated_pids: list[str] = list(stored_providers)
-        for pid in all_known:
-            if pid not in authenticated_pids:
-                key = os.environ.get(f"{pid.upper()}_API_KEY")
-                if key:
-                    authenticated_pids.append(pid)
+        """List models from connected providers and switch the active model."""
+        authenticated_pids = self._connected_providers()
 
         if not authenticated_pids:
             self.console.print(
@@ -520,20 +505,29 @@ class MiaREPL:
 
         model_options: list[tuple[str, str, str]] = []
         model_provider_map: dict[str, str] = {}
+        self.available_model_sources = {}
         default_idx = 0
 
         for pid in target_providers:
-            key = self.cred_store.get_api_key(pid) or os.environ.get(f"{pid.upper()}_API_KEY")
+            key = self._provider_api_key(pid)
             base_url = self.config_mgr.config.base_urls.get(pid)
             live_models = discover_provider_models(pid, api_key=key, base_url=base_url)
 
-            for m in live_models:
-                is_active = m == self.model_name
+            for model in live_models:
+                option_id = f"{pid}::{model}"
+                is_active = model == self.model_name
                 desc = f"Provider: {pid} (Active)" if is_active else f"Provider: {pid}"
                 if is_active:
                     default_idx = len(model_options)
-                model_options.append((m, m, desc))
-                model_provider_map[m] = pid
+                model_options.append((option_id, model, desc))
+                model_provider_map[option_id] = pid
+                self.available_model_sources[option_id] = pid
+
+        self.scoped_models = [
+            model_id for model_id in self.scoped_models if model_id in self.available_model_sources
+        ]
+        if not self.scoped_models:
+            self.scoped_models = list(self.available_model_sources)
 
         model_options.append(
             ("__custom__", "Custom Model", "Type any custom or unlisted model ID...")
@@ -553,13 +547,9 @@ class MiaREPL:
                 if custom_m:
                     self.model_name = custom_m
                     inferred_prov = self.config_mgr.infer_provider(custom_m)
-                    current_cfg = self.config_mgr.config
-                    self.config_mgr.save_config(
-                        MiaConfig(
-                            default_provider=inferred_prov or current_cfg.default_provider,
-                            default_model=custom_m,
-                            base_urls=current_cfg.base_urls,
-                        )
+                    self._save_model_selection(
+                        inferred_prov or self.config_mgr.config.default_provider,
+                        custom_m,
                     )
                     self._init_harness()
                     self.console.print(
@@ -568,16 +558,9 @@ class MiaREPL:
             except (KeyboardInterrupt, EOFError):
                 return
         else:
-            self.model_name = selected
-            prov_id = model_provider_map.get(selected, self.config_mgr.config.default_provider)
-            current_cfg = self.config_mgr.config
-            self.config_mgr.save_config(
-                MiaConfig(
-                    default_provider=prov_id,
-                    default_model=selected,
-                    base_urls=current_cfg.base_urls,
-                )
-            )
+            provider_id = model_provider_map[selected]
+            self.model_name = selected.split("::", 1)[1]
+            self._save_model_selection(provider_id, self.model_name)
             self._init_harness()
             self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
 
@@ -762,6 +745,10 @@ class MiaREPL:
         except Exception as exc:
             self.console.print(f"[red]Failed to resume session: {exc}[/red]\n")
 
+    def _print_session_resume_hint(self) -> None:
+        self.console.print(f"[dim]Session ID: {escape(self.session_id)}[/dim]")
+        self.console.print(f"[dim]Resume with: mia --session {escape(self.session_id)}[/dim]\n")
+
     def print_banner(self) -> None:
         """Render clean, compact top status banner with full session telemetry."""
         model_display = self.model_name if self.model_name else "(none - run /login)"
@@ -811,9 +798,9 @@ class MiaREPL:
         )
 
     def print_command_menu(self, filter_prefix: str | None = None) -> None:
-        """Render the 13 essential commands palette with descriptions and examples."""
+        """Render canonical commands with descriptions and aliases."""
         table = Table(
-            title="🥕 Mia Essential Slash Commands",
+            title=f"🥕 Mia {len(SLASH_COMMANDS)} Canonical Slash Commands",
             border_style="#2D3342",
             show_header=True,
             header_style="bold #FF7A00",
@@ -880,7 +867,7 @@ class MiaREPL:
 
         except asyncio.CancelledError:
             self.stream_renderer._stop_status()
-            self.console.print("\n[yellow]⚠️  Turn halted by user (/stop or Ctrl+C).[/yellow]\n")
+            self.console.print("\n[yellow]⚠️  Turn halted by user (Ctrl+C).[/yellow]\n")
         except Exception as exc:
             self.stream_renderer._stop_status()
             self.console.print(f"\n[bold red]Error during execution:[/bold red] {exc}\n")
@@ -908,6 +895,7 @@ class MiaREPL:
 
         elif cmd in ("/quit", "/exit"):
             self.console.print("[dim]Saving session tree... Goodbye![/dim]")
+            self._print_session_resume_hint()
             return False
 
         elif cmd in ("/clear", "/cls"):
@@ -936,12 +924,38 @@ class MiaREPL:
         elif cmd in ("/model", "/llm"):
             if not args:
                 self.interactive_model_picker()
+            elif args.lower() == "next":
+                self.cycle_scoped_model()
             else:
                 self.model_name = args
                 self._init_harness()
                 self.console.print(
                     f"[bold green]✓ Switched active model to {self.model_name}[/bold green]\n"
                 )
+
+        elif cmd == "/scoped-models":
+            if not args:
+                current = ", ".join(self.scoped_models) or "(none; run /model first)"
+                self.console.print(f"[bold #FF7A00]Scoped models:[/bold #FF7A00] {current}\n")
+            elif args.lower() == "all":
+                self.scoped_models = list(self.available_model_sources)
+                self.console.print(
+                    f"[bold green]✓ Scoped {len(self.scoped_models)} available models.[/bold green]\n"
+                )
+            else:
+                requested = [model.strip() for model in args.split(",") if model.strip()]
+                unknown = [
+                    model for model in requested if model not in self.available_model_sources
+                ]
+                if unknown:
+                    self.console.print(
+                        f"[yellow]Unknown available models: {', '.join(unknown)}. Run /model first.[/yellow]\n"
+                    )
+                else:
+                    self.scoped_models = requested
+                    self.console.print(
+                        f"[bold green]✓ Scoped {len(requested)} models for Ctrl+P.[/bold green]\n"
+                    )
 
         elif cmd in ("/profile", "/role", "/persona"):
             if not args:
@@ -954,11 +968,16 @@ class MiaREPL:
                     "[dim]To switch: /profile <name> (e.g. /profile architect)[/dim]\n"
                 )
             else:
-                self.profile_name = args
-                self._init_harness()
-                self.console.print(
-                    f"[bold green]✓ Switched profile to {self.profile_name}[/bold green]\n"
-                )
+                try:
+                    profile = self.profile_mgr.get_profile(args)
+                except ValueError as exc:
+                    self.console.print(f"[yellow]{exc}[/yellow]\n")
+                else:
+                    self.profile_name = profile.name
+                    self._init_harness()
+                    self.console.print(
+                        f"[bold green]✓ Switched profile to {self.profile_name}[/bold green]\n"
+                    )
 
         elif cmd in ("/diff", "/changes"):
             try:
@@ -969,17 +988,21 @@ class MiaREPL:
                     text=True,
                     check=False,
                 )
-                diff_text = res.stdout.strip()
-                if not diff_text:
-                    self.console.print(
-                        "[bold green]✓ Working tree clean. No uncommitted diffs.[/bold green]\n"
-                    )
+                if res.returncode != 0:
+                    error = res.stderr.strip() or f"git diff exited with status {res.returncode}"
+                    self.console.print(f"[red]Git diff failed: {escape(error)}[/red]\n")
                 else:
-                    self.console.print("[bold #FF7A00]Current Git Diffs:[/bold #FF7A00]")
-                    self.console.print(
-                        Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
-                    )
-                    self.console.print()
+                    diff_text = res.stdout.strip()
+                    if not diff_text:
+                        self.console.print(
+                            "[bold green]✓ Working tree clean. No uncommitted diffs.[/bold green]\n"
+                        )
+                    else:
+                        self.console.print("[bold #FF7A00]Current Git Diffs:[/bold #FF7A00]")
+                        self.console.print(
+                            Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
+                        )
+                        self.console.print()
             except Exception as e:
                 self.console.print(f"[red]Failed to run git diff: {e}[/red]\n")
 
@@ -989,7 +1012,21 @@ class MiaREPL:
             )
 
         elif cmd in ("/compact", "/compress"):
-            self.console.print("[bold green]✓ Context compaction status verified.[/bold green]\n")
+            if self.harness is None:
+                self.console.print(
+                    "[yellow]No active context to compact; configure a model first.[/yellow]\n"
+                )
+            else:
+                result = self.harness.compact_context()
+                if result is None:
+                    self.console.print(
+                        "[yellow]Nothing to compact: no conversation history or compactor is configured.[/yellow]\n"
+                    )
+                else:
+                    self.console.print(
+                        "[bold green]✓ Context compacted: "
+                        f"{result.before_tokens:,} → {result.after_tokens:,} estimated tokens.[/bold green]\n"
+                    )
 
         elif cmd in ("/sessions", "/history"):
             session_dir = self.profile_mgr.get_session_dir(self.profile_name)
@@ -1018,9 +1055,6 @@ class MiaREPL:
                 f"[bold #FF7A00]💭 Model reasoning trace is now {state_str}.[/bold #FF7A00]\n"
             )
 
-        elif cmd in ("/stop", "/abort"):
-            self.console.print("[yellow]No active turn running.[/yellow]\n")
-
         elif cmd in ("/init", "/bootstrap"):
             has_git = (self.cwd / ".git").exists()
             has_agents = (self.cwd / "AGENTS.md").exists()
@@ -1031,7 +1065,7 @@ class MiaREPL:
                     f" - Git Repository: {'[green]Yes[/green]' if has_git else '[yellow]No[/yellow]'}\n"
                     f" - AGENTS.md Guidelines: {'[green]Found[/green]' if has_agents else '[dim]None[/dim]'}\n"
                     f" - README.md: {'[green]Found[/green]' if has_readme else '[dim]None[/dim]'}",
-                    title="[bold #FF7A00]Repository Context[/bold #FF7A00]",
+                    title="[bold #FF7A00]Basic Repository Context[/bold #FF7A00]",
                     border_style="#2D3342",
                 )
             )
@@ -1084,4 +1118,5 @@ class MiaREPL:
 
             except (KeyboardInterrupt, EOFError):
                 self.console.print("\n[dim]Exiting Mia session... Goodbye![/dim]")
+                self._print_session_resume_hint()
                 break

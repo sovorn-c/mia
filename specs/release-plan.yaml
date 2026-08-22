@@ -41,7 +41,7 @@ epics:
       job_size: 8
       score: 5.9
     status: "planned"
-    bcps_total: 9
+    bcps_total: 12
     stories_count: 2
     directory: "specs/epics/e03-native-orchestration"
 

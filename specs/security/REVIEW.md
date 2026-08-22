@@ -17,3 +17,13 @@
 ## Notes
 
 `session_id` and custom profile names are used in local filesystem paths by pre-existing session/profile infrastructure. This review found no new remotely reachable exploit path; path hardening remains a reasonable future defense-in-depth improvement if Mia exposes these values to an untrusted service boundary.
+
+## e03s02 In-Flight Adjustment Addendum
+
+- **Diff scope:** `e903f00..HEAD`
+- **Verdict:** PASS — no HIGH or MEDIUM vulnerability at confidence >= 8.
+- Model APIs are queried only for providers with stored credentials/OAuth records or recognized API-key environment variables; keys are not rendered or persisted in model scope state.
+- Provider identity remains attached to model choices with internal `provider::model` IDs, preventing same-name models from selecting another provider's credential.
+- Disconnected providers and their scoped models are pruned on the next discovery pass.
+- Top-level `--session` accepts IDs only; path components are rejected before session filesystem resolution. The CLI emits a bounded Typer error without traceback, and rendered IDs are Rich-escaped.
+- No shell interpolation, unsafe deserialization, new network endpoint, dependency, or secret-bearing log was introduced.

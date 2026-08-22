@@ -89,22 +89,28 @@ Previous versions attempted character-by-character raw POSIX input (`setcbreak`)
 
 ## 4. Essential Slash Commands Suite
 
-1. **`/help`** (`/?`): Compact table of commands, shortcuts, and tool permissions.
-2. **`/login`** (`/auth`): 2-option login wizard (API Key vs OpenAI Auth) with live probe.
-3. **`/logout`** (`/signout`, `/disconnect`): Wipe stored credentials for one or all providers.
-4. **`/model`** (`/llm`): Scoped model switcher showing authenticated providers + custom entry.
-5. **`/mode`**: Show or select the explicit `single` or `research` orchestration mode.
-6. **`/profile`** (`/role`, `/persona`): Select the coordinator role (`coding`, `architect`, `minimal`, `code_mode`).
-6. **`/diff`** (`/changes`): Display syntax-highlighted git diff of modifications.
-7. **`/cost`** (`/tokens`, `/stats`): Display real-time session tokens and estimated USD cost.
-8. **`/compact`** (`/compress`): Check token usage against context window and trigger compaction.
-9. **`/sessions`** (`/history`): List saved JSONL conversation trees.
-10. **`/resume`**: Pick or directly restore a saved session and its active branch; use `Ctrl+D`/`d`, then Enter to delete a selected non-active session.
-11. **`/tree`** (`/branch`): Interactive tree navigator to jump to previous checkpoints and fork branches.
-12. **`/stop`** (`/abort`): Immediately halt and cancel an active running agent turn.
-13. **`/init`** (`/bootstrap`): Scan repository architecture and verify `AGENTS.md`.
-14. **`/clear`** (`/cls`): Clear screen and redraw clean single-line header banner.
-15. **`/quit`** (`/exit`): Save session and exit cleanly.
+The inline REPL exposes **18 canonical commands**. Completion, help, and unique-prefix matching derive from the same ordered metadata list.
+
+1. **`/help`** (`/?`): Show the command menu and aliases.
+2. **`/login`** (`/auth`): Authenticate an AI provider.
+3. **`/logout`** (`/signout`, `/disconnect`): Remove stored credentials.
+4. **`/mode`**: Show or select the explicit `single` or `research` orchestration mode.
+5. **`/model`** (`/llm`): Discover models from all connected providers or filter by provider, then switch the active model.
+6. **`/scoped-models`**: Show or set the ordered models used by Ctrl+P cycling.
+7. **`/profile`** (`/role`, `/persona`): Show or switch the coordinator profile.
+8. **`/diff`** (`/changes`): Show the Git diff or report Git errors.
+9. **`/cost`** (`/tokens`, `/stats`): Show session token and cost totals.
+10. **`/compact`** (`/compress`): Compact active context when history is available and append a session checkpoint.
+11. **`/sessions`** (`/history`): List saved JSONL conversation trees.
+12. **`/resume`**: Restore or delete a saved session.
+13. **`/tree`** (`/branch`): Explore and fork the session tree.
+14. **`/inspect`** (`/logs`): Show post-turn audit details.
+15. **`/thinking`** (`/trace`): Toggle model reasoning trace visibility.
+16. **`/init`** (`/bootstrap`): Check for `.git`, `AGENTS.md`, and `README.md`.
+17. **`/clear`** (`/cls`): Clear the terminal and redraw the banner.
+18. **`/quit`** (`/exit`): Save the session, show its ID, and print `mia --session <id>`.
+
+**Deferred active-turn cancellation:** `/stop` and `/abort` are not advertised until the serial REPL can receive input while a turn is running and cancel provider streams and tool processes safely.
 
 ---
 
@@ -165,11 +171,13 @@ Mia uses a profile-driven execution model enforced via the `SecurityGuardMiddlew
 | **`Shift+Enter`** | Multi-Line Newline | Inserts a newline without submitting |
 | **`Ctrl+C`** | Clear Input Buffer | Clears the current typed text in prompt without killing session |
 | **`Ctrl+D`** | Exit Session | Saves session JSONL tree and terminates cleanly |
+| **`Ctrl+L`** | Select Model | Opens the all-connected-provider model selector |
+| **`Ctrl+P`** | Cycle Model | Selects the next model configured by `/scoped-models` |
+| **`Shift+Tab`** | Toggle Thinking Trace | Toggles live visibility of model reasoning tokens; Ctrl+Tab is not distinct from Tab in standard terminals |
 | **`Ctrl+O`** | Expand/Collapse Logs | Toggles detailed audit view of tool arguments and file diffs |
-| **`Ctrl+T`** | Toggle Thinking Trace | Toggles live visibility of model reasoning tokens |
+| **`Ctrl+T`** | Toggle Thinking Trace | Also toggles live visibility of model reasoning tokens |
 | **`Esc Esc` (or `/tree`)** | Session Tree Fork | On an empty prompt, double-Esc within 500 ms opens the tree browser to jump to a checkpoint or fork |
 | **`Ctrl+D` / `d` in `/resume`** | Delete Session | Asks for Enter confirmation; Esc cancels. The active session cannot be deleted. |
-| **`/stop`** | Abort Turn | Halts the active LLM stream or running tool subprocess |
 
 ---
 
@@ -191,12 +199,8 @@ Mia uses a profile-driven execution model enforced via the `SecurityGuardMiddlew
 
 ## 9. Context Bootstrap & Automatic Compaction (Tau / Pi Standard)
 
-### A. Repository Context Auto-Discovery
-* **Automatic Ingestion:** Upon session startup in a workspace, Mia automatically discovers:
-  - `AGENTS.md`, `CLAUDE.md`, or `README.md` in the project root.
-  - Git repository status (active branch, modified working tree status via `git status --short`).
-  - System environment (OS, Python runtime, workspace path).
-* **Inspection (`/init`):** Developers can inspect the dynamically compiled system prompt context at any time.
+### A. Repository Context Check
+* **Inspection (`/init`):** Developers can check whether `.git`, `AGENTS.md`, and `README.md` exist in the working directory. This command does not scan architecture or compile a system prompt.
 
 ### B. Automatic Context Compaction (`/compact`)
 * **Threshold (Default: 80% of window or configurable):**

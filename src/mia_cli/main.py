@@ -183,10 +183,17 @@ def main_callback(
     ctx: typer.Context,
     model: Annotated[str | None, typer.Option("--model", "-m", help="Default model")] = None,
     profile: Annotated[str, typer.Option("--profile", "-p", help="Agent profile")] = "coding",
+    session: Annotated[
+        str | None,
+        typer.Option("--session", help="Resume an interactive session by ID"),
+    ] = None,
 ) -> None:
     """Default callback: launch interactive Mia REPL harness."""
     if ctx.invoked_subcommand is None:
+        if session and (Path(session).name != session or session in {".", ".."}):
+            raise typer.BadParameter("must be a session ID, not a path", param_hint="--session")
+
         from mia_cli.repl import MiaREPL
 
-        repl = MiaREPL(model=model, profile=profile)
+        repl = MiaREPL(model=model, profile=profile, session_id=session)
         repl.run()

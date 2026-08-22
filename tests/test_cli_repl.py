@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
+import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from prompt_toolkit.document import Document
+from rich.console import Console
 
 from mia_agent.orchestration import OrchestrationErrorEvent, OrchestrationEventEnvelope
 from mia_agent.session.entries import MessageEntry
@@ -15,6 +18,7 @@ from mia_agent.session.jsonl import JsonlSessionStore
 from mia_ai.providers.mock import MockProvider
 from mia_ai.types import ToolCall
 from mia_cli.interactive_input import (
+    COMMAND_HINTS,
     LiveInteractivePrompt,
     LivePromptSession,
     SlashCompleter,
@@ -42,6 +46,38 @@ def test_slash_completer_and_menu() -> None:
     assert len(completions_empty) == 0
 
 
+def test_command_discovery_has_one_truthful_canonical_list() -> None:
+    from mia_cli.repl import COMMAND_ALIASES, COMMAND_DESCRIPTIONS, SLASH_COMMANDS
+
+    canonical = [command for command, _ in COMMAND_HINTS]
+
+    assert len(canonical) == 18
+    assert "/mode" in canonical
+    assert "/scoped-models" in canonical
+    assert "/stop" not in canonical
+    assert canonical == SLASH_COMMANDS
+    assert canonical == list(COMMAND_DESCRIPTIONS)
+    assert "/abort" not in COMMAND_ALIASES
+
+
+def test_help_contract_describes_only_implemented_behavior(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+
+    repl.handle_slash_command("/help")
+    help_output = repl.console.export_text()
+    assert "18 Canonical Slash Commands" in help_output
+    assert "shortcuts" not in help_output
+    assert "/mode" in help_output
+    assert "/stop" not in help_output
+
+    repl.console = Console(record=True, width=120)
+    repl.handle_slash_command("/init")
+    init_output = repl.console.export_text()
+    assert "Basic Repository Context" in init_output
+    assert "architecture" not in init_output.lower()
+
+
 def test_format_status_toolbar() -> None:
     toolbar_html = format_status_toolbar(
         workspace_name="mia",
@@ -64,6 +100,45 @@ def test_carrot_bounce_spinner() -> None:
     frame1 = CarrotBounceSpinner.render_frame(1.5)
     assert "🥕" in frame1
     assert "Thinking (1.5s)..." in frame1
+
+
+def test_model_and_thinking_keybindings_dispatch_pi_commands() -> None:
+    from prompt_toolkit.keys import Keys
+
+    session = LivePromptSession()
+    expected = {
+        Keys.ControlL: "/model",
+        Keys.ControlP: "/model next",
+        Keys.BackTab: "/thinking",
+    }
+
+    for key, command in expected.items():
+        binding = session.bindings.get_bindings_for_keys((key,))[-1]
+        buffer = MagicMock()
+        event = MagicMock(current_buffer=buffer)
+        binding.handler(event)
+        assert buffer.text == command
+        buffer.validate_and_handle.assert_called_once_with()
+
+
+def test_scoped_model_cycle_switches_and_wraps(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.config_mgr.config_path = tmp_path / "config.json"
+    repl.available_model_sources = {
+        "openai::shared-model": "openai",
+        "openrouter::shared-model": "openrouter",
+    }
+    repl.scoped_models = ["openai::shared-model", "openrouter::shared-model"]
+    repl.model_name = "shared-model"
+    repl._save_model_selection("openai", "shared-model")
+
+    assert repl.handle_slash_command("/model next") is True
+    assert repl.model_name == "shared-model"
+    assert repl.config_mgr.config.default_provider == "openrouter"
+
+    assert repl.handle_slash_command("/model next") is True
+    assert repl.model_name == "shared-model"
+    assert repl.config_mgr.config.default_provider == "openai"
 
 
 def test_double_escape_opens_tree_only_on_second_press() -> None:
@@ -116,6 +191,61 @@ def test_repl_slash_commands_suite(tmp_path: Path) -> None:
     assert repl.handle_slash_command("/profile architect") is True
     assert repl.profile_name == "architect"
     assert repl.handle_slash_command("/quit") is False
+
+
+def test_session_resume_hint_is_shown_on_quit_and_eof(tmp_path: Path) -> None:
+    repl = MiaREPL(
+        cwd=tmp_path,
+        custom_provider=MockProvider(),
+        session_id="session_resume_me",
+    )
+    repl.console = Console(record=True, width=120)
+
+    assert repl.handle_slash_command("/quit") is False
+    quit_output = repl.console.export_text()
+    assert "session_resume_me" in quit_output
+    assert "mia --session session_resume_me" in quit_output
+
+    repl.console = Console(record=True, width=120)
+    repl.prompt_session.read_prompt_async = AsyncMock(side_effect=EOFError)
+    asyncio.run(repl.run_async())
+    eof_output = repl.console.export_text()
+    assert "session_resume_me" in eof_output
+    assert "mia --session session_resume_me" in eof_output
+
+
+def test_invalid_profile_preserves_active_runtime(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+    original_harness = repl.harness
+    original_runtime = repl.agent_runtime
+
+    assert repl.handle_slash_command("/profile does-not-exist") is True
+
+    assert repl.profile_name == "coding"
+    assert repl.harness is original_harness
+    assert repl.agent_runtime is original_runtime
+    output = repl.console.export_text()
+    assert "not found" in output
+    assert "Available profiles" in output
+
+
+def test_diff_reports_git_failure_instead_of_clean_tree(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+    failed_diff = subprocess.CompletedProcess(
+        args=["git", "diff"],
+        returncode=128,
+        stdout="",
+        stderr="fatal: not a git repository",
+    )
+
+    with patch("mia_cli.repl.subprocess.run", return_value=failed_diff):
+        assert repl.handle_slash_command("/diff") is True
+
+    output = repl.console.export_text()
+    assert "not a git repository" in output
+    assert "Working tree clean" not in output
 
 
 def test_repl_mode_selection_and_invalid_mode(tmp_path: Path) -> None:
@@ -177,6 +307,66 @@ def test_repl_pi_style_auth_and_model_scoper(tmp_path: Path) -> None:
     with patch("builtins.input", return_value="1"):
         repl.interactive_model_picker()
     assert repl.model_name == "mimo-v2.5"
+
+
+def test_connected_provider_models_are_all_discovered_without_unconnected(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.cred_store.path = tmp_path / "credentials.json"
+    repl.config_mgr.config_path = tmp_path / "config.json"
+    repl.cred_store.set_api_key("openai", "sk-test-openai")
+    repl.cred_store.set_api_key("deepseek", "sk-test-deepseek")
+
+    discovered: list[str] = []
+
+    def models_for(provider: str, **_: object) -> list[str]:
+        discovered.append(provider)
+        return [f"{provider}-model"]
+
+    with (
+        patch.dict("os.environ", {"GOOGLE_API_KEY": "google-key"}, clear=True),
+        patch("mia_cli.repl.discover_provider_models", side_effect=models_for),
+        patch(
+            "mia_cli.repl.interactive_select",
+            side_effect=["all", "openai::openai-model"],
+        ),
+    ):
+        repl.interactive_model_picker()
+
+    assert discovered == ["deepseek", "openai", "gemini"]
+    assert repl.model_name == "openai-model"
+    assert repl.config_mgr.config.default_provider == "openai"
+
+    repl.cred_store.delete("openai")
+    with (
+        patch.dict("os.environ", {}, clear=True),
+        patch("mia_cli.repl.discover_provider_models", side_effect=models_for),
+        patch("mia_cli.repl.interactive_select", return_value="deepseek::deepseek-model"),
+    ):
+        repl.interactive_model_picker()
+
+    assert repl.available_model_sources == {"deepseek::deepseek-model": "deepseek"}
+    assert repl.scoped_models == ["deepseek::deepseek-model"]
+
+
+def test_scoped_models_command_sets_cycle_scope(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.available_model_sources = {
+        "openai::gpt-4o": "openai",
+        "deepseek::deepseek-chat": "deepseek",
+        "gemini::gemini-pro": "gemini",
+    }
+
+    assert (
+        repl.handle_slash_command("/scoped-models openai::gpt-4o, deepseek::deepseek-chat") is True
+    )
+    assert repl.scoped_models == ["openai::gpt-4o", "deepseek::deepseek-chat"]
+
+    assert repl.handle_slash_command("/scoped-models all") is True
+    assert repl.scoped_models == [
+        "openai::gpt-4o",
+        "deepseek::deepseek-chat",
+        "gemini::gemini-pro",
+    ]
 
 
 def test_repl_scoped_model_picker(tmp_path: Path) -> None:

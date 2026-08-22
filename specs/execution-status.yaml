@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.3.0
-updated_at: '2026-08-21T23:23:33Z'
+updated_at: '2026-08-21T23:49:43Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-08-21T23:11:33Z'
@@ -88,9 +88,9 @@ epics:
         tasks_failing: 0
       e03s02:
         title: Essential Slash Command Contract Alignment
-        status: failing
-        bcps: 4
+        status: passing
+        bcps: 7
         risk: P1
-        tasks_total: 4
-        tasks_passing: 0
-        tasks_failing: 4
+        tasks_total: 7
+        tasks_passing: 7
+        tasks_failing: 0
