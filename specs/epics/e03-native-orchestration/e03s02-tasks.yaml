@@ -3,7 +3,7 @@ spec: "e03s02-essential-slash-command-contracts.md"
 title: "Essential Slash Command Contract Alignment"
 type: "fix"
 context: "domain and infrastructure"
-status: failing
+status: passing
 bcps: 7
 risk: "P1"
 
@@ -42,8 +42,8 @@ tasks:
       categories: ["CLI", "Failure Safety", "unit"]
 
   - id: "t04"
-    description: "Synchronize architecture with the 17-command contract and deferred cancellation boundary, then run every offline quality gate and record verification evidence."
-    verify: "grep -q '17 canonical commands' specs/tech-architecture/tech-stack.md && grep -q 'Deferred active-turn cancellation' specs/tech-architecture/tech-stack.md && uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest"
+    description: "Synchronize architecture with the canonical command contract and deferred cancellation boundary, then run every offline quality gate and record verification evidence."
+    verify: "grep -q '18 canonical commands' specs/tech-architecture/tech-stack.md && grep -q 'Deferred active-turn cancellation' specs/tech-architecture/tech-stack.md && uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest"
     risk: "P1"
     security: "low"
     status: "passing"
@@ -79,7 +79,8 @@ tasks:
     verify: "uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py -k 'session_resume_hint or top_level_session'"
     risk: "P1"
     security: "low"
-    status: "failing"
+    status: "passing"
+    evidence: "db328a3; slash quit, EOF exit, resume hint, session ID validation, and top-level --session forwarding tests pass."
     allure:
       severity: "high"
       categories: ["CLI", "Session", "Resume"]

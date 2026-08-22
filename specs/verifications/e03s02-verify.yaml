@@ -16,8 +16,14 @@ phases:
         actual: "3 passed"
       - command: "uv run --offline pytest tests/test_cli_repl.py -k 'invalid_profile or git_failure'"
         actual: "2 passed"
-      - command: "grep -q '17 canonical commands' specs/tech-architecture/tech-stack.md && grep -q 'Deferred active-turn cancellation' specs/tech-architecture/tech-stack.md"
+      - command: "grep -q '18 canonical commands' specs/tech-architecture/tech-stack.md && grep -q 'Deferred active-turn cancellation' specs/tech-architecture/tech-stack.md"
         actual: "PASS"
+      - command: "uv run --offline pytest tests/test_cli_repl.py -k 'connected_provider_models or scoped_models_command'"
+        actual: "2 passed"
+      - command: "uv run --offline pytest tests/test_cli_repl.py -k 'model_and_thinking_keybindings or scoped_model_cycle'"
+        actual: "2 passed"
+      - command: "uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py -k 'session_resume_hint or top_level_session'"
+        actual: "2 passed"
   build:
     passed: true
     command: "uv run --offline python -m compileall -q src"
@@ -35,19 +41,19 @@ phases:
   tests:
     passed: true
     command: "uv run --offline pytest"
-    actual: "93 passed in 3.27s"
+    actual: "99 passed in 2.99s"
   diff:
     passed: true
     command: "git diff --check"
     actual: "PASS"
   tdd:
     passed: true
-    actual: "Each behavior has separate test and implementation commits; RED isolation checks passed for canonical metadata, help/init, compaction, profile failure, and Git failure."
+    actual: "Each behavior has separate RED/GREEN commits; isolation checks passed for original command fixes plus connected providers, scoped models, shortcuts, stale discovery state, and direct session resume."
   manual:
     user_confirmation: pending
     steps:
       - step: "Run /help in the inline REPL."
-        expected: "17 Canonical Slash Commands appears; /mode is listed; /stop is absent."
+        expected: "18 Canonical Slash Commands appears; /mode and /scoped-models are listed; /stop is absent."
       - step: "Run /compact after a conversation with history."
         expected: "Mia reports estimated before/after token counts and persists a compaction checkpoint."
       - step: "Run /profile does-not-exist."
@@ -56,3 +62,11 @@ phases:
         expected: "Mia reports the Git error instead of claiming a clean tree."
       - step: "Open prompt completion for /mo."
         expected: "/mode is offered; /stop is not offered."
+      - step: "Connect at least two providers and run /model."
+        expected: "All Providers and each connected provider are offered; unconnected providers are absent."
+      - step: "Run /scoped-models <model-a>,<model-b>, then press Ctrl+P twice."
+        expected: "The active model cycles in configured order and wraps."
+      - step: "Press Ctrl+L and Shift+Tab."
+        expected: "Ctrl+L opens /model; Shift+Tab toggles the thinking trace without breaking Tab completion."
+      - step: "Run /quit and copy the printed resume command."
+        expected: "Output includes the active session ID and `mia --session <id>` reopens it."

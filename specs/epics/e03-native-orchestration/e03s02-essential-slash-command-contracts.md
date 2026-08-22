@@ -8,7 +8,7 @@
 - **Risk:** P1
 - **Context:** domain and infrastructure
 - **BCPs:** 4
-- **Status:** failing
+- **Status:** passing
 
 ## 2. User Story
 
@@ -159,7 +159,7 @@ Focused tests MUST assert canonical metadata consistency and observable outcomes
 1. Add failing contract tests that require one canonical metadata source, `/mode` completion, truthful `/help` and `/init` descriptions, and no advertised `/stop` or `/abort` → verify: `uv run --offline pytest tests/test_cli_repl.py -k 'command_metadata or slash_completer or help_contract'`
 2. Add failing harness and REPL tests, then implement forced manual compaction with before/after token evidence and append-only `CompactionEntry` lineage while preserving automatic compaction → verify: `uv run --offline pytest tests/test_agent_loop.py tests/test_sessions.py tests/test_cli_repl.py -k 'compact'`
 3. Add failing command tests, then validate profiles before mutation and treat non-zero `git diff` as failure rather than a clean tree → verify: `uv run --offline pytest tests/test_cli_repl.py -k 'invalid_profile or diff_failure'`
-4. Synchronize the essential command architecture and deferred cancellation boundary, then run all project gates before changing any task to passing → verify: `grep -q '17 canonical commands' specs/tech-architecture/tech-stack.md && grep -q 'Deferred active-turn cancellation' specs/tech-architecture/tech-stack.md && uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest`
+4. Synchronize the essential command architecture and deferred cancellation boundary, then run all project gates before changing any task to passing → verify: `grep -q '18 canonical commands' specs/tech-architecture/tech-stack.md && grep -q 'Deferred active-turn cancellation' specs/tech-architecture/tech-stack.md && uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest`
 
 ## 17. Acceptance Criteria
 
@@ -168,7 +168,7 @@ Focused tests MUST assert canonical metadata consistency and observable outcomes
 ```gherkin
 Given Mia's canonical command metadata
 When completion, help, and unique-prefix matching enumerate commands
-Then all three expose the same 17 canonical names in the same order
+Then all three expose the same 18 canonical names in the same order
 And `/mode` is offered by completion
 And `/stop` and `/abort` are not advertised
 ```
@@ -225,7 +225,7 @@ And architecture documentation uses the same bounded contract
 
 ## 18. Verification Script (Step-by-Step)
 
-1. Run `uv run --offline pytest tests/test_cli_repl.py -k 'command_metadata or slash_completer or help_contract'` and confirm command discovery uses one canonical 17-command list with `/mode` and without `/stop`.
+1. Run `uv run --offline pytest tests/test_cli_repl.py -k 'command_metadata or slash_completer or help_contract'` and confirm command discovery uses one canonical 18-command list with `/mode` and `/scoped-models`, without `/stop`.
 2. Create deterministic history with `MockProvider`, run `/compact`, and run `uv run --offline pytest tests/test_agent_loop.py tests/test_sessions.py tests/test_cli_repl.py -k 'compact'`; confirm in-memory reduction and append-only checkpoint evidence.
 3. Run `uv run --offline pytest tests/test_cli_repl.py -k 'invalid_profile or diff_failure'`; confirm both failures remain local and do not print false success.
 4. Run the full REPL tests and confirm existing auth, model, mode, resume, tree, inspect, thinking, clear, and quit behavior remains compatible.
@@ -243,10 +243,10 @@ And architecture documentation uses the same bounded contract
 
 ## 20. Definition of Done and Slopcheck
 
-- All four tasks in `e03s02-tasks.yaml` start `failing` and change to `passing` only after their verify commands exit zero.
-- All six acceptance scenarios have deterministic automated evidence except the final completion-menu visual smoke check.
+- All seven tasks in `e03s02-tasks.yaml` change to `passing` only after their verify commands exit zero.
+- All nine acceptance scenarios have deterministic automated evidence except the final completion-menu visual smoke check.
 - `specs/verifications/e03s02-verify.yaml` records final command outcomes.
-- Impact, scope, release index, epic manifest, execution status, and architecture agree on the 17-command contract and deferred cancellation.
+- Impact, scope, release index, epic manifest, execution status, and architecture agree on the 18-command contract and deferred cancellation.
 - Plan consistency reports `CRITICAL=0 HIGH=0 MED=0` before implementation.
 - No unresolved P0/P1 defect or security finding remains in affected paths.
 
