@@ -68,7 +68,8 @@ tasks:
     verify: "uv run --offline pytest tests/test_cli_repl.py -k 'model_and_thinking_keybindings or scoped_model_cycle'"
     risk: "P1"
     security: "low"
-    status: "failing"
+    status: "passing"
+    evidence: "b61576c; Ctrl+L, Ctrl+P, Shift+Tab dispatch and ordered model wrap tests pass."
     allure:
       severity: "high"
       categories: ["CLI", "Input", "Models"]
