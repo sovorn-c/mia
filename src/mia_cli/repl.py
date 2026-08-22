@@ -18,6 +18,7 @@ from rich.table import Table
 from rich.text import Text
 
 from mia_agent.auth.config import (
+    ENV_API_KEY_MAP,
     ConfigManager,
     MiaConfig,
     discover_provider_models,
@@ -428,24 +429,30 @@ class MiaREPL:
                 f"[bold green]✓ Logged out of {chosen}. Key removed from ~/.mia/credentials.json[/bold green]\n"
             )
 
+    def _provider_api_key(self, provider_id: str) -> str | None:
+        stored = self.cred_store.get_api_key(provider_id)
+        if stored:
+            return stored
+        env_names = ENV_API_KEY_MAP.get(provider_id, [f"{provider_id.upper()}_API_KEY"])
+        return next((os.environ[name] for name in env_names if os.environ.get(name)), None)
+
+    def _connected_providers(self) -> list[str]:
+        connected = self.cred_store.list_stored_providers()
+        for provider in (entry["id"] for entry in PROVIDER_CATALOG.values()):
+            if provider not in connected and self._provider_api_key(provider):
+                connected.append(provider)
+        return connected
+
+    def _save_model_selection(self, provider_id: str, model: str) -> None:
+        self.config_mgr.save_config(
+            self.config_mgr.config.model_copy(
+                update={"default_provider": provider_id, "default_model": model}
+            )
+        )
+
     def interactive_model_picker(self) -> None:
-        """Interactive Model Switcher with dynamic live model discovery and provider scoping (Pi-Style)."""
-        stored_providers = self.cred_store.list_stored_providers()
-        all_known = [
-            "opencode-go",
-            "openrouter",
-            "gemini",
-            "openai",
-            "anthropic",
-            "deepseek",
-            "custom",
-        ]
-        authenticated_pids: list[str] = list(stored_providers)
-        for pid in all_known:
-            if pid not in authenticated_pids:
-                key = os.environ.get(f"{pid.upper()}_API_KEY")
-                if key:
-                    authenticated_pids.append(pid)
+        """List models from connected providers and switch the active model."""
+        authenticated_pids = self._connected_providers()
 
         if not authenticated_pids:
             self.console.print(
@@ -481,17 +488,18 @@ class MiaREPL:
         default_idx = 0
 
         for pid in target_providers:
-            key = self.cred_store.get_api_key(pid) or os.environ.get(f"{pid.upper()}_API_KEY")
+            key = self._provider_api_key(pid)
             base_url = self.config_mgr.config.base_urls.get(pid)
             live_models = discover_provider_models(pid, api_key=key, base_url=base_url)
 
-            for m in live_models:
-                is_active = m == self.model_name
+            for model in live_models:
+                option_id = f"{pid}::{model}"
+                is_active = model == self.model_name
                 desc = f"Provider: {pid} (Active)" if is_active else f"Provider: {pid}"
                 if is_active:
                     default_idx = len(model_options)
-                model_options.append((m, m, desc))
-                model_provider_map[m] = pid
+                model_options.append((option_id, model, desc))
+                model_provider_map[option_id] = pid
 
         model_options.append(
             ("__custom__", "Custom Model", "Type any custom or unlisted model ID...")
@@ -511,13 +519,9 @@ class MiaREPL:
                 if custom_m:
                     self.model_name = custom_m
                     inferred_prov = self.config_mgr.infer_provider(custom_m)
-                    current_cfg = self.config_mgr.config
-                    self.config_mgr.save_config(
-                        MiaConfig(
-                            default_provider=inferred_prov or current_cfg.default_provider,
-                            default_model=custom_m,
-                            base_urls=current_cfg.base_urls,
-                        )
+                    self._save_model_selection(
+                        inferred_prov or self.config_mgr.config.default_provider,
+                        custom_m,
                     )
                     self._init_harness()
                     self.console.print(
@@ -526,16 +530,9 @@ class MiaREPL:
             except (KeyboardInterrupt, EOFError):
                 return
         else:
-            self.model_name = selected
-            prov_id = model_provider_map.get(selected, self.config_mgr.config.default_provider)
-            current_cfg = self.config_mgr.config
-            self.config_mgr.save_config(
-                MiaConfig(
-                    default_provider=prov_id,
-                    default_model=selected,
-                    base_urls=current_cfg.base_urls,
-                )
-            )
+            provider_id = model_provider_map[selected]
+            self.model_name = selected.split("::", 1)[1]
+            self._save_model_selection(provider_id, self.model_name)
             self._init_harness()
             self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
 
