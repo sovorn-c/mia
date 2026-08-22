@@ -431,6 +431,22 @@ def test_scoped_models_opens_selector_and_saves_selected_scope(tmp_path: Path) -
     assert repl.config_mgr.config.scoped_models == ["openai::gpt-4o"]
 
 
+def test_login_preserves_saved_scoped_models(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.cred_store.path = tmp_path / "credentials.json"
+    repl.config_mgr.config_path = tmp_path / "config.json"
+    repl.scoped_models = ["openai::gpt-4o"]
+    repl._save_scoped_models()
+
+    with (
+        patch("mia_cli.repl.interactive_select", side_effect=["api_key", "openai"]),
+        patch("getpass.getpass", return_value="sk-test-openai"),
+    ):
+        repl.interactive_login()
+
+    assert repl.config_mgr.config.scoped_models == ["openai::gpt-4o"]
+
+
 def test_scoped_models_command_discovers_and_sets_cycle_scope(tmp_path: Path) -> None:
     repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
     repl.cred_store.path = tmp_path / "credentials.json"
