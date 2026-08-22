@@ -473,7 +473,6 @@ class MiaREPL:
             self.scoped_models = []
             return {}
 
-        self.console.print("[dim]Fetching live models from provider(s)...[/dim]")
         sources: dict[str, str] = {}
         config = self.config_mgr.config
         for provider in providers:
@@ -930,8 +929,10 @@ class MiaREPL:
             elif not args:
                 if not had_scope:
                     self.scoped_models = list(model_sources)
-                labels = ", ".join(self._model_label(model_id) for model_id in self.scoped_models)
-                self.console.print(f"[bold #FF7A00]Scoped models:[/bold #FF7A00] {labels}\n")
+                self.console.print("[bold #FF7A00]Scoped models:[/bold #FF7A00]")
+                for model_id in self.scoped_models:
+                    self.console.print(f"  {self._model_label(model_id)}")
+                self.console.print()
             elif args.lower() == "all":
                 self.scoped_models = list(model_sources)
                 self.console.print(

@@ -316,6 +316,7 @@ def test_connected_provider_models_are_all_discovered_without_unconnected(tmp_pa
     repl.config_mgr.config_path = tmp_path / "config.json"
     repl.cred_store.set_api_key("openai", "sk-test-openai")
     repl.cred_store.set_api_key("deepseek", "sk-test-deepseek")
+    repl.console = Console(record=True, width=120)
 
     discovered: list[str] = []
 
@@ -329,6 +330,12 @@ def test_connected_provider_models_are_all_discovered_without_unconnected(tmp_pa
     ):
         repl.handle_slash_command("/scoped-models")
 
+    output = repl.console.export_text()
+    assert "Fetching live models" not in output
+    assert "Scoped models:" in output
+    assert "deepseek: deepseek-model\n" in output
+    assert "openai: openai-model\n" in output
+    assert "gemini: gemini-model\n" in output
     assert discovered == ["deepseek", "openai", "gemini"]
     assert repl.scoped_models == [
         "deepseek::deepseek-model",
