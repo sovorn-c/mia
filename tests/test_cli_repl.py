@@ -124,16 +124,21 @@ def test_model_and_thinking_keybindings_dispatch_pi_commands() -> None:
 def test_scoped_model_cycle_switches_and_wraps(tmp_path: Path) -> None:
     repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
     repl.config_mgr.config_path = tmp_path / "config.json"
-    repl.available_model_sources = {"gpt-4o": "openai", "deepseek-chat": "deepseek"}
-    repl.scoped_models = ["gpt-4o", "deepseek-chat"]
-    repl.model_name = "gpt-4o"
+    repl.available_model_sources = {
+        "openai::shared-model": "openai",
+        "openrouter::shared-model": "openrouter",
+    }
+    repl.scoped_models = ["openai::shared-model", "openrouter::shared-model"]
+    repl.model_name = "shared-model"
+    repl._save_model_selection("openai", "shared-model")
 
     assert repl.handle_slash_command("/model next") is True
-    assert repl.model_name == "deepseek-chat"
-    assert repl.config_mgr.config.default_provider == "deepseek"
+    assert repl.model_name == "shared-model"
+    assert repl.config_mgr.config.default_provider == "openrouter"
 
     assert repl.handle_slash_command("/model next") is True
-    assert repl.model_name == "gpt-4o"
+    assert repl.model_name == "shared-model"
+    assert repl.config_mgr.config.default_provider == "openai"
 
 
 def test_double_escape_opens_tree_only_on_second_press() -> None:
@@ -339,22 +344,31 @@ def test_connected_provider_models_are_all_discovered_without_unconnected(tmp_pa
     ):
         repl.interactive_model_picker()
 
-    assert repl.available_model_sources == {"deepseek-model": "deepseek"}
+    assert repl.available_model_sources == {"deepseek::deepseek-model": "deepseek"}
 
 
 def test_scoped_models_command_sets_cycle_scope(tmp_path: Path) -> None:
     repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
     repl.available_model_sources = {
-        "gpt-4o": "openai",
-        "deepseek-chat": "deepseek",
-        "gemini-pro": "gemini",
+        "openai::gpt-4o": "openai",
+        "deepseek::deepseek-chat": "deepseek",
+        "gemini::gemini-pro": "gemini",
     }
 
-    assert repl.handle_slash_command("/scoped-models gpt-4o, deepseek-chat") is True
-    assert repl.scoped_models == ["gpt-4o", "deepseek-chat"]
+    assert (
+        repl.handle_slash_command(
+            "/scoped-models openai::gpt-4o, deepseek::deepseek-chat"
+        )
+        is True
+    )
+    assert repl.scoped_models == ["openai::gpt-4o", "deepseek::deepseek-chat"]
 
     assert repl.handle_slash_command("/scoped-models all") is True
-    assert repl.scoped_models == ["gpt-4o", "deepseek-chat", "gemini-pro"]
+    assert repl.scoped_models == [
+        "openai::gpt-4o",
+        "deepseek::deepseek-chat",
+        "gemini::gemini-pro",
+    ]
 
 
 def test_repl_scoped_model_picker(tmp_path: Path) -> None:
