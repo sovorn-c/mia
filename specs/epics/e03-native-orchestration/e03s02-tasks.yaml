@@ -58,7 +58,7 @@ tasks:
     risk: "P1"
     security: "medium"
     status: "passing"
-    evidence: "4ec0653 and 788e473; connected provider aliases, all-provider discovery, source-safe model IDs, and scoped-model command tests pass."
+    evidence: "4ec0653, 788e473, 4f6f6dc, and 2f4302b; connected aliases, all-provider discovery, duplicate-safe provider/model IDs, stale-scope pruning, and scoped command tests pass."
     allure:
       severity: "high"
       categories: ["CLI", "Authentication", "Models"]
@@ -80,7 +80,7 @@ tasks:
     risk: "P1"
     security: "low"
     status: "passing"
-    evidence: "db328a3; slash quit, EOF exit, resume hint, session ID validation, and top-level --session forwarding tests pass."
+    evidence: "db328a3 and 006c889; slash quit, EOF exit, resume hint, path-safe session ID validation, clean option errors, and top-level --session forwarding tests pass."
     allure:
       severity: "high"
       categories: ["CLI", "Session", "Resume"]
