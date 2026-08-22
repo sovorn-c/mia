@@ -461,13 +461,11 @@ class MiaREPL:
                 "[yellow]No scoped models. Run /model, then /scoped-models.[/yellow]\n"
             )
             return
-        current = (
-            self.scoped_models.index(self.model_name)
-            if self.model_name in self.scoped_models
-            else -1
-        )
-        self.model_name = self.scoped_models[(current + 1) % len(self.scoped_models)]
-        provider_id = self.available_model_sources[self.model_name]
+        active_id = f"{self.config_mgr.config.default_provider}::{self.model_name}"
+        current = self.scoped_models.index(active_id) if active_id in self.scoped_models else -1
+        selected_id = self.scoped_models[(current + 1) % len(self.scoped_models)]
+        provider_id = self.available_model_sources[selected_id]
+        self.model_name = selected_id.split("::", 1)[1]
         self._save_model_selection(provider_id, self.model_name)
         self._init_harness()
         self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
@@ -523,7 +521,7 @@ class MiaREPL:
                     default_idx = len(model_options)
                 model_options.append((option_id, model, desc))
                 model_provider_map[option_id] = pid
-                self.available_model_sources[model] = pid
+                self.available_model_sources[option_id] = pid
 
         if not self.scoped_models:
             self.scoped_models = list(self.available_model_sources)
@@ -797,7 +795,7 @@ class MiaREPL:
         )
 
     def print_command_menu(self, filter_prefix: str | None = None) -> None:
-        """Render the 17 canonical commands with descriptions and aliases."""
+        """Render canonical commands with descriptions and aliases."""
         table = Table(
             title=f"🥕 Mia {len(SLASH_COMMANDS)} Canonical Slash Commands",
             border_style="#2D3342",
