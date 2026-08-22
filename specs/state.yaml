@@ -4,13 +4,13 @@ session:
   active_story_id: e03s02
   target_version: 0.3.0
   bug_cycle:
-    current_step: 1
-    completed_steps: []
+    current_step: 2
+    completed_steps: [1]
     bug_id: BUG-001
 handoff:
-  next_skill: investigate-bug
-  summary: BUG-001 is open. /scoped-models prints models instead of opening a
-    Pi-style selectable, savable scope selector. Baseline quality gates pass.
+  next_skill: diagnose-root
+  summary: BUG-001 investigation confirmed /scoped-models is print-only. Four-phase
+    RCA reproduced and isolated the missing selector/save transition; TDD fix is next.
 git:
   branch: e03s02-essential-slash-command-contracts
 metrics:
