@@ -395,6 +395,32 @@ def test_custom_connected_model_is_in_model_picker(tmp_path: Path) -> None:
     assert repl.model_name == "local-model"
 
 
+def test_scoped_models_opens_selector_and_saves_selected_scope(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.cred_store.path = tmp_path / "credentials.json"
+    repl.config_mgr.config_path = tmp_path / "config.json"
+    repl.cred_store.set_api_key("openai", "sk-test-openai")
+    repl.cred_store.set_api_key("deepseek", "sk-test-deepseek")
+
+    models = {"openai": ["gpt-4o"], "deepseek": ["deepseek-chat"]}
+    with (
+        patch.dict("os.environ", {}, clear=True),
+        patch(
+            "mia_cli.repl.discover_provider_models",
+            side_effect=lambda provider, **_: models[provider],
+        ),
+        patch(
+            "mia_cli.repl.interactive_multi_select",
+            return_value=["openai::gpt-4o"],
+        ) as selector,
+    ):
+        assert repl.handle_slash_command("/scoped-models") is True
+
+    selector.assert_called_once()
+    assert repl.scoped_models == ["openai::gpt-4o"]
+    assert repl.config_mgr.config.scoped_models == ["openai::gpt-4o"]
+
+
 def test_scoped_models_command_discovers_and_sets_cycle_scope(tmp_path: Path) -> None:
     repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
     repl.cred_store.path = tmp_path / "credentials.json"
