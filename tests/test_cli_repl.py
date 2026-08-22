@@ -247,6 +247,34 @@ def test_repl_pi_style_auth_and_model_scoper(tmp_path: Path) -> None:
     assert repl.model_name == "mimo-v2.5"
 
 
+def test_connected_provider_models_are_all_discovered_without_unconnected(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.cred_store.path = tmp_path / "credentials.json"
+    repl.config_mgr.config_path = tmp_path / "config.json"
+    repl.cred_store.set_api_key("openai", "sk-test-openai")
+    repl.cred_store.set_api_key("deepseek", "sk-test-deepseek")
+
+    discovered: list[str] = []
+
+    def models_for(provider: str, **_: object) -> list[str]:
+        discovered.append(provider)
+        return [f"{provider}-model"]
+
+    with (
+        patch.dict("os.environ", {"GOOGLE_API_KEY": "google-key"}, clear=True),
+        patch("mia_cli.repl.discover_provider_models", side_effect=models_for),
+        patch(
+            "mia_cli.repl.interactive_select",
+            side_effect=["all", "openai::openai-model"],
+        ),
+    ):
+        repl.interactive_model_picker()
+
+    assert discovered == ["deepseek", "openai", "gemini"]
+    assert repl.model_name == "openai-model"
+    assert repl.config_mgr.config.default_provider == "openai"
+
+
 def test_repl_scoped_model_picker(tmp_path: Path) -> None:
     """Test interactive model picker lists authenticated models."""
     cred_file = tmp_path / "credentials.json"
