@@ -4,13 +4,13 @@ session:
   active_story_id: e03s02
   target_version: 0.3.0
   bug_cycle:
-    current_step: 2
-    completed_steps: [1]
+    current_step: 3
+    completed_steps: [1, 2]
     bug_id: BUG-001
 handoff:
-  next_skill: diagnose-root
-  summary: BUG-001 investigation confirmed /scoped-models is print-only. Four-phase
-    RCA reproduced and isolated the missing selector/save transition; TDD fix is next.
+  next_skill: develop-tdd
+  summary: BUG-001 RCA is verified: /scoped-models lacks an interactive selection/save
+    transition. Worktree baseline is green; develop-tdd will add the selector regression.
 git:
   branch: e03s02-essential-slash-command-contracts
 metrics:
