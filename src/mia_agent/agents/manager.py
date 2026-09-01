@@ -240,11 +240,22 @@ class AgentManager:
         return legacy
 
     def filter_tools(self, agent: Agent, available_tools: Sequence[Any]) -> list[Any]:
-        """Filter visible Tools by the Agent's declared capability scope."""
+        """Filter visible Tools by capability scope and read-only access."""
         if agent.tools is None:
-            return list(available_tools)
-        allowed = set(agent.tools)
-        return [tool for tool in available_tools if getattr(tool, "name", None) in allowed]
+            filtered = list(available_tools)
+        else:
+            allowed = set(agent.tools)
+            filtered = [tool for tool in available_tools if getattr(tool, "name", None) in allowed]
+        if agent.access_policy != "read-only":
+            return filtered
+        from mia_middleware.access import tool_effect
+
+        return [
+            tool
+            for tool in filtered
+            if tool_effect(getattr(tool, "name", ""), {"effect": getattr(tool, "effect", None)})
+            == "non-mutating"
+        ]
 
     def _resolve(self, key: str) -> tuple[Agent, str, bool]:
         collision = self._native_path_for_key(key).exists() and self._legacy_path(key).exists()

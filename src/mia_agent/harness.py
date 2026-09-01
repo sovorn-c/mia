@@ -269,7 +269,7 @@ class AgentHarness:
                     yield ToolCallEvent(
                         call_id=tc.id,
                         tool_name=tc.name,
-                        arguments=tc.arguments,
+                        arguments=sanitize_arguments(tc.arguments),
                     )
 
                     start_time = time.perf_counter()
@@ -277,14 +277,15 @@ class AgentHarness:
                     try:
                         result = await self._execute_tool(tc.id, tc.name, tc.arguments)
                     except Exception as exc:
-                        result = f"Error executing {tc.name}: {exc}"
+                        result = f"Error executing {tc.name}: {sanitize_arguments(str(exc))}"
                         is_error = True
+                    safe_result = sanitize_arguments(result)
                     duration_ms = (time.perf_counter() - start_time) * 1000.0
 
                     yield ToolResultEvent(
                         call_id=tc.id,
                         tool_name=tc.name,
-                        output=result,
+                        output=safe_result,
                         is_error=is_error,
                         duration_ms=duration_ms,
                     )
@@ -294,7 +295,9 @@ class AgentHarness:
                         role="tool",
                         tool_call_id=tc.id,
                         tool_name=tc.name,
-                        content=str(result) if not isinstance(result, str) else result,
+                        content=str(safe_result)
+                        if not isinstance(safe_result, str)
+                        else safe_result,
                     )
                     self._messages.append(tool_msg)
                     if self.session_store:
