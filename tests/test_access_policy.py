@@ -8,9 +8,43 @@ from mia_middleware.access import (
     AccessPolicyMiddleware,
     ApprovalRequest,
     PolicyRejectedError,
+    compose_effective_access,
+    normalize_access_level,
+    tool_effect,
 )
 from mia_middleware.pipeline import ToolCallContext, ToolPipeline
 from mia_middleware.security import SecurityGuardMiddleware, SecurityViolationError
+from mia_tools.bash import BashTool
+from mia_tools.fs import ReadFileTool, WriteFileTool
+
+
+def test_access_levels_map_legacy_values_and_unknown_tools_fail_closed() -> None:
+    assert normalize_access_level("read_only") == "read-only"
+    assert normalize_access_level("standard") == "approval-required"
+    assert normalize_access_level("full_access") == "full-access"
+    assert normalize_access_level("no_tools") == "approval-required"
+    assert tool_effect("read_file") == "non-mutating"
+    assert tool_effect("unknown_plugin_tool") == "side-effecting"
+    assert ReadFileTool.effect == "non-mutating"
+    assert WriteFileTool.effect == "side-effecting"
+    assert BashTool.effect == "side-effecting"
+    with pytest.raises(ValueError, match="Unknown access policy"):
+        normalize_access_level("auto")
+
+
+def test_effective_access_is_restrictive_and_intersects_capabilities() -> None:
+    effective = compose_effective_access(
+        "full-access",
+        "approval-required",
+        {"read_file", "write_file"},
+        {"read_file", "bash"},
+    )
+    assert effective.access_level == "approval-required"
+    assert effective.capabilities == {"read_file"}
+
+    no_tools = compose_effective_access("approval-required", "full-access", set(), None)
+    assert no_tools.access_level == "approval-required"
+    assert no_tools.capabilities == set()
 
 
 @pytest.mark.asyncio
@@ -74,6 +108,33 @@ async def test_read_only_and_unknown_tools_are_rejected_before_execution() -> No
                 ToolCallContext(tool_name=tool_name, arguments={}),
                 lambda: pytest.fail("policy must reject before execution"),
             )
+
+
+@pytest.mark.asyncio
+async def test_unknown_tools_are_side_effecting_and_approval_is_sanitized() -> None:
+    requests: list[ApprovalRequest] = []
+
+    def approve(request: ApprovalRequest) -> bool:
+        requests.append(request)
+        return True
+
+    policy = AccessPolicyMiddleware(
+        access_policy="approval-required",
+        approval_callback=approve,
+        agent_id="mia",
+    )
+    await ToolPipeline([policy]).execute(
+        ToolCallContext(
+            tool_name="plugin_tool",
+            arguments={"authorization": "Bearer secret", "value": "sk-secret"},
+        ),
+        lambda: "ok",
+    )
+    assert requests[0].effect == "side-effecting"
+    assert requests[0].arguments == {
+        "authorization": "[REDACTED]",
+        "value": "[REDACTED]",
+    }
 
 
 @pytest.mark.asyncio
