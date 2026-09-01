@@ -189,6 +189,19 @@ def test_factory_builds_agent_owned_runtime_and_session(tmp_path: Path) -> None:
     assert metadata.data["run_id"] == "run-researcher"
 
 
+def test_full_access_requires_explicit_creation_confirmation(tmp_path: Path) -> None:
+    manager = make_manager(tmp_path)
+    with pytest.raises(ValueError, match="confirmation"):
+        manager.create_agent("autonomous", access_policy="full-access")
+
+    autonomous = manager.create_agent(
+        "autonomous",
+        access_policy="full-access",
+        confirm_full_access=True,
+    )
+    assert autonomous.access_policy == "full-access"
+
+
 def test_native_agent_writes_are_atomic_and_do_not_copy_secret_values(tmp_path: Path) -> None:
     manager = make_manager(tmp_path)
     agent = manager.create_agent(
