@@ -12,6 +12,7 @@ from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.events import TurnStartEvent
 from mia_agent.orchestration import (
+    AgentRunner,
     AgentRuntimeFactory,
     Mode,
     ModeRuntime,
@@ -146,6 +147,75 @@ def test_factory_resumes_messages_from_active_session(tmp_path) -> None:
     )
 
     assert [message.content for message in runtime.harness.messages] == ["existing prompt"]
+
+
+@pytest.mark.asyncio
+async def test_agent_runner_assigns_fresh_run_ids_and_stable_session(tmp_path) -> None:
+    provider = MockProvider()
+    provider.queue_text_response("first")
+    provider.queue_text_response("second")
+    from mia_agent.agents import AgentManager
+
+    agents = AgentManager(
+        agents_dir=tmp_path / "agents",
+        profiles_dir=tmp_path / "profiles",
+        sessions_base_dir=tmp_path / "legacy-sessions",
+    )
+    agents.create_agent("researcher", display_name="Researcher", tools=[])
+    runner = AgentRunner(
+        factory=AgentRuntimeFactory(agent_manager=agents),
+        agent_manager=agents,
+    )
+
+    first = [
+        event
+        async for event in runner.prompt(
+            "first prompt", agent_id="researcher", session_id="session-stable", provider=provider
+        )
+    ]
+    second = [
+        event
+        async for event in runner.prompt(
+            "second prompt", agent_id="researcher", session_id="session-stable", provider=provider
+        )
+    ]
+
+    assert {event.agent_id for event in first} == {"researcher"}
+    assert {event.session_id for event in first} == {"session-stable"}
+    assert first[0].task_id == "root"
+    assert first[0].run_id != second[0].run_id
+    assert second[0].session_id == "session-stable"
+    assert all(event.profile is None for event in first + second)
+
+
+@pytest.mark.asyncio
+async def test_agent_runner_research_is_a_private_agent_journey(tmp_path) -> None:
+    provider = MockProvider()
+    provider.queue_text_response("architect findings")
+    provider.queue_text_response("research synthesis")
+    from mia_agent.agents import AgentManager
+
+    agents = AgentManager(
+        agents_dir=tmp_path / "agents",
+        profiles_dir=tmp_path / "profiles",
+        sessions_base_dir=tmp_path / "legacy-sessions",
+    )
+    runner = AgentRunner(
+        factory=AgentRuntimeFactory(agent_manager=agents),
+        agent_manager=agents,
+    )
+    events = [
+        event
+        async for event in runner.prompt(
+            "research this", agent_id="research", provider=provider, cwd=tmp_path
+        )
+    ]
+
+    assert len(provider.recorded_calls) == 2
+    starts = [event for event in events if event.event.type == "turn_start"]
+    assert [event.agent_id for event in starts] == ["architect", "research"]
+    assert [event.task_id for event in starts] == ["specialist", "root"]
+    assert "architect findings" in provider.recorded_calls[1]["messages"][-1]["content"]
 
 
 @pytest.mark.asyncio
