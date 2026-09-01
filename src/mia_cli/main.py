@@ -21,6 +21,7 @@ from mia_agent.orchestration import (
 )
 from mia_agent.profiles.manager import ProfileManager
 from mia_cli.renderers.rich_stream import RichStreamRenderer
+from mia_middleware.access import ApprovalCallback, ApprovalRequest
 
 app = typer.Typer(
     name="mia",
@@ -38,6 +39,15 @@ app.add_typer(sessions_app, name="sessions")
 console = Console()
 
 
+def _confirm_tool(request: ApprovalRequest) -> bool:
+    """Render a sanitized approval prompt for print-mode side effects."""
+    console.print(
+        f"[yellow]Agent {request.agent_id} requests {request.effect} Tool "
+        f"{request.tool_name}.[/yellow]"
+    )
+    return typer.confirm("Approve this Tool call?", default=False)
+
+
 async def _run_agent_loop(
     prompt_text: str,
     profile_name: str | None = None,
@@ -48,6 +58,7 @@ async def _run_agent_loop(
     context_window: int | None = None,
     cwd: Path | None = None,
     mode_name: str = "single",
+    approval_callback: ApprovalCallback | None = None,
 ) -> None:
     renderer = RichStreamRenderer(console=console)
     if agent_name is not None:
@@ -64,6 +75,7 @@ async def _run_agent_loop(
             cwd=cwd,
             compaction_threshold=compaction_threshold,
             context_window=context_window,
+            approval_callback=approval_callback,
         ):
             if isinstance(envelope.event, OrchestrationErrorEvent):
                 renderer._stop_status()
@@ -137,6 +149,7 @@ def run_command(
             compaction_threshold=compaction_threshold,
             context_window=context_window,
             mode_name=mode,
+            approval_callback=_confirm_tool,
         )
     )
 

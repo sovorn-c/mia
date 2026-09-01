@@ -93,7 +93,7 @@ class AuditLogMiddleware:
             return result
         except Exception as exc:
             is_error = True
-            err_msg = str(exc)
+            err_msg = str(sanitize_arguments(str(exc)))
             raise
         finally:
             duration_ms = (time.perf_counter() - start_time) * 1000.0

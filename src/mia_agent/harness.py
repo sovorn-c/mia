@@ -27,6 +27,7 @@ from mia_agent.session.jsonl import JsonlSessionStore
 from mia_agent.session.tree import SessionTree
 from mia_ai.providers.base import LLMProvider
 from mia_ai.types import ChatMessage, TokenUsage, ToolCall, ToolDefinition
+from mia_middleware.access import sanitize_arguments
 from mia_middleware.pipeline import ToolCallContext, ToolPipeline
 
 
@@ -236,7 +237,7 @@ class AgentHarness:
                 elif chunk.type == "tool_call_end" and chunk.tool_call:
                     tool_calls.append(chunk.tool_call)
                 elif chunk.type == "error":
-                    error_msg = chunk.error or "Unknown provider error"
+                    error_msg = str(sanitize_arguments(chunk.error or "Unknown provider error"))
                     provider_error = error_msg
                     accumulated_text.append(f"\n[Error: {error_msg}]\n")
                     yield AssistantChunkEvent(delta_text=f"\n[Error: {error_msg}]\n")

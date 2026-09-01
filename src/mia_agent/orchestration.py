@@ -24,7 +24,12 @@ from mia_agent.session.tree import SessionTree
 from mia_ai.providers.anthropic import AnthropicProvider
 from mia_ai.providers.base import LLMProvider
 from mia_ai.providers.openai_compatible import OpenAICompatibleProvider
-from mia_middleware.access import AccessPolicyMiddleware, ApprovalCallback, tool_effect
+from mia_middleware.access import (
+    AccessPolicyMiddleware,
+    ApprovalCallback,
+    sanitize_arguments,
+    tool_effect,
+)
 from mia_middleware.pipeline import ToolPipeline
 from mia_middleware.security import SecurityGuardMiddleware
 from mia_middleware.telemetry import AuditLogMiddleware, CostBudgetMiddleware
@@ -430,6 +435,8 @@ class ModeRuntime:
         compaction_threshold: float | None = None,
         context_window: int | None = None,
         runtime: AgentRuntime | None = None,
+        approval_callback: ApprovalCallback | None = None,
+        full_access_confirmed: bool = False,
     ) -> AsyncIterator[OrchestrationEventEnvelope]:
         if agent_id is not None:
             if runtime is not None:
@@ -444,6 +451,8 @@ class ModeRuntime:
                 cwd=cwd,
                 compaction_threshold=compaction_threshold,
                 context_window=context_window,
+                approval_callback=approval_callback,
+                full_access_confirmed=full_access_confirmed,
             ):
                 yield envelope
             return
@@ -613,7 +622,11 @@ class ModeRuntime:
             profile=identity.profile,
             session_id=identity.session_id,
             parent_session_id=identity.parent_session_id,
-            event=OrchestrationErrorEvent(stage=stage, error=error, cancelled=cancelled),
+            event=OrchestrationErrorEvent(
+                stage=stage,
+                error=str(sanitize_arguments(error)),
+                cancelled=cancelled,
+            ),
         )
 
 

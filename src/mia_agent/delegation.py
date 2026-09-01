@@ -41,15 +41,20 @@ class TaskRequest(BaseModel):
     timeout: float = 60.0
     depth: int = 0
 
-    @field_validator(
-        "task_id", "caller_agent_id", "recipient_agent_id", "parent_run_id", "parent_session_id"
-    )
+    @field_validator("task_id", "parent_run_id", "parent_session_id")
     @classmethod
     def require_identity(cls, value: str) -> str:
         value = value.strip()
         if not value:
             raise ValueError("Task identity fields must not be blank")
         return value
+
+    @field_validator("caller_agent_id", "recipient_agent_id")
+    @classmethod
+    def normalize_agent_identity(cls, value: str) -> str:
+        from mia_agent.agents.model import normalize_agent_id
+
+        return normalize_agent_id(value)
 
     @field_validator("prompt")
     @classmethod

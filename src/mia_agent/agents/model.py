@@ -127,7 +127,10 @@ class Agent(BaseModel):
     def accept_legacy_permission(cls, values: Any) -> Any:
         if isinstance(values, dict) and "permission" in values:
             values = dict(values)
-            values.setdefault("access_policy", values["permission"])
+            permission = values["permission"]
+            values.setdefault("access_policy", permission)
+            if permission == "no_tools":
+                values.setdefault("tools", [])
             values.pop("permission")
         return values
 
