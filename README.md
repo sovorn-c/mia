@@ -1,74 +1,43 @@
 # Mia (Modular Intelligent Agent)
 
-> **A Hybrid Python Coding Agent Harness** combining the deterministic simplicity of [Pi](https://pi.dev) & [Tau](https://twotimespi.dev) with the extensible middleware guardrails of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
+Mia is a lightweight local agent system centered on durable, named Agents. Each Agent has its own instructions, model references, capabilities, access policy, and Sessions. Mia starts as the default personal Agent, while coding, research, and specialist work can use named Agents.
 
----
+## Core boundaries
 
-## 💡 Overview
+- **Agent:** durable identity and configuration.
+- **Run:** one execution of an Agent.
+- **Session:** append-only conversation history owned by an Agent.
+- **Tool:** callable capability enforced by the middleware pipeline.
+- **Delegation:** one bounded Task assigned to an eligible Agent through Mia Core.
+- **Access:** `read-only`, `approval-required`, or `full-access` (explicit opt-in).
 
-**Mia** is a lightweight, high-performance, and modular AI coding agent harness written in modern Python (3.12+).
+Provider credentials stay in the machine-global credential store. Agent files and Sessions contain provider/account references, never credential values. Agent ownership is logical state separation, not an operating-system sandbox.
 
-* **Core Engine (`mia_agent`):** Deterministic, typed agent loop (`Pydantic` + `AnyIO` + `asyncio`) with zero magic.
-* **Middleware Pipeline (`mia_middleware`):** Onion-style async pipeline wrapping tool execution for security checks, user approval prompts, audit logs, and budgeting.
-* **Multi-Provider LLM Streaming (`mia_ai`):** Standardized SSE streaming across Anthropic, OpenAI, and custom providers with offline mock testing.
-* **Standard Coding Tools (`mia_tools`):** Battle-tested `read_file`, `write_file`, `edit_file` (single-match replacement), and async `bash`.
-* **Terminal Interface (`mia_cli`):** Fast non-interactive streaming CLI (`mia -p "prompt"`) and full-screen Textual TUI (`mia`).
-
----
-
-## 📁 Repository Layout
-
-```text
-mia/
-├── pyproject.toml              # Build & dependency configuration
-├── README.md                   # Project overview & quickstart
-├── docs/
-│   └── initial_plan/           # Original architecture blueprints & roadmaps
-│       ├── ARCHITECTURE.md
-│       ├── ROADMAP.md
-│       ├── REFERENCES.md
-│       └── INITIAL_README.md
-├── src/
-│   ├── mia_ai/                 # Multi-provider LLM streaming & adapters
-│   ├── mia_agent/              # Core AgentHarness, events, and session store
-│   ├── mia_middleware/         # Onion middleware pipeline & safety guardrails
-│   ├── mia_tools/              # Coding tools (read, write, edit, bash)
-│   └── mia_cli/                # Typer CLI, Rich live renderers, Textual TUI
-└── tests/                      # Pytest automated test suites
-```
-
----
-
-## 🚀 Quickstart
-
-### Installation
+## Quickstart
 
 ```bash
 uv sync
-```
-
-### Running Tests & Quality Gates
-
-```bash
-uv run pytest
-uv run ruff check .
-uv run mypy src
-```
-
-### CLI Usage
-
-```bash
-# Print mode: Stream response directly to terminal
-mia run -p "Fix the typo in README.md"
-
-# Interactive TUI mode
 mia
+mia agent list
+mia agent create researcher --name "Researcher" --tools read_file
+mia agent use researcher
+mia run --agent researcher -p "Review the repository"
 ```
 
----
+Running `mia` without an Agent selection starts the built-in `mia` Agent. Its four local coding Tools are available under `approval-required`: reads run automatically, while writes, edits, shell commands, and Delegation require approval. Permanent security guards always remain active.
 
-## 📖 Detailed Documentation
+## Compatibility
 
-* Historical Architecture Design: [docs/initial_plan/ARCHITECTURE.md](docs/initial_plan/ARCHITECTURE.md)
-* Historical Roadmap: [docs/initial_plan/ROADMAP.md](docs/initial_plan/ROADMAP.md)
-* Ground Truth References: [docs/initial_plan/REFERENCES.md](docs/initial_plan/REFERENCES.md)
+The canonical surfaces are `--agent`, `/agent`, and `mia agent create|list|show|use|delete`. Existing `--profile`, `/profile`, `mia profile`, and `--mode` inputs remain compatibility aliases during v0.4 and report migration guidance. Existing Profile JSON and Session JSONL are read without destructive migration.
+
+The historical architecture material in `docs/initial_plan/` remains historical. Current implementation packages are under `src/`, with deterministic offline tests in `tests/`.
+
+## Quality gate
+
+```bash
+uv run --offline ruff format .
+uv run --offline ruff check .
+uv run --offline mypy src
+uv run --offline pytest
+uv build --offline
+```

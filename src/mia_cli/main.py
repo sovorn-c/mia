@@ -337,8 +337,13 @@ def main_callback(
 
         from mia_cli.repl import MiaREPL
 
-        if session and agent is None:
-            # Preserve the old constructor shape for existing session scripts.
+        profile_source = ctx.get_parameter_source("profile")
+        profile_supplied = profile_source is not None and profile_source.name == "COMMANDLINE"
+        if (session and agent is None) or (profile_supplied and agent is None):
+            Console(stderr=True).print(
+                "[yellow]Warning: --profile is deprecated; use --agent instead.[/yellow]"
+            )
+            # Preserve the old constructor shape for compatibility scripts.
             repl = MiaREPL(model=model, profile=profile, session_id=session)
         else:
             repl = MiaREPL(model=model, agent=agent or "mia", session_id=session)

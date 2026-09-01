@@ -966,6 +966,10 @@ class MiaREPL:
 
         elif cmd in ("/agent", "/profile"):
             legacy = cmd == "/profile"
+            if legacy:
+                self.console.print(
+                    "[yellow]Warning: /profile is deprecated; use /agent instead.[/yellow]\n"
+                )
             if not args:
                 active = self.agent_mgr.get_agent(self.agent_id)
                 available = ", ".join(agent.agent_id for agent in self.agent_mgr.list_agents())
@@ -1003,6 +1007,9 @@ class MiaREPL:
                     )
 
         elif cmd == "/mode":
+            self.console.print(
+                "[yellow]Warning: /mode is deprecated; select an Agent instead.[/yellow]\n"
+            )
             if not args:
                 available = ", ".join(self.mode_runtime.catalog.available_modes())
                 self.console.print(
