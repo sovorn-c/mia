@@ -13,11 +13,13 @@ from mia_agent.events import (
     TurnStartEvent,
 )
 from mia_agent.harness import AgentHarness
+from mia_agent.orchestration import AgentRunner
 
 __all__ = [
     "Agent",
     "AgentEvent",
     "AgentManager",
+    "AgentRunner",
     "DelegationService",
     "AgentHarness",
     "AssistantChunkEvent",

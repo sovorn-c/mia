@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import uuid
 from pathlib import Path
 from typing import Annotated
 
@@ -15,10 +14,10 @@ from mia_agent.agents import AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.orchestration import (
+    AgentRunner,
     AgentRuntimeFactory,
     ModeRuntime,
     OrchestrationErrorEvent,
-    RuntimeIdentity,
 )
 from mia_agent.profiles.manager import ProfileManager
 from mia_cli.renderers.rich_stream import RichStreamRenderer
@@ -53,23 +52,27 @@ async def _run_agent_loop(
     renderer = RichStreamRenderer(console=console)
     if agent_name is not None:
         manager = AgentManager()
-        factory = AgentRuntimeFactory(agent_manager=manager)
-        agent = manager.get_agent(agent_name)
-        identity = RuntimeIdentity(
-            run_id=f"run_{uuid.uuid4().hex}",
-            task_id="root",
-            agent_id=agent.agent_id,
-            session_id=session_id or f"session_{uuid.uuid4().hex[:8]}",
+        runner = AgentRunner(
+            factory=AgentRuntimeFactory(agent_manager=manager),
+            agent_manager=manager,
         )
-        runtime = factory.build(
-            identity=identity,
+        async for envelope in runner.prompt(
+            prompt_text,
+            agent_id=agent_name,
             model_override=model_override,
+            session_id=session_id,
             cwd=cwd,
             compaction_threshold=compaction_threshold,
             context_window=context_window,
-        )
-        async for event in runtime.harness.prompt(prompt_text):
-            renderer.on_event(event)
+        ):
+            if isinstance(envelope.event, OrchestrationErrorEvent):
+                renderer._stop_status()
+                console.print(
+                    f"[bold red]Orchestration error ({envelope.event.stage}): "
+                    f"{envelope.event.error}[/bold red]"
+                )
+                continue
+            renderer.on_event(envelope.event)
         return
 
     legacy_runtime = ModeRuntime()

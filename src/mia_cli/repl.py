@@ -31,6 +31,7 @@ from mia_agent.auth.openai_auth import OpenAIOAuthManager
 from mia_agent.events import StepEndEvent, TurnCompleteEvent
 from mia_agent.harness import AgentHarness
 from mia_agent.orchestration import (
+    AgentRunner,
     AgentRuntime,
     AgentRuntimeFactory,
     ModeRuntime,
@@ -159,6 +160,10 @@ class MiaREPL:
         self.mode_runtime = ModeRuntime(
             factory=self.runtime_factory,
             profile_manager=self.profile_mgr,
+        )
+        self.agent_runner = AgentRunner(
+            factory=self.runtime_factory,
+            agent_manager=self.agent_mgr,
         )
 
         # Never assume a model unless explicitly authenticated or provided
@@ -872,12 +877,31 @@ class MiaREPL:
         try:
             self.stream_renderer.show_thinking_trace = self.show_thinking_trace
             if self._canonical_agent:
-                async for event in self.harness.prompt(prompt):
+                async for envelope in self.agent_runner.prompt(
+                    prompt,
+                    agent_id=self.agent_id,
+                    provider=self.custom_provider,
+                    model_override=self.model_name,
+                    session_id=self.session_id,
+                    cwd=self.cwd,
+                    approval_callback=self._approval_callback,
+                ):
+                    event = envelope.event
+                    if isinstance(event, OrchestrationErrorEvent):
+                        self.stream_renderer._stop_status()
+                        self.console.print(
+                            f"[bold red]Orchestration error ({event.stage}): "
+                            f"{event.error}[/bold red]"
+                        )
+                        continue
                     self.stream_renderer.on_event(event)
                     if isinstance(event, StepEndEvent):
                         self.total_tokens += event.input_tokens + event.output_tokens
                     elif isinstance(event, TurnCompleteEvent):
                         self.total_cost_usd += event.total_cost_usd
+                if self.agent_runner.last_runtime is not None:
+                    self.agent_runtime = self.agent_runner.last_runtime
+                    self.harness = self.agent_runtime.harness
             else:
                 async for envelope in self.mode_runtime.prompt(
                     prompt,
