@@ -196,8 +196,21 @@ class DelegationService:
                 error="child Task was cancelled",
             )
             self._persist_result(runtime=runtime, result=result)
-            raise
+            current = asyncio.current_task()
+            if current is not None and current.cancelling():
+                raise
+            return result
         except TimeoutError:
+            current = asyncio.current_task()
+            if current is not None and current.cancelling():
+                result = self._result(
+                    request,
+                    child_identity,
+                    "cancelled",
+                    error="child Task was cancelled",
+                )
+                self._persist_result(runtime=runtime, result=result)
+                raise asyncio.CancelledError from None
             result = self._result(
                 request,
                 child_identity,
@@ -228,7 +241,7 @@ class DelegationService:
                     parent_run_id=identity.run_id,
                     parent_session_id=identity.session_id,
                     timeout=timeout,
-                    depth=identity.task_id != "root",
+                    depth=1 if identity.task_id != "root" else 0,
                 )
             )
 

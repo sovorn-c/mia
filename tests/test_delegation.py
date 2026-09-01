@@ -269,7 +269,9 @@ async def test_provider_error_chunk_is_failed_not_success(tmp_path: Path) -> Non
 @pytest.mark.asyncio
 async def test_max_steps_is_failed_not_success(tmp_path: Path) -> None:
     manager = make_manager(tmp_path)
-    manager.create_agent("caller", display_name="Caller", tools=["read_file"], delegation_targets=["recipient"])
+    manager.create_agent(
+        "caller", display_name="Caller", tools=["read_file"], delegation_targets=["recipient"]
+    )
     manager.create_agent(
         "recipient", display_name="Recipient", tools=["read_file"], max_steps_per_turn=1
     )
@@ -289,7 +291,9 @@ async def test_max_steps_is_failed_not_success(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_provider_cancellation_is_recorded_without_false_success(tmp_path: Path) -> None:
     manager = make_manager(tmp_path)
-    manager.create_agent("caller", display_name="Caller", tools=[], delegation_targets=["recipient"])
+    manager.create_agent(
+        "caller", display_name="Caller", tools=[], delegation_targets=["recipient"]
+    )
     manager.create_agent("recipient", display_name="Recipient", tools=[])
     from mia_agent.delegation import DelegationService
 
@@ -304,7 +308,9 @@ async def test_provider_cancellation_is_recorded_without_false_success(tmp_path:
 @pytest.mark.asyncio
 async def test_caller_cancellation_is_recorded_and_propagated(tmp_path: Path) -> None:
     manager = make_manager(tmp_path)
-    manager.create_agent("caller", display_name="Caller", tools=[], delegation_targets=["recipient"])
+    manager.create_agent(
+        "caller", display_name="Caller", tools=[], delegation_targets=["recipient"]
+    )
     manager.create_agent("recipient", display_name="Recipient", tools=[])
     from mia_agent.delegation import DelegationService
 
@@ -314,7 +320,9 @@ async def test_caller_cancellation_is_recorded_and_propagated(tmp_path: Path) ->
         provider=NeverProvider(),
     )
     task = asyncio.create_task(
-        service.delegate(TaskRequest(caller_agent_id="caller", recipient_agent_id="recipient", prompt="work"))
+        service.delegate(
+            TaskRequest(caller_agent_id="caller", recipient_agent_id="recipient", prompt="work")
+        )
     )
     await asyncio.sleep(0)
     task.cancel()
@@ -322,7 +330,7 @@ async def test_caller_cancellation_is_recorded_and_propagated(tmp_path: Path) ->
         await task
     records = list((tmp_path / "agents" / "recipient" / "sessions").glob("*.jsonl"))
     assert records
-    assert any('"outcome": "cancelled"' in path.read_text() for path in records)
+    assert any('"outcome":"cancelled"' in path.read_text() for path in records)
 
 
 @pytest.mark.asyncio
