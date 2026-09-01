@@ -9,7 +9,11 @@ import pytest
 from pydantic import ValidationError
 
 from mia_agent.agents import Agent, AgentManager
+from mia_agent.auth.config import ConfigManager
+from mia_agent.auth.credentials import FileCredentialStore
+from mia_agent.orchestration import AgentRuntimeFactory, RuntimeIdentity
 from mia_agent.profiles.model import AgentProfile
+from mia_ai.providers.mock import MockProvider
 
 
 def make_manager(tmp_path: Path) -> AgentManager:
@@ -146,6 +150,42 @@ def test_legacy_profile_projects_without_rewriting_and_native_wins(tmp_path: Pat
     assert resolved.display_name == "Native reviewer"
     assert inspection["source"] == "native"
     assert inspection["collision"] is True
+
+
+def test_factory_builds_agent_owned_runtime_and_session(tmp_path: Path) -> None:
+    manager = make_manager(tmp_path)
+    manager.create_agent(
+        "researcher",
+        display_name="Researcher",
+        instructions="Research with care.",
+        tools=["read_file"],
+    )
+    identity = RuntimeIdentity(
+        agent_id="researcher",
+        run_id="run-researcher",
+        task_id="root",
+        session_id="session-researcher",
+    )
+
+    runtime = AgentRuntimeFactory(
+        agent_manager=manager,
+        config_manager=ConfigManager(
+            config_path=tmp_path / "config.json",
+            credential_store=FileCredentialStore(path=tmp_path / "credentials.json"),
+        ),
+    ).build(identity=identity, provider=MockProvider())
+
+    assert runtime.agent.agent_id == "researcher"
+    assert runtime.harness.system_prompt == "Research with care."
+    assert runtime.session_store.path == (
+        tmp_path / "agents" / "researcher" / "sessions" / "session-researcher.jsonl"
+    ).resolve()
+    metadata = next(
+        entry for entry in runtime.session_store.load_entries() if entry.type == "custom"
+    )
+    assert metadata.namespace == "agent"
+    assert metadata.data["agent_id"] == "researcher"
+    assert metadata.data["run_id"] == "run-researcher"
 
 
 def test_native_agent_writes_are_atomic_and_do_not_copy_secret_values(tmp_path: Path) -> None:
