@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from mia_agent.auth.config import ConfigManager
 from mia_agent.events import AgentEvent, AssistantChunkEvent
+from mia_middleware.access import AccessPolicyMiddleware, ApprovalCallback
 from mia_agent.agents import Agent, AgentManager
 from mia_agent.harness import AgentHarness
 from mia_agent.profiles.manager import ProfileManager
@@ -462,6 +463,8 @@ class AgentRuntimeFactory:
         cwd: Path | None = None,
         compaction_threshold: float | None = None,
         context_window: int | None = None,
+        approval_callback: ApprovalCallback | None = None,
+        full_access_confirmed: bool = False,
     ) -> AgentRuntime:
         """Construct an Agent-scoped harness, restoring and annotating its Session."""
         if identity.profile is not None:
@@ -502,7 +505,13 @@ class AgentRuntimeFactory:
                 BashTool(cwd=work_dir),
             ],
         )
-        pipeline = self._build_pipeline(agent.middlewares)
+        pipeline = self._build_pipeline(
+            agent.middlewares,
+            agent=agent,
+            identity=identity,
+            approval_callback=approval_callback,
+            full_access_confirmed=full_access_confirmed,
+        )
         session_store = JsonlSessionStore(session_dir / f"{identity.session_id}.jsonl")
         initial_messages, last_entry_id = self._restore_session(session_store)
         last_entry_id = self._persist_identity(identity, session_store, last_entry_id, namespace=namespace)
@@ -551,8 +560,28 @@ class AgentRuntimeFactory:
         )
 
     @staticmethod
-    def _build_pipeline(middlewares: list[str]) -> ToolPipeline:
+    def _build_pipeline(
+        middlewares: list[str],
+        *,
+        agent: Agent | None = None,
+        identity: RuntimeIdentity | None = None,
+        approval_callback: ApprovalCallback | None = None,
+        full_access_confirmed: bool = False,
+    ) -> ToolPipeline:
         active: list[Any] = []
+        if agent is not None and identity is not None and identity.profile is None:
+            active.append(
+                AccessPolicyMiddleware(
+                    access_policy=agent.access_policy,
+                    capabilities=agent.tools,
+                    approval_callback=approval_callback,
+                    full_access_confirmed=full_access_confirmed,
+                    agent_id=agent.agent_id,
+                    run_id=identity.run_id,
+                    task_id=identity.task_id,
+                    session_id=identity.session_id,
+                )
+            )
         if "security_guard" in middlewares:
             active.append(SecurityGuardMiddleware())
         if "audit_log" in middlewares:
