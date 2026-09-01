@@ -1,82 +1,106 @@
-# specs/product/SCOPE_LATEST.yaml — Bounded PRD for Mia Native Orchestration
+# specs/product/SCOPE_LATEST.yaml — Bounded PRD for Mia orchestration lifecycle hardening
+initiative_id: "e04"
+initiative_name: "Native Orchestration Run Identity and Lifecycle"
+status: "proposed"
+
 core_value: >
-  Make orchestration Mia's single execution architecture: every prompt enters a mode runtime,
-  while the default one-node mode preserves today's fast Pi/Tau-style behavior and an explicit
-  research mode proves deterministic one-shot specialist delegation end to end.
+  Make every Mia prompt produce a trustworthy, uniquely attributable orchestration result so
+  maintainers and future workflow authors can reason about success, failure, and recovery.
 
 summary: >
-  This slice establishes the canonical separation "Mode composes; Profile configures; Workflow
-  coordinates; Agent executes; Plugin extends." It inserts a headless mode runtime above the
-  existing AgentHarness without changing AgentHarness into a multi-agent manager. The existing
-  interactive and headless CLIs use the same runtime. A built-in single mode remains the default;
-  a built-in research mode runs one task-local architect specialist followed by the selected
-  coordinator profile. Typed envelopes make every event attributable to its mode, run, task, and
-  agent. The legacy src/mia_agent/herd implementation is not an architectural input. A small
-  follow-up aligns the inline REPL's essential slash-command descriptions with behavior that is
-  actually implemented, including durable manual compaction.
+  Mia's native orchestration vocabulary now defines an Orchestration Run as one prompt-scoped
+  execution and a Session as durable history that can span sequential runs. The implementation
+  still reuses run identity in interactive single mode and does not expose enough typed lifecycle
+  evidence to distinguish successful completion from limits, provider errors, cancellation, or
+  unstarted downstream work.
+
+  This initiative aligns observable native behavior with the canonical domain model. It covers
+  unique run identity, attributable lifecycle outcomes, and truthful failure propagation across
+  the existing single and research modes. It preserves the current one-agent AgentHarness seam,
+  append-only sessions, profile permissions, middleware, and terminal adapters.
+
+actors:
+  - "Mia users who need reliable completion and failure behavior"
+  - "Mia maintainers evolving ModeRuntime and AgentHarness"
+  - "Future workflow and plugin authors consuming attributed events"
 
 in_scope:
-  - id: "e03s01"
-    name: "Native Orchestration Mode Vertical Slice"
+  - id: "e04s01"
+    name: "Prompt-Scoped Run Identity"
     description: >
-      Add validated mode/workflow definitions, one shared AgentHarness factory, an orchestration
-      event envelope, a one-node compatibility path, a deterministic research workflow with a
-      task-local specialist, durable child lineage, and explicit /mode and --mode selection.
-  - id: "e03s02"
-    name: "Essential Slash Command Contract Alignment"
+      Every submitted prompt receives one unique Orchestration Run identity across interactive,
+      headless, and resumed-session paths. Sequential runs may share a Session without sharing a
+      run identity, and existing event attribution remains intact.
+  - id: "e04s02"
+    name: "Truthful Native Lifecycle Outcomes"
     description: >
-      Make command completion, help, and dispatch share one canonical list; implement real manual
-      context compaction; preserve state on invalid profile selection; report Git failures; and
-      remove unsupported active-turn cancellation from the advertised command suite.
+      Native orchestration exposes unambiguous terminal outcomes for Runs, Workflow Tasks, Agent
+      Instances, Turns, Steps, and Tool Invocations. Limits and unrecovered errors cannot appear
+      as success; recoverable tool failures remain distinguishable from policy rejection and
+      downstream unstarted work is represented as Skipped.
 
 out_of_scope:
   - id: "oos-01"
-    name: "Continuable child agents"
-    rationale: "Restart recovery and later follow-up messages require lifecycle semantics beyond the first vertical slice."
+    name: "Concurrent input and per-session coordination"
+    rationale: "One-active-turn enforcement, queues, and active-turn cancellation require a separate concurrency design."
   - id: "oos-02"
-    name: "Durable team mailbox and shared task DAG"
-    rationale: "The first slice proves deterministic one-shot delegation before introducing team coordination state."
+    name: "Session lineage and retention hardening"
+    rationale: "Parent constraints, orphan prevention, branch retention, and safe deletion need separate persistence-focused acceptance criteria."
   - id: "oos-03"
-    name: "Automatic mode or workflow inference"
-    rationale: "Mode selection remains explicit until behavior, cost, and latency are measurable."
+    name: "Continuable child agents and durable task DAGs"
+    rationale: "The current one-shot workflow boundary remains sufficient while lifecycle attribution is stabilized."
   - id: "oos-04"
-    name: "User plugin loading and built-in memory service"
-    rationale: "Plugin and memory contracts remain architectural terms but are not implemented in this story."
+    name: "Legacy Herd or full-screen UI migration"
+    rationale: "The native headless runtime remains the architecture; legacy presentation and orchestration adapters are not required for this contract."
   - id: "oos-05"
-    name: "Full-screen multi-agent UI"
-    rationale: "Both current terminal adapters consume the headless runtime; orchestration correctness precedes new presentation work."
-  - id: "oos-06"
-    name: "Legacy Herd migration"
-    rationale: "src/mia_agent/herd and its Textual path are experimental/legacy and do not constrain the native runtime design."
-  - id: "oos-07"
-    name: "Concurrent input and active-turn cancellation"
-    rationale: "The serial inline REPL cannot accept /stop during a turn; a later lifecycle story must design concurrent input and cancellation before the command is advertised."
+    name: "Provider retry policy and new runtime dependencies"
+    rationale: "This initiative classifies existing outcomes and adds no new provider behavior or package dependency."
 
 constraints:
-  - "Runtime: Python 3.12+ with strict Mypy and Ruff formatting."
-  - "AgentHarness remains the executor for exactly one agent and imports no terminal UI."
-  - "AgentProfile remains configuration for one role; it does not absorb mode, workflow, memory, or plugin responsibilities."
-  - "Every tool visible to an agent is filtered by that agent's profile and executed through ToolPipeline."
-  - "Root and child transcripts remain append-only JSONL session trees."
-  - "No new runtime dependency is introduced; PyYAML is a development-only prerequisite for repository planning gates."
-  - "Existing uncommitted user changes must be preserved."
+  - "Preserve the invariant: Mode composes; Profile configures; Workflow coordinates; Agent executes; Plugin extends."
+  - "AgentHarness remains a one-agent, UI-independent executor."
+  - "Existing inner AgentEvent payloads and renderer behavior remain compatible unless an explicit lifecycle contract requires an additive envelope change."
+  - "Root and child session histories remain append-only JSONL trees."
+  - "Single and research modes remain explicit and deterministic."
+  - "All visible tools remain profile-filtered and middleware-protected."
+  - "Use Python 3.12+, strict Mypy, Ruff, offline tests, and no new runtime dependency."
+  - "Preserve all existing user-authored and completed e03 artifacts; the prior e03 scope is frozen under product/snapshots/."
 
 success_criteria:
-  - "Both `mia` and `mia run` submit prompts through the native mode runtime."
-  - "Default single mode preserves current AgentEvent order, profile tool filtering, middleware, session resume/tree behavior, token accounting, and Rich rendering."
-  - "`/mode` and `--mode` explicitly list or select validated modes; unknown modes fail with an actionable error."
-  - "Research mode runs one task-local architect specialist before coordinator synthesis, using separate AgentHarness instances and sessions."
-  - "Every runtime event identifies mode, workflow run, task, agent, and profile while retaining the original typed AgentEvent payload."
-  - "Specialist failure or cancellation prevents later stages and emits a typed terminal error."
-  - "Focused orchestration tests, the existing suite, Ruff, and strict Mypy pass offline."
-  - "Completion, help, and prefix matching expose the same 18 canonical slash commands."
-  - "Manual /compact changes active context and appends a durable compaction checkpoint."
-  - "Invalid profile selection and failed Git inspection report errors without partial state mutation or false success."
-  - "Unsupported /stop and /abort commands are not advertised until concurrent cancellation exists."
-  - "Model discovery includes every connected provider and excludes unconnected providers; /scoped-models controls Ctrl+P cycling."
-  - "Interactive exit output identifies the session and top-level mia --session resumes it."
+  - "Each submitted prompt has a unique run_id, including repeated prompts in one interactive Session and prompts after resume."
+  - "Every native event and terminal outcome can be attributed to its Mode, Run, Workflow Task, Agent Instance, Profile, and Session where applicable."
+  - "A successful Run requires successful final Coordinator completion. max_steps, unrecovered provider errors, and cancellation never produce a successful Run outcome."
+  - "Research-mode specialist failure prevents Coordinator execution and records downstream work as Skipped rather than silently omitting it."
+  - "Tool execution failure, policy rejection, cancellation, and successful completion remain distinguishable without exposing credentials or sensitive provider data."
+  - "Terminal lifecycle outcomes are immutable and illegal post-terminal transitions are rejected or impossible."
+  - "Existing single-mode behavior, session replay, profile permissions, middleware, CLI rendering, and all current tests remain green."
+  - "Focused lifecycle regression tests, Ruff, strict Mypy, offline pytest, build, and specification checks pass."
 
 references:
-  - "specs/IMPACT_LATEST.md"
+  - "specs/product/snapshots/SCOPE_e03-native-orchestration.yaml"
+  - "specs/planning-context.yaml"
+  - "specs/product/GLOSSARY_LATEST.yaml"
   - "specs/tech-architecture/tech-stack.md"
-  - "specs/old_plan/mia_harness.md"
+  - "specs/adr/0001-prompt-scoped-orchestration-runs.md"
+
+prior_art:
+  - candidate: "Mia native orchestration seams"
+    source: "src/mia_agent/orchestration.py and src/mia_agent/harness.py"
+    verdict: "extend"
+    notes: "ModeRuntime already owns mode routing and event envelopes; AgentHarness already owns one-agent turns and session context."
+  - candidate: "Tau reusable harness lifecycle"
+    source: "/Users/sovorn/dev/pi/pi-architecture/tau/src/tau_agent/harness.py"
+    verdict: "adopt"
+    notes: "Reject overlapping prompts, keep active-run state in the harness boundary, and expose lifecycle state separately from transcript messages."
+  - candidate: "Tau append-only session tree"
+    source: "/Users/sovorn/dev/pi/pi-architecture/tau/dev-notes/architecture/phase-7-session-tree.md"
+    verdict: "adopt"
+    notes: "Keep durable history append-only and reconstruct active context by replaying a selected root-to-leaf path."
+  - candidate: "Pi stateful Agent lifecycle"
+    source: "/Users/sovorn/dev/pi/pi-architecture/pi/packages/agent/src/agent.ts"
+    verdict: "adopt"
+    notes: "Keep active-run ownership and abort state separate from the durable message transcript."
+  - candidate: "DeepSeek Harness tool outcome pipeline"
+    source: "/Users/sovorn/dev/pi/pi-architecture/deepseek-harness/packages/core/tools/src/index.ts"
+    verdict: "adapt"
+    notes: "Preserve explicit policy, execution, cancellation, and immutable result distinctions without importing the larger plugin framework."

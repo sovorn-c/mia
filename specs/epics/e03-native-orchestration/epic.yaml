@@ -4,7 +4,7 @@ slug: "native-orchestration"
 title: "Native Orchestration Runtime"
 type: "feat"
 context: "domain and infrastructure"
-status: "planned"
+status: "completed"
 bcps_total: 12
 
 stories:

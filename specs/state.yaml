@@ -1,16 +1,18 @@
+workflow_mode: solo-git
 session:
-  active_flow: commit_message
-  active_epic_id: e03
-  active_story_id: e03s02
+  active_flow: plan
+  active_epic_id: null
+  active_story_id: null
   target_version: 0.3.0
 handoff:
-  next_skill: commit-message
-  summary: BUG-001 is fixed and landed. /scoped-models now opens a vertical checkbox
-    selector, saves ordered scope state, supports cancel, and preserves scope across login.
-    Full quality gates and manual PTY UAT pass.
+  next_skill: plan-release
+  summary: Epic e03 and BUG-001 remain complete. e04 scope now defines native orchestration
+    Run identity and lifecycle hardening; the prior e03 scope is preserved as a product snapshot.
+    Ready to sequence e04 before slicing stories.
 git:
   branch: main
 metrics:
+  story_start: '2026-09-01T08:57:36Z'
   skill_timings:
     plan-work:
       calls: 2
@@ -32,3 +34,7 @@ metrics:
       calls: 1
       total_seconds: 49.0
       avg_seconds: 49.0
+    survey-context:
+      calls: 1
+      total_seconds: 98.0
+      avg_seconds: 98.0

@@ -1,0 +1,51 @@
+# specs/planning-context.yaml — written by elaborate-spec; consumed by scope-work and slice-tasks
+feature_name: "Mia Canonical Orchestration Domain Foundation"
+problem_statement: >
+  Mia has settled orchestration vocabulary, but lifecycle identity, ownership, states,
+  legal transitions, terminal outcomes, and recovery semantics remain fragmented across
+  runtime models, typed events, session trees, architecture prose, and legacy herd concepts.
+actors:
+  - "Mia maintainers"
+  - "Feature planners"
+  - "Future plugin and workflow authors"
+solution_summary: >
+  Standardize the orchestration and execution domain language, entity relationships,
+  semantic state models, legal transitions, failure propagation, and invariants without
+  changing runtime code or requiring new persistence.
+constraints:
+  - "Preserve the invariant: Mode composes; Profile configures; Workflow coordinates; Agent executes; Plugin extends."
+  - "Treat lifecycle states as normative semantics derivable from typed events today."
+  - "Mark durable run/task state persistence and restart recovery as deferred."
+  - "Preserve current event payloads, session formats, public APIs, and existing specification content."
+  - "Keep exactly one final coordinator stage and at most one specialist stage in the current workflow contract."
+  - "Keep AgentHarness responsible for exactly one agent and independent from terminal UI code."
+  - "Keep root and child transcripts in append-only JSONL session trees."
+out_of_scope:
+  - "Runtime implementation changes"
+  - "Persistence schemas or migrations"
+  - "Public API changes"
+  - "Continuable child agents"
+  - "Durable team mailbox and shared task DAG coordination"
+  - "Concurrent turns and active-turn cancellation"
+  - "Plugin loading"
+  - "Adoption of legacy Herd AgentState semantics"
+success_criteria:
+  - "Every core domain term has one canonical definition and explicit aliases to avoid."
+  - "Entity relationships identify ownership, cardinality, and durable identity boundaries."
+  - "Every core lifecycle defines initial, active, terminal, and illegal transitions."
+  - "Failure, cancellation, and downstream-skip propagation are explicit."
+  - "Invariants distinguish current guarantees from deferred recovery semantics."
+  - "Code and specification contradictions are labeled instead of silently normalized."
+  - "Legacy herd and Textual concepts cannot become native orchestration terms by accident."
+key_decisions:
+  - decision: "Standardize the current native orchestration domain before adding new capabilities."
+    rationale: "Stable language and lifecycle contracts reduce ambiguity in every later orchestration feature."
+  - decision: "Cover orchestration and execution lifecycles, not the whole product surface."
+    rationale: "Providers, credentials, and terminal presentation support orchestration but do not own its core state model."
+  - decision: "Define normative semantic states without requiring persistent state records."
+    rationale: "Current typed events can derive lifecycle state while storage and recovery remain deferred."
+  - decision: "Keep specs/product/GLOSSARY_LATEST.yaml canonical."
+    rationale: "The existing specs cockpit already assigns glossary ownership there."
+  - decision: "Maintain specs/UBIQUITOUS_LANGUAGE_LATEST.md as a synchronized human-readable projection."
+    rationale: "This satisfies define-language output while retaining one declared source of truth."
+next_skill: "plan-release"

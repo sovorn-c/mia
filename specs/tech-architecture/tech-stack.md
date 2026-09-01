@@ -24,7 +24,7 @@ graph TD
     Harness --> Sessions["JSONL session tree + compaction"]
     Mode -->|research: specialist then coordinator| Child["Task-local architect session"]
     Child --> Factory
-``
+```
 
 ---
 
@@ -209,8 +209,188 @@ Mia uses a profile-driven execution model enforced via the `SecurityGuardMiddlew
   - Emits a clean notification: `⚡ Context compacted: 86k → 14k tokens (-83%)`.
   - Can also be triggered manually anytime via **`/compact`**.
 
+---
 
+## 10. Canonical Orchestration Domain Model
 
+`specs/product/GLOSSARY_LATEST.yaml` is the canonical terminology source. `specs/UBIQUITOUS_LANGUAGE_LATEST.md` is its human-readable projection.
 
+### Aggregate ownership
 
+**Orchestration Run** is the orchestration aggregate root. It owns ordered **Workflow Tasks** and one final outcome. **Agent Instances** execute tasks. **Sessions** preserve durable conversation history outside the run lifecycle.
+
+### Orchestration Run state model
+
+```mermaid
+stateDiagram-v2
+    [*] --> Created
+    Created --> Running: first Workflow Task starts
+    Running --> Succeeded: final Coordinator completes successfully
+    Running --> Failed: unrecovered error or execution limit
+    Running --> Cancelled: cancellation is observed
+    Succeeded --> [*]
+    Failed --> [*]
+    Cancelled --> [*]
+```
+
+`Succeeded`, `Failed`, and `Cancelled` are terminal. Only successful final **Coordinator** completion yields `Succeeded`. `max_steps` and unrecovered provider or orchestration errors yield `Failed`.
+
+**Current contradiction:** `AgentHarness.prompt()` emits `TurnCompleteEvent(stop_reason="max_steps")`, and provider error chunks can still lead to `stop_reason="stop"`. Consumers cannot derive strict run success from event type alone. This foundation records the desired semantics without changing code.
+
+### Workflow Task state model
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending
+    Pending --> Running: Agent Instance starts its Turn
+    Pending --> Skipped: upstream task is not successful
+    Running --> Succeeded: task Turn completes successfully
+    Running --> Failed: unrecovered execution error or limit
+    Running --> Cancelled: cancellation is observed
+    Succeeded --> [*]
+    Failed --> [*]
+    Cancelled --> [*]
+    Skipped --> [*]
+```
+
+All four outcomes are terminal. A `Failed` task fails its **Orchestration Run**. A `Cancelled` task cancels its run. Every later `Pending` task becomes `Skipped`. A tool error remains recoverable inside a task until the task reaches a terminal outcome.
+
+**Current gap:** Native orchestration emits no explicit task-start, task-complete, or task-skipped events. Research mode enforces fail-fast control flow, but downstream `Skipped` state remains implicit.
+
+### Identity scope
+
+One submitted prompt creates exactly one **Orchestration Run**. A **Session** spans zero or more runs and preserves their shared conversation history. Run identifiers MUST remain unique across prompts, including resumed sessions.
+
+**Current contradiction:** Interactive single mode reuses `run_id=f"run_{session_id}"` with one long-lived runtime. Research mode creates a new run identifier per prompt. Native attribution therefore has mode-dependent run identity today.
+
+### Agent Instance state model
+
+```mermaid
+stateDiagram-v2
+    [*] --> Created
+    Created --> Running: Workflow Task starts
+    Running --> Completed: task succeeds
+    Running --> Failed: task fails
+    Running --> Cancelled: task is cancelled
+    Completed --> [*]
+    Failed --> [*]
+    Cancelled --> [*]
+```
+
+An **Agent Instance** is task-scoped and reaches one terminal state. Its **Session** survives it. A later prompt creates a new run and agent instance that can reopen the same session.
+
+**Current contradiction:** Interactive single mode reuses one `AgentRuntime` and `AgentHarness` across prompts. The implementation currently behaves as a session-scoped executor, unlike research specialists.
+
+### Turn and Step state models
+
+```mermaid
+stateDiagram-v2
+    state Turn {
+        [*] --> Started
+        Started --> Running: first Step starts
+        Running --> Succeeded: normal completion
+        Running --> Failed: unrecovered error or max_steps
+        Running --> Cancelled: cancellation is observed
+    }
+    state Step {
+        [*] --> StepStarted
+        StepStarted --> Streaming: provider stream starts
+        Streaming --> ResolvingTools: tool requests exist
+        Streaming --> StepCompleted: no tool requests remain
+        ResolvingTools --> StepCompleted: all results recorded
+        StepStarted --> StepFailed: unrecovered error
+        Streaming --> StepFailed: unrecovered error
+        ResolvingTools --> StepFailed: unrecovered error
+        StepStarted --> StepCancelled: cancellation
+        Streaming --> StepCancelled: cancellation
+        ResolvingTools --> StepCancelled: cancellation
+    }
+```
+
+A **Turn** reaches `Succeeded`, `Failed`, or `Cancelled`. A **Step** reaches `Completed`, `Failed`, or `Cancelled`. `max_steps` is a failed Turn outcome, not success.
+
+### Tool Invocation state model
+
+```mermaid
+stateDiagram-v2
+    [*] --> Requested
+    Requested --> Rejected: policy denies execution
+    Requested --> Executing: middleware permits execution
+    Executing --> Succeeded: result recorded without error
+    Executing --> Failed: execution error recorded
+    Requested --> Cancelled: cancellation before execution
+    Executing --> Cancelled: cancellation during execution
+    Succeeded --> [*]
+    Failed --> [*]
+    Rejected --> [*]
+    Cancelled --> [*]
+```
+
+A failed or rejected **Tool Invocation** is recoverable. Its result remains part of the completed **Step**, allowing a later Step to react. Only an unrecovered exception, policy decision, execution limit, or cancellation terminates the Turn.
+
+**Current gap:** `ToolResultEvent.is_error` does not distinguish `Failed` from `Rejected`. Cancellation can end execution without a terminal tool or step event.
+
+### Session semantics
+
+A **Session** has no lifecycle state. It exists as append-only history until explicit deletion. “Active” describes a runtime selecting that session, not a stored session state. Resuming creates a new **Agent Instance** without reopening or mutating the session.
+
+A **Session Tree** never rewrites existing entries. A **Session Branch** is the selected root-to-leaf replay path. Selecting or forking a branch changes the active leaf pointer without deleting sibling history. A **Compaction Checkpoint** changes replay context without replacing stored history.
+
+A root **Session** has no parent. A child session has exactly one immutable parent session. Session lineage is acyclic, and parent and child histories never merge. Parent deletion MUST NOT silently orphan a child.
+
+**Current gap:** `parent_session_id` is persisted inside namespaced orchestration metadata, but no constraint prevents conflicting parents, cycles, or orphaning.
+
+### Concurrency
+
+Mia permits concurrency across different **Sessions**. One Session permits at most one active **Turn** and one writing **Agent Instance**. An overlapping run targeting the same session MUST be queued or rejected. Current research workflow tasks remain sequential.
+
+| Shared mutable location | Readers | Writers | Synchronization | Risk |
+|-------------------------|---------|---------|-----------------|------|
+| `AgentHarness._messages`, counters, and last entry | Harness, compactor, session navigation | `prompt`, compaction, navigation | Serial REPL assumption only | **HIGH:** concurrent prompts corrupt context and attribution |
+| One `JsonlSessionStore` file | Runtime restoration and tree navigation | Harness and identity persistence | None | **HIGH:** concurrent appends can interleave or create conflicting parents |
+| `CostBudgetMiddleware` counters | Budget checks and inspection | Every tool invocation | None | **HIGH:** check-then-increment races and reused-runtime leakage |
+| `AuditLogMiddleware.logs` | Inspection UI and tests | Every tool invocation | None | **MEDIUM:** concurrent ordering becomes nondeterministic |
+| `ToolPipeline.middlewares` | Every tool invocation | Setup through `use()` | Construction-time convention | **MEDIUM:** runtime mutation can alter an active chain |
+| `SessionTree` indexes and active leaf | Replay and navigation | `add_entry()` | Instance-local use | **LOW:** unsafe only if one tree object is shared concurrently |
+
+No lock, actor, or compare-and-swap mechanism enforces the per-Session invariant today. The serial inline REPL avoids the race by control flow, not by the headless runtime contract.
+
+### Domain invariants
+
+1. A run resolves and validates its **Mode**, **Workflow**, stages, and **Profiles** exactly once at creation.
+2. Definition changes affect later runs only; an active run uses its immutable resolved definitions.
+3. A **Workflow** contains exactly one final **Coordinator** stage and currently at most one **Specialist** stage.
+4. One submitted prompt creates one run; one session can span many sequential runs.
+5. `task_id` and `agent_id` are unique within one run; `step_index` is unique within one turn.
+6. `call_id` identifies one **Tool Invocation** within its step and correlates exactly one terminal result.
+7. Every **Orchestration Event Envelope** identity matches the emitting agent instance's **Runtime Identity**.
+8. Every reached **Workflow Stage** creates exactly one task, agent instance, profile binding, and session binding.
+9. Only successful final coordinator completion succeeds a run.
+10. Failure or cancellation prevents downstream execution and marks unstarted tasks `Skipped`.
+11. Terminal entities never transition again.
+12. Session entries are immutable, parent references are acyclic, and compaction never deletes stored history.
+13. One session has at most one active turn and one writer.
+14. Every visible tool is profile-authorized and executes through the configured middleware pipeline.
+15. Legacy Herd models and `AgentState` never define native orchestration semantics.
+
+**Current gap:** Mode and workflow Pydantic models are mutable, and profiles are resolved while each agent runtime is built. The code has no explicit immutable run-definition snapshot.
+
+### Event-derived state mapping
+
+| Entity transition | Current evidence | Gap |
+|-------------------|------------------|-----|
+| Run or task `Created/Pending → Running` | First attributable `TurnStartEvent` | No explicit run/task start event |
+| Agent Instance `Created → Running` | First attributable `TurnStartEvent` | Construction is not emitted |
+| Turn `Started → Running` | `TurnStartEvent`, then `StepStartEvent` | None |
+| Step `Started → Completed` | `StepStartEvent`, then `StepEndEvent` | No explicit failed or cancelled step event |
+| Tool `Requested → Executing` | `ToolCallEvent` followed by middleware dispatch | Execution start is not emitted separately |
+| Tool `Executing → Succeeded/Failed` | `ToolResultEvent.is_error` | Rejection and execution failure are conflated |
+| Turn or task `Running → Succeeded` | `TurnCompleteEvent(stop_reason="stop")` | Provider error chunks can still produce this event |
+| Turn or task `Running → Failed` | `AgentErrorEvent`, orchestration error, or `max_steps` | `max_steps` uses TurnComplete; provider errors lack reliable terminal typing |
+| Run or task `Running → Cancelled` | `OrchestrationErrorEvent(cancelled=true)` | Inner agent, step, and tool terminal events can be absent |
+| Downstream task `Pending → Skipped` | Research control flow returns before coordinator creation | No explicit skipped event |
+
+### Decision records
+
+- [ADR-0001: Use prompt-scoped orchestration runs and session-spanning history](../adr/0001-prompt-scoped-orchestration-runs.md)
 

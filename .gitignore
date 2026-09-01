@@ -38,8 +38,11 @@ htmlcov/
 .vscode/
 .idea/
 
-# Mia local sessions & environment
+# Mia local sessions, environment, and agent workspace files
 .mia/
 .env
 AGENTS.md
+CLAUDE.md
+CONVENTIONS.md
+docs/
 
