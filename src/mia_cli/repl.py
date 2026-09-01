@@ -38,7 +38,6 @@ from mia_agent.orchestration import (
     RuntimeIdentity,
 )
 from mia_agent.profiles.manager import ProfileManager
-from mia_middleware.access import ApprovalRequest
 from mia_agent.session.entries import LeafEntry, MessageEntry, SessionInfoEntry
 from mia_agent.session.jsonl import JsonlSessionStore
 from mia_agent.session.tree import SessionTree
@@ -50,6 +49,7 @@ from mia_cli.interactive_input import (
     interactive_select,
 )
 from mia_cli.renderers.rich_stream import RichStreamRenderer
+from mia_middleware.access import ApprovalRequest
 
 SLASH_COMMANDS = [command for command, _ in COMMAND_HINTS]
 COMMAND_DESCRIPTIONS: dict[str, str] = dict(COMMAND_HINTS)
@@ -889,18 +889,19 @@ class MiaREPL:
                     cwd=self.cwd,
                     runtime=self.agent_runtime if self.mode_name == "single" else None,
                 ):
-                    event = envelope.event
-                    if isinstance(event, OrchestrationErrorEvent):
+                    legacy_event = envelope.event
+                    if isinstance(legacy_event, OrchestrationErrorEvent):
                         self.stream_renderer._stop_status()
                         self.console.print(
-                            f"[bold red]Orchestration error ({event.stage}): {event.error}[/bold red]"
+                            f"[bold red]Orchestration error ({legacy_event.stage}): "
+                            f"{legacy_event.error}[/bold red]"
                         )
                         continue
-                    self.stream_renderer.on_event(event)
-                    if isinstance(event, StepEndEvent):
-                        self.total_tokens += event.input_tokens + event.output_tokens
-                    elif isinstance(event, TurnCompleteEvent):
-                        self.total_cost_usd += event.total_cost_usd
+                    self.stream_renderer.on_event(legacy_event)
+                    if isinstance(legacy_event, StepEndEvent):
+                        self.total_tokens += legacy_event.input_tokens + legacy_event.output_tokens
+                    elif isinstance(legacy_event, TurnCompleteEvent):
+                        self.total_cost_usd += legacy_event.total_cost_usd
 
         except asyncio.CancelledError:
             self.stream_renderer._stop_status()
@@ -952,7 +953,7 @@ class MiaREPL:
                 self.console.print(f"[dim]Available Agents: {available}[/dim]\n")
             else:
                 try:
-                    selected = self.agent_mgr.get_agent(args)
+                    selected_agent = self.agent_mgr.get_agent(args)
                 except ValueError as exc:
                     if legacy:
                         available = ", ".join(
@@ -965,8 +966,8 @@ class MiaREPL:
                     else:
                         self.console.print(f"[yellow]{exc}[/yellow]\n")
                 else:
-                    self.agent_id = selected.agent_id
-                    self.profile_name = selected.agent_id
+                    self.agent_id = selected_agent.agent_id
+                    self.profile_name = selected_agent.agent_id
                     self._canonical_agent = not legacy
                     self._approval_callback = (
                         self._request_tool_approval if self._canonical_agent else None
@@ -974,7 +975,7 @@ class MiaREPL:
                     self._init_harness()
                     noun = "Agent" if self._canonical_agent else "profile"
                     self.console.print(
-                        f"[bold green]✓ Switched {noun} to {selected.agent_id}[/bold green]\n"
+                        f"[bold green]✓ Switched {noun} to {selected_agent.agent_id}[/bold green]\n"
                     )
 
         elif cmd == "/mode":

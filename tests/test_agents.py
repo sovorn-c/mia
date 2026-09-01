@@ -177,9 +177,10 @@ def test_factory_builds_agent_owned_runtime_and_session(tmp_path: Path) -> None:
 
     assert runtime.agent.agent_id == "researcher"
     assert runtime.harness.system_prompt == "Research with care."
-    assert runtime.session_store.path == (
-        tmp_path / "agents" / "researcher" / "sessions" / "session-researcher.jsonl"
-    ).resolve()
+    assert (
+        runtime.session_store.path
+        == (tmp_path / "agents" / "researcher" / "sessions" / "session-researcher.jsonl").resolve()
+    )
     metadata = next(
         entry for entry in runtime.session_store.load_entries() if entry.type == "custom"
     )

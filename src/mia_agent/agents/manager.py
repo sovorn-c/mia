@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from collections.abc import Sequence
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from mia_agent.profiles.manager import (
-    ProfileManager,
-    default_profiles_dir,
-    default_sessions_base_dir,
-)
-from mia_agent.profiles.model import AgentProfile
+from .model import BUILTIN_AGENTS, LEGACY_PERMISSION_MAP, Agent, normalize_agent_id
 
-from .model import BUILTIN_AGENTS, Agent, normalize_agent_id
+if TYPE_CHECKING:
+    from mia_agent.profiles.model import AgentProfile
 
 DEFAULT_AGENT_HOME = Path.home() / ".mia" / "agents"
 DEFAULT_SELECTION_FILE = ".default-agent"
@@ -34,11 +31,17 @@ class AgentManager:
         sessions_base_dir: Path | None = None,
         profile_manager: Any | None = None,
     ) -> None:
+        from mia_agent.profiles.manager import (
+            ProfileManager,
+            default_profiles_dir,
+            default_sessions_base_dir,
+        )
+
         self.agents_dir = (agents_dir or DEFAULT_AGENT_HOME).expanduser().resolve()
         self.profiles_dir = (profiles_dir or default_profiles_dir()).expanduser().resolve()
         self.sessions_base_dir = (
-            sessions_base_dir or default_sessions_base_dir()
-        ).expanduser().resolve()
+            (sessions_base_dir or default_sessions_base_dir()).expanduser().resolve()
+        )
         self.profile_manager = profile_manager or ProfileManager(
             profiles_dir=self.profiles_dir,
             sessions_base_dir=self.sessions_base_dir,
@@ -124,10 +127,8 @@ class AgentManager:
         if not target.exists():
             return False
         target.unlink()
-        try:
+        with contextlib.suppress(OSError):
             target_dir.rmdir()
-        except OSError:
-            pass
         if self._selected_id() == key:
             self._clear_default()
         return True
@@ -251,6 +252,8 @@ class AgentManager:
         return Agent(agent_id=agent, **data)
 
     def _legacy_profile(self, key: str) -> AgentProfile | None:
+        from mia_agent.profiles.model import AgentProfile
+
         path = self._legacy_path(key)
         if not path.exists():
             return None
@@ -261,12 +264,16 @@ class AgentManager:
             raise ValueError(f"Failed to load legacy Profile '{key}': {exc}") from exc
 
     def _legacy_profiles(self) -> list[AgentProfile]:
+        from mia_agent.profiles.model import AgentProfile
+
         if not self.profiles_dir.exists():
             return []
         profiles: list[AgentProfile] = []
         for path in sorted(self.profiles_dir.glob("*.json")):
             try:
-                profiles.append(AgentProfile.model_validate(json.loads(path.read_text(encoding="utf-8"))))
+                profiles.append(
+                    AgentProfile.model_validate(json.loads(path.read_text(encoding="utf-8")))
+                )
             except (OSError, json.JSONDecodeError, TypeError, ValueError):
                 continue
         return profiles
@@ -285,7 +292,7 @@ class AgentManager:
             temperature=profile.temperature,
             max_steps_per_turn=profile.max_steps_per_turn,
             tools=profile.tools,
-            access_policy=profile.permission,
+            access_policy=LEGACY_PERMISSION_MAP[profile.permission],
             compaction_threshold_ratio=profile.compaction_threshold_ratio,
             context_window_tokens=profile.context_window_tokens,
             middlewares=list(profile.middlewares),
@@ -314,10 +321,8 @@ class AgentManager:
             return None
 
     def _clear_default(self) -> None:
-        try:
+        with contextlib.suppress(FileNotFoundError):
             (self.agents_dir / DEFAULT_SELECTION_FILE).unlink()
-        except FileNotFoundError:
-            pass
 
     @staticmethod
     def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -347,6 +352,4 @@ __all__ = [
     "AGENT_DEFINITION_FILE",
     "AgentManager",
     "DEFAULT_AGENT_HOME",
-    "default_profiles_dir",
-    "default_sessions_base_dir",
 ]

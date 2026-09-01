@@ -97,9 +97,7 @@ async def _run_agent_loop(
 def run_command(
     prompt: Annotated[str, typer.Option("--prompt", "-p", help="User instruction prompt")] = "",
     agent: Annotated[str | None, typer.Option("--agent", help="Active Agent ID")] = "mia",
-    profile: Annotated[
-        str | None, typer.Option("--profile", help="Legacy profile alias")
-    ] = None,
+    profile: Annotated[str | None, typer.Option("--profile", help="Legacy profile alias")] = None,
     mode: Annotated[str, typer.Option("--mode", help="Legacy orchestration mode alias")] = "single",
     model: Annotated[str | None, typer.Option("--model", "-m", help="LLM model identifier")] = None,
     resume: Annotated[
@@ -122,9 +120,8 @@ def run_command(
     if not prompt:
         prompt = typer.prompt("Prompt")
     if profile is not None or mode != "single":
-        console.print(
-            "[yellow]Warning: --profile/--mode are compatibility aliases; use --agent.[/yellow]",
-            stderr=True,
+        Console(stderr=True).print(
+            "[yellow]Warning: --profile/--mode are compatibility aliases; use --agent.[/yellow]"
         )
         agent = None
     asyncio.run(
@@ -161,12 +158,8 @@ def login_command(
 def create_agent_command(
     agent_id: Annotated[str, typer.Argument(help="Path-safe Agent ID")],
     name: Annotated[str | None, typer.Option("--name", help="Agent display name")] = None,
-    instructions: Annotated[
-        str, typer.Option("--instructions", help="System instructions")
-    ] = "",
-    tools: Annotated[
-        str | None, typer.Option("--tools", help="Comma-separated Tool names")
-    ] = None,
+    instructions: Annotated[str, typer.Option("--instructions", help="System instructions")] = "",
+    tools: Annotated[str | None, typer.Option("--tools", help="Comma-separated Tool names")] = None,
     access: Annotated[
         str, typer.Option("--access", help="read-only, approval-required, or full-access")
     ] = "approval-required",
@@ -182,7 +175,9 @@ def create_agent_command(
         )
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="AGENT_ID") from exc
-    console.print(f"[bold green]✓ Created Agent {agent.agent_id} ({agent.display_name}).[/bold green]")
+    console.print(
+        f"[bold green]✓ Created Agent {agent.agent_id} ({agent.display_name}).[/bold green]"
+    )
 
 
 @agent_app.command(name="list")
@@ -222,7 +217,9 @@ def show_agent_command(
     console.print(f"Tools: {', '.join(agent.tools) if agent.tools else '(none)'}")
     console.print(f"Source: {inspection['source']}")
     if inspection["collision"]:
-        console.print("[yellow]Collision: native Agent takes precedence over legacy Profile.[/yellow]")
+        console.print(
+            "[yellow]Collision: native Agent takes precedence over legacy Profile.[/yellow]"
+        )
 
 
 @agent_app.command(name="use")
@@ -318,7 +315,9 @@ def main_callback(
     ctx: typer.Context,
     model: Annotated[str | None, typer.Option("--model", "-m", help="Default model")] = None,
     agent: Annotated[str | None, typer.Option("--agent", help="Default Agent ID")] = None,
-    profile: Annotated[str, typer.Option("--profile", "-p", help="Legacy Agent profile alias")] = "coding",
+    profile: Annotated[
+        str, typer.Option("--profile", "-p", help="Legacy Agent profile alias")
+    ] = "coding",
     session: Annotated[
         str | None,
         typer.Option("--session", help="Resume an interactive session by ID"),

@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import pytest
 
-from mia_middleware.access import AccessPolicyMiddleware, PolicyRejectedError
+from mia_middleware.access import (
+    AccessPolicyMiddleware,
+    ApprovalRequest,
+    PolicyRejectedError,
+)
 from mia_middleware.pipeline import ToolCallContext, ToolPipeline
 from mia_middleware.security import SecurityGuardMiddleware, SecurityViolationError
 
 
 @pytest.mark.asyncio
 async def test_approval_required_reads_automatically_and_asks_for_side_effects() -> None:
-    approvals: list[object] = []
+    approvals: list[ApprovalRequest] = []
     executed: list[str] = []
 
     def approve(request: object) -> bool:
@@ -40,8 +44,8 @@ async def test_approval_required_reads_automatically_and_asks_for_side_effects()
     assert await pipeline.execute(write, lambda: executed.append("write") or "written") == "written"
     assert len(approvals) == 1
     assert executed == ["read", "write"]
-    assert getattr(approvals[0], "tool_name") == "write_file"
-    assert getattr(approvals[0], "agent_id") == "mia"
+    assert approvals[0].tool_name == "write_file"
+    assert approvals[0].agent_id == "mia"
 
 
 @pytest.mark.asyncio

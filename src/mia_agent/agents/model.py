@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 AccessLevel = Literal["read-only", "approval-required", "full-access"]
+LegacyPermission = Literal["standard", "read_only", "no_tools", "full_access"]
 
 LEGACY_PERMISSION_MAP: dict[str, AccessLevel] = {
     "standard": "approval-required",
@@ -28,7 +29,9 @@ def normalize_agent_id(value: str) -> str:
     if not candidate:
         raise ValueError("Agent ID must not be blank")
     if "/" in candidate or "\\" in candidate or candidate in {".", ".."}:
-        raise ValueError(f"Unsafe Agent ID '{value}': path separators and traversal are not allowed")
+        raise ValueError(
+            f"Unsafe Agent ID '{value}': path separators and traversal are not allowed"
+        )
     candidate = re.sub(r"\s+", "-", candidate)
     if not _AGENT_ID_RE.fullmatch(candidate):
         raise ValueError(
@@ -39,6 +42,7 @@ def normalize_agent_id(value: str) -> str:
 
 def _validate_metadata(value: dict[str, Any]) -> dict[str, Any]:
     """Reject credential-shaped metadata before it can be persisted or displayed."""
+
     def visit(item: Any, path: str = "metadata") -> None:
         if isinstance(item, dict):
             for key, nested in item.items():
@@ -143,13 +147,16 @@ class Agent(BaseModel):
         return self.instructions
 
     @property
-    def permission(self) -> str:
+    def permission(self) -> LegacyPermission:
         """Compatibility spelling for the former Profile permission field."""
-        return {
-            "read-only": "read_only",
-            "approval-required": "standard",
-            "full-access": "full_access",
-        }[self.access_policy]
+        return cast(
+            LegacyPermission,
+            {
+                "read-only": "read_only",
+                "approval-required": "standard",
+                "full-access": "full_access",
+            }[self.access_policy],
+        )
 
     @property
     def capabilities(self) -> list[str] | None:
@@ -229,5 +236,6 @@ __all__ = [
     "Agent",
     "BUILTIN_AGENTS",
     "LEGACY_PERMISSION_MAP",
+    "LegacyPermission",
     "normalize_agent_id",
 ]

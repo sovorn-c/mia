@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from mia_agent.agents.model import BUILTIN_AGENTS
 from mia_agent.profiles.model import AgentProfile
@@ -13,7 +13,9 @@ from mia_agent.profiles.model import AgentProfile
 
 def _profile_from_agent(agent_id: str, *, legacy_name: str | None = None) -> AgentProfile:
     agent = BUILTIN_AGENTS[agent_id]
-    execution_mode = str(agent.metadata.get("execution_mode", "native"))
+    execution_mode: Literal["native", "code"] = (
+        "code" if agent.metadata.get("execution_mode") == "code" else "native"
+    )
     if execution_mode not in {"native", "code"}:
         execution_mode = "native"
     return AgentProfile(
@@ -24,8 +26,8 @@ def _profile_from_agent(agent_id: str, *, legacy_name: str | None = None) -> Age
         temperature=agent.temperature,
         max_steps_per_turn=agent.max_steps_per_turn,
         tools=agent.tools,
-        execution_mode=execution_mode,  # type: ignore[arg-type]
-        permission=agent.permission,  # type: ignore[arg-type]
+        execution_mode=execution_mode,
+        permission=agent.permission,
         compaction_threshold_ratio=agent.compaction_threshold_ratio,
         context_window_tokens=agent.context_window_tokens,
         middlewares=list(agent.middlewares),

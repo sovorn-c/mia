@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field
 
@@ -54,9 +54,7 @@ def normalize_access_level(value: str) -> AccessLevel:
     """Normalize the three target levels and deterministic legacy labels."""
     normalized = _LEGACY_ACCESS.get(value.strip().lower(), value.strip().lower())
     if normalized not in {"read-only", "approval-required", "full-access"}:
-        raise ValueError(
-            "Unknown access policy. Use read-only, approval-required, or full-access."
-        )
+        raise ValueError("Unknown access policy. Use read-only, approval-required, or full-access.")
     return normalized  # type: ignore[return-value]
 
 
@@ -64,7 +62,7 @@ def tool_effect(tool_name: str, metadata: Mapping[str, Any] | None = None) -> To
     """Return declared Tool effect, defaulting unknown Tools to side-effecting."""
     declared = (metadata or {}).get("effect")
     if declared in {"non-mutating", "side-effecting"}:
-        return declared
+        return cast(ToolEffect, declared)
     return TOOL_EFFECTS.get(tool_name, "side-effecting")
 
 
@@ -101,11 +99,15 @@ class AccessPolicyMiddleware:
         next_fn: Callable[[], Awaitable[Any]],
     ) -> Any:
         if self.capabilities is not None and ctx.tool_name not in self.capabilities:
-            raise PolicyRejectedError(f"Tool '{ctx.tool_name}' is outside the Agent capability scope")
+            raise PolicyRejectedError(
+                f"Tool '{ctx.tool_name}' is outside the Agent capability scope"
+            )
 
         effect = self.tool_effects.get(ctx.tool_name) or tool_effect(ctx.tool_name, ctx.metadata)
         if self.access_policy == "read-only" and effect == "side-effecting":
-            raise PolicyRejectedError(f"Tool '{ctx.tool_name}' is side-effecting under read-only access")
+            raise PolicyRejectedError(
+                f"Tool '{ctx.tool_name}' is side-effecting under read-only access"
+            )
         if self.access_policy == "full-access":
             if not self.full_access_confirmed:
                 raise PolicyRejectedError("full-access requires explicit user confirmation")

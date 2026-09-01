@@ -11,10 +11,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from mia_agent.agents import Agent, AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.events import AgentEvent, AssistantChunkEvent
-from mia_middleware.access import AccessPolicyMiddleware, ApprovalCallback
-from mia_agent.agents import Agent, AgentManager
 from mia_agent.harness import AgentHarness
 from mia_agent.profiles.manager import ProfileManager
 from mia_agent.profiles.model import AgentProfile
@@ -25,6 +24,7 @@ from mia_agent.session.tree import SessionTree
 from mia_ai.providers.anthropic import AnthropicProvider
 from mia_ai.providers.base import LLMProvider
 from mia_ai.providers.openai_compatible import OpenAICompatibleProvider
+from mia_middleware.access import AccessPolicyMiddleware, ApprovalCallback
 from mia_middleware.pipeline import ToolPipeline
 from mia_middleware.security import SecurityGuardMiddleware
 from mia_middleware.telemetry import AuditLogMiddleware, CostBudgetMiddleware
@@ -34,7 +34,9 @@ from mia_tools.fs import EditFileTool, ReadFileTool, WriteFileTool
 
 def _profile_from_agent(agent: Agent) -> AgentProfile:
     """Project an Agent into the temporary Profile shape used by legacy callers."""
-    execution_mode = "code" if agent.metadata.get("execution_mode") == "code" else "native"
+    execution_mode: Literal["native", "code"] = (
+        "code" if agent.metadata.get("execution_mode") == "code" else "native"
+    )
     return AgentProfile(
         name=agent.agent_id,
         description=agent.description,
@@ -514,7 +516,9 @@ class AgentRuntimeFactory:
         )
         session_store = JsonlSessionStore(session_dir / f"{identity.session_id}.jsonl")
         initial_messages, last_entry_id = self._restore_session(session_store)
-        last_entry_id = self._persist_identity(identity, session_store, last_entry_id, namespace=namespace)
+        last_entry_id = self._persist_identity(
+            identity, session_store, last_entry_id, namespace=namespace
+        )
 
         config = self.config_manager.config
         compaction_ratio = (
