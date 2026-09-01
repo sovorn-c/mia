@@ -7,6 +7,7 @@ from mia_middleware.access import (
     EffectiveAccess,
     PolicyRejectedError,
     compose_effective_access,
+    sanitize_arguments,
 )
 from mia_middleware.pipeline import ToolCallContext, ToolMiddleware, ToolPipeline
 from mia_middleware.security import (
@@ -33,6 +34,7 @@ __all__ = [
     "EffectiveAccess",
     "PolicyRejectedError",
     "compose_effective_access",
+    "sanitize_arguments",
     "DEFAULT_BLOCKED_COMMAND_PATTERNS",
     "DEFAULT_BLOCKED_PATHS",
     "SecurityGuardMiddleware",

@@ -8,6 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from mia_middleware.access import sanitize_arguments
 from mia_middleware.pipeline import ToolCallContext
 
 
@@ -16,11 +17,14 @@ class BudgetExceededError(RuntimeError):
 
 
 class AuditLogRecord(BaseModel):
-    """Structured telemetry record for tool execution."""
+    """Structured, attributed, secret-free telemetry record for Tool execution."""
 
     session_id: str
     step_index: int
     tool_name: str
+    agent_id: str = ""
+    run_id: str = ""
+    task_id: str = ""
     arguments: dict[str, Any]
     duration_ms: float
     is_error: bool = False
@@ -97,8 +101,11 @@ class AuditLogMiddleware:
                 session_id=ctx.session_id,
                 step_index=ctx.step_index,
                 tool_name=ctx.tool_name,
-                arguments=ctx.arguments,
+                arguments=sanitize_arguments(ctx.arguments),
                 duration_ms=duration_ms,
+                agent_id=str(ctx.metadata.get("agent_id", "")),
+                run_id=str(ctx.metadata.get("run_id", "")),
+                task_id=str(ctx.metadata.get("task_id", "")),
                 is_error=is_error,
                 error_message=err_msg,
             )

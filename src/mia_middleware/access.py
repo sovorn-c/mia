@@ -209,7 +209,7 @@ class AccessPolicyMiddleware:
             session_id=self.session_id or ctx.session_id,
             tool_name=ctx.tool_name,
             effect=effect,
-            arguments=_sanitize(ctx.arguments),
+            arguments=sanitize_arguments(ctx.arguments),
         )
         self.approvals.append(request)
         decision = self.approval_callback(request)
@@ -220,15 +220,15 @@ class AccessPolicyMiddleware:
         return await next_fn()
 
 
-def _sanitize(value: Any, key: str = "") -> Any:
+def sanitize_arguments(value: Any, key: str = "") -> Any:
     """Redact credential-shaped keys and values in approval arguments."""
     key_text = key.lower().replace("-", "_")
     if any(part in key_text for part in _SECRET_KEY_PARTS):
         return "[REDACTED]"
     if isinstance(value, dict):
-        return {str(k): _sanitize(nested, str(k)) for k, nested in value.items()}
+        return {str(k): sanitize_arguments(nested, str(k)) for k, nested in value.items()}
     if isinstance(value, list):
-        return [_sanitize(item, key) for item in value]
+        return [sanitize_arguments(item, key) for item in value]
     if isinstance(value, str) and (
         value.lower().startswith("bearer ") or value.startswith(("sk-", "ghp_", "xoxb-"))
     ):
@@ -249,5 +249,6 @@ __all__ = [
     "compose_effective_access",
     "effective_access",
     "normalize_access_level",
+    "sanitize_arguments",
     "tool_effect",
 ]

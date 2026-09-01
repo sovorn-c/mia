@@ -562,6 +562,12 @@ class AgentRuntimeFactory:
                 compaction_threshold_ratio=compaction_ratio,
             ),
             last_entry_id=last_entry_id,
+            tool_context_metadata={
+                "agent_id": agent.agent_id,
+                "run_id": identity.run_id,
+                "task_id": identity.task_id,
+                "session_id": identity.session_id,
+            },
         )
         return AgentRuntime(
             harness=harness,

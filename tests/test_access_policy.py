@@ -13,8 +13,8 @@ from mia_middleware.access import (
     tool_effect,
 )
 from mia_middleware.pipeline import ToolCallContext, ToolPipeline
-from mia_middleware.telemetry import AuditLogMiddleware
 from mia_middleware.security import SecurityGuardMiddleware, SecurityViolationError
+from mia_middleware.telemetry import AuditLogMiddleware
 from mia_tools.bash import BashTool
 from mia_tools.fs import ReadFileTool, WriteFileTool
 

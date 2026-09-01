@@ -56,6 +56,7 @@ class AgentHarness:
         session_store: JsonlSessionStore | None = None,
         compactor: ContextCompactor | None = None,
         last_entry_id: str | None = None,
+        tool_context_metadata: dict[str, Any] | None = None,
     ) -> None:
         self.provider = provider
         self.model = model
@@ -69,6 +70,7 @@ class AgentHarness:
         self.session_store = session_store
         self.compactor = compactor
         self._last_entry_id = last_entry_id
+        self.tool_context_metadata = dict(tool_context_metadata or {})
         self._turn_counter = 0
         self._current_step = 0
 
@@ -173,6 +175,7 @@ class AgentHarness:
                 call_id=call_id,
                 tool_name=tool_name,
                 arguments=args,
+                metadata=dict(self.tool_context_metadata),
             )
             return await self.pipeline.execute(
                 ctx,
