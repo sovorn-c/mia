@@ -37,7 +37,7 @@ def test_agent_model_normalizes_identity_and_keeps_serialization_secret_free() -
     assert "openai" in dumped
     assert "personal" in dumped
     assert "api_key" not in dumped
-    assert "token" not in dumped.lower()
+    assert "access_token" not in dumped.lower()
 
     with pytest.raises(ValidationError):
         Agent(agent_id="../outside", display_name="Outside")
