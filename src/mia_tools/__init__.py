@@ -2,6 +2,7 @@
 
 from mia_tools.base import BaseTool
 from mia_tools.bash import BashTool
+from mia_tools.delegate import DelegateTaskTool
 from mia_tools.fs import (
     EditFileTool,
     ReadFileTool,
@@ -14,6 +15,7 @@ from mia_tools.fs import (
 
 __all__ = [
     "BaseTool",
+    "DelegateTaskTool",
     "BashTool",
     "EditFileTool",
     "ReadFileTool",

@@ -51,7 +51,9 @@ def test_task_contract_validates_attribution_timeout_and_secret_free_payload() -
     with pytest.raises(ValidationError):
         TaskRequest(caller_agent_id="same", recipient_agent_id="same", prompt="work")
     with pytest.raises(ValidationError):
-        TaskRequest(caller_agent_id="mia", recipient_agent_id="researcher", prompt="work", timeout=0)
+        TaskRequest(
+            caller_agent_id="mia", recipient_agent_id="researcher", prompt="work", timeout=0
+        )
     with pytest.raises(ValidationError):
         TaskRequest(
             caller_agent_id="mia",

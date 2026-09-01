@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Collection
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -467,6 +467,10 @@ class AgentRuntimeFactory:
         context_window: int | None = None,
         approval_callback: ApprovalCallback | None = None,
         full_access_confirmed: bool = False,
+        access_policy_override: str | None = None,
+        capabilities_override: Collection[str] | None = None,
+        delegation_service: Any | None = None,
+        delegation_depth: int = 0,
     ) -> AgentRuntime:
         """Construct an Agent-scoped harness, restoring and annotating its Session."""
         if identity.profile is not None:
@@ -483,6 +487,15 @@ class AgentRuntimeFactory:
             profile = _profile_from_agent(agent)
             session_dir = self.agent_manager.get_session_dir(agent.agent_id)
             namespace = "agent"
+
+        if access_policy_override is not None or capabilities_override is not None:
+            updates: dict[str, Any] = {}
+            if access_policy_override is not None:
+                updates["access_policy"] = access_policy_override
+            if capabilities_override is not None:
+                updates["tools"] = list(capabilities_override)
+            agent = agent.model_copy(update=updates)
+            profile = _profile_from_agent(agent)
 
         work_dir = cwd or Path.cwd()
         target_model = model_override or agent.model or ("" if provider else "claude-3-5-sonnet")
@@ -505,6 +518,12 @@ class AgentRuntimeFactory:
             BashTool(cwd=work_dir),
         ]
         tools = self.agent_manager.filter_tools(agent, available_tools)
+        if delegation_service is not None and delegation_depth == 0 and agent.delegation_targets:
+            from mia_tools.delegate import DelegateTaskTool
+
+            tools.append(DelegateTaskTool(delegation_service.for_caller(identity)))
+            if agent.tools is not None:
+                agent = agent.model_copy(update={"tools": [*agent.tools, "delegate_task"]})
         if agent.access_policy == "read-only":
             tools = [
                 tool
