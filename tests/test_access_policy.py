@@ -13,6 +13,7 @@ from mia_middleware.access import (
     tool_effect,
 )
 from mia_middleware.pipeline import ToolCallContext, ToolPipeline
+from mia_middleware.telemetry import AuditLogMiddleware
 from mia_middleware.security import SecurityGuardMiddleware, SecurityViolationError
 from mia_tools.bash import BashTool
 from mia_tools.fs import ReadFileTool, WriteFileTool
@@ -135,6 +136,25 @@ async def test_unknown_tools_are_side_effecting_and_approval_is_sanitized() -> N
         "authorization": "[REDACTED]",
         "value": "[REDACTED]",
     }
+
+
+@pytest.mark.asyncio
+async def test_audit_records_are_attributed_and_redacted() -> None:
+    audit = AuditLogMiddleware()
+    ctx = ToolCallContext(
+        session_id="session-1",
+        tool_name="write_file",
+        arguments={"content": "safe", "api_key": "sk-never-log"},
+        metadata={"agent_id": "mia", "run_id": "run-1", "task_id": "task-1"},
+    )
+    await ToolPipeline([audit]).execute(ctx, lambda: "ok")
+
+    record = audit.logs[0]
+    assert record.agent_id == "mia"
+    assert record.run_id == "run-1"
+    assert record.task_id == "task-1"
+    assert record.arguments["api_key"] == "[REDACTED]"
+    assert "sk-never-log" not in str(record.model_dump())
 
 
 @pytest.mark.asyncio
