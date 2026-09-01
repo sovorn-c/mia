@@ -24,7 +24,7 @@ COMMAND_HINTS: list[tuple[str, str]] = [
     ("/mode", "Show or select the orchestration mode"),
     ("/model", "Switch the active model (alias: /llm)"),
     ("/scoped-models", "Discover and set models used by Ctrl+P cycling"),
-    ("/profile", "Show or switch the coordinator profile (alias: /role, /persona)"),
+    ("/agent", "Show or switch the active Agent (legacy /profile remains supported)"),
     ("/diff", "Show the Git diff or report Git errors (alias: /changes)"),
     ("/cost", "Show session token and cost totals (alias: /stats, /tokens)"),
     ("/compact", "Compact active context when history is available (alias: /compress)"),
