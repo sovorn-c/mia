@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from mia_agent.auth.config import ConfigManager
 from mia_agent.events import AgentEvent, AssistantChunkEvent
+from mia_agent.agents import Agent, AgentManager
 from mia_agent.harness import AgentHarness
 from mia_agent.profiles.manager import ProfileManager
 from mia_agent.profiles.model import AgentProfile
@@ -28,6 +29,26 @@ from mia_middleware.security import SecurityGuardMiddleware
 from mia_middleware.telemetry import AuditLogMiddleware, CostBudgetMiddleware
 from mia_tools.bash import BashTool
 from mia_tools.fs import EditFileTool, ReadFileTool, WriteFileTool
+
+
+def _profile_from_agent(agent: Agent) -> AgentProfile:
+    """Project an Agent into the temporary Profile shape used by legacy callers."""
+    execution_mode = "code" if agent.metadata.get("execution_mode") == "code" else "native"
+    return AgentProfile(
+        name=agent.agent_id,
+        description=agent.description,
+        system_prompt=agent.instructions,
+        model=agent.model,
+        temperature=agent.temperature,
+        max_steps_per_turn=agent.max_steps_per_turn,
+        tools=agent.tools,
+        execution_mode=execution_mode,
+        permission=agent.permission,
+        compaction_threshold_ratio=agent.compaction_threshold_ratio,
+        context_window_tokens=agent.context_window_tokens,
+        middlewares=list(agent.middlewares),
+        metadata=dict(agent.metadata),
+    )
 
 
 class WorkflowStage(BaseModel):
@@ -119,16 +140,22 @@ class OrchestrationErrorEvent(BaseModel):
 class OrchestrationEventEnvelope(BaseModel):
     """Attribution envelope retaining one unchanged inner AgentEvent."""
 
-    mode: str
     run_id: str
     task_id: str
     agent_id: str
-    profile: str
     event: AgentEvent | OrchestrationErrorEvent
+    mode: str = "single"
+    profile: str | None = None
+    session_id: str | None = None
+    parent_session_id: str | None = None
 
-    @field_validator("mode", "run_id", "task_id", "agent_id", "profile")
+    @field_validator(
+        "mode", "run_id", "task_id", "agent_id", "profile", "session_id", "parent_session_id"
+    )
     @classmethod
-    def require_identity(cls, value: str) -> str:
+    def require_identity(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         value = value.strip()
         if not value:
             raise ValueError("orchestration event identity fields must not be blank")
@@ -136,14 +163,14 @@ class OrchestrationEventEnvelope(BaseModel):
 
 
 class RuntimeIdentity(BaseModel):
-    """Durable identity assigned to one mode-run agent instance."""
+    """Immutable attribution for one prompt-scoped Agent Run."""
 
-    mode: str
     run_id: str
     task_id: str
     agent_id: str
-    profile: str
     session_id: str
+    mode: str = "single"
+    profile: str | None = None
     parent_session_id: str | None = None
 
     @field_validator(
@@ -161,12 +188,13 @@ class RuntimeIdentity(BaseModel):
 
 @dataclass(frozen=True, slots=True)
 class AgentRuntime:
-    """Constructed executor and persistence handles for one agent instance."""
+    """Constructed executor and persistence handles for one Agent Run."""
 
     harness: AgentHarness
     identity: RuntimeIdentity
     profile: AgentProfile
     session_store: JsonlSessionStore
+    agent: Agent
 
 
 class ModeCatalog:
@@ -386,6 +414,8 @@ class ModeRuntime:
             task_id=identity.task_id,
             agent_id=identity.agent_id,
             profile=identity.profile,
+            session_id=identity.session_id,
+            parent_session_id=identity.parent_session_id,
             event=event,
         )
 
@@ -403,20 +433,24 @@ class ModeRuntime:
             task_id=identity.task_id,
             agent_id=identity.agent_id,
             profile=identity.profile,
+            session_id=identity.session_id,
+            parent_session_id=identity.parent_session_id,
             event=OrchestrationErrorEvent(stage=stage, error=error, cancelled=cancelled),
         )
 
 
 class AgentRuntimeFactory:
-    """Build every Mia agent with the same profile and session invariants."""
+    """Build every Agent with the same Tool, provider, and Session invariants."""
 
     def __init__(
         self,
         *,
+        agent_manager: AgentManager | None = None,
         profile_manager: ProfileManager | None = None,
         config_manager: ConfigManager | None = None,
     ) -> None:
         self.profile_manager = profile_manager or ProfileManager()
+        self.agent_manager = agent_manager or AgentManager(profile_manager=self.profile_manager)
         self.config_manager = config_manager or ConfigManager()
 
     def build(
@@ -429,10 +463,24 @@ class AgentRuntimeFactory:
         compaction_threshold: float | None = None,
         context_window: int | None = None,
     ) -> AgentRuntime:
-        """Construct a profile-scoped harness, restoring and annotating its session."""
-        profile = self.profile_manager.get_profile(identity.profile)
+        """Construct an Agent-scoped harness, restoring and annotating its Session."""
+        if identity.profile is not None:
+            # Compatibility callers still provide Profile and retain their old Session path.
+            profile = self.profile_manager.get_profile(identity.profile)
+            try:
+                agent = self.agent_manager.get_agent(identity.agent_id)
+            except ValueError:
+                agent = self.agent_manager.get_agent(profile.name)
+            session_dir = self.profile_manager.get_session_dir(profile.name)
+            namespace = "orchestration"
+        else:
+            agent = self.agent_manager.get_agent(identity.agent_id)
+            profile = _profile_from_agent(agent)
+            session_dir = self.agent_manager.get_session_dir(agent.agent_id)
+            namespace = "agent"
+
         work_dir = cwd or Path.cwd()
-        target_model = model_override or profile.model or ("" if provider else "claude-3-5-sonnet")
+        target_model = model_override or agent.model or ("" if provider else "claude-3-5-sonnet")
 
         if provider is None:
             provider_name, model_name, api_key, base_url = self.config_manager.resolve_credentials(
@@ -445,8 +493,8 @@ class AgentRuntimeFactory:
         else:
             model_name = target_model
 
-        tools = self.profile_manager.filter_tools(
-            profile,
+        tools = self.agent_manager.filter_tools(
+            agent,
             [
                 ReadFileTool(cwd=work_dir),
                 WriteFileTool(cwd=work_dir),
@@ -454,19 +502,18 @@ class AgentRuntimeFactory:
                 BashTool(cwd=work_dir),
             ],
         )
-        pipeline = self._build_pipeline(profile.middlewares)
-        session_dir = self.profile_manager.get_session_dir(profile.name)
+        pipeline = self._build_pipeline(agent.middlewares)
         session_store = JsonlSessionStore(session_dir / f"{identity.session_id}.jsonl")
         initial_messages, last_entry_id = self._restore_session(session_store)
-        last_entry_id = self._persist_identity(identity, session_store, last_entry_id)
+        last_entry_id = self._persist_identity(identity, session_store, last_entry_id, namespace=namespace)
 
         config = self.config_manager.config
         compaction_ratio = (
             compaction_threshold
             if compaction_threshold is not None
             else (
-                profile.compaction_threshold_ratio
-                if profile.compaction_threshold_ratio is not None
+                agent.compaction_threshold_ratio
+                if agent.compaction_threshold_ratio is not None
                 else config.compaction_threshold_ratio
             )
         )
@@ -474,18 +521,18 @@ class AgentRuntimeFactory:
             context_window
             if context_window is not None
             else (
-                profile.context_window_tokens
-                if profile.context_window_tokens is not None
+                agent.context_window_tokens
+                if agent.context_window_tokens is not None
                 else config.context_window_tokens
             )
         )
         harness = AgentHarness(
             provider=provider,
             model=model_name,
-            system_prompt=profile.system_prompt,
+            system_prompt=agent.instructions,
             tools=tools,
             pipeline=pipeline,
-            max_steps_per_turn=profile.max_steps_per_turn,
+            max_steps_per_turn=agent.max_steps_per_turn,
             session_id=identity.session_id,
             messages=initial_messages,
             session_store=session_store,
@@ -500,6 +547,7 @@ class AgentRuntimeFactory:
             identity=identity,
             profile=profile,
             session_store=session_store,
+            agent=agent,
         )
 
     @staticmethod
@@ -530,18 +578,20 @@ class AgentRuntimeFactory:
         identity: RuntimeIdentity,
         session_store: JsonlSessionStore,
         parent_entry_id: str | None,
+        *,
+        namespace: str = "orchestration",
     ) -> str | None:
         data = identity.model_dump(exclude_none=True)
         for entry in session_store.load_entries():
             if (
                 isinstance(entry, CustomEntry)
-                and entry.namespace == "orchestration"
+                and entry.namespace == namespace
                 and entry.data == data
             ):
                 return parent_entry_id
         metadata = CustomEntry(
             parent_id=parent_entry_id,
-            namespace="orchestration",
+            namespace=namespace,
             data=data,
         )
         session_store.append_entry(metadata)
