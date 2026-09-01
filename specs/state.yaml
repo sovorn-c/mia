@@ -6,12 +6,13 @@ session:
   target_version: 0.4.0
 handoff:
   next_skill: kickoff-branch
-  summary: >
-    Agent-centric vision and e04 scope are approved. The complete e04 planning capsule contains
-    four ordered failing stories, 24 implementation tasks, 32 acceptance scenarios, explicit
-    Agent/access/Delegation/compatibility contracts, and a high-risk impact assessment. Begin with
-    e04s01 contract tests on an isolated feature branch; do not destructively migrate legacy
-    Profile or Session data.
+  summary: 'Agent-centric vision and e04 scope are approved. The complete e04 planning
+    capsule contains four ordered failing stories, 24 implementation tasks, 32 acceptance
+    scenarios, explicit Agent/access/Delegation/compatibility contracts, and a high-risk
+    impact assessment. Begin with e04s01 contract tests on an isolated feature branch;
+    do not destructively migrate legacy Profile or Session data.
+
+    '
 git:
   branch: main
 metrics:
@@ -25,6 +26,7 @@ metrics:
       calls: 3
       total_seconds: 3577.0
       avg_seconds: 1192.3333333333333
+      _start: '2026-09-01T16:00:07Z'
     verify-work:
       calls: 2
       total_seconds: 815.0

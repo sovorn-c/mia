@@ -6,7 +6,7 @@ bcps: 8
 tasks:
   - id: e04s01t01
     title: "Lock the canonical Agent contracts with failing tests"
-    status: failing
+    status: passing
     agent_type: "domain-test-engineer"
     risk: high
     depends_on: []
@@ -42,7 +42,7 @@ tasks:
 
   - id: e04s01t02
     title: "Implement Agent and AgentManager with additive compatibility"
-    status: failing
+    status: passing
     agent_type: "python-domain-engineer"
     risk: high
     depends_on: [e04s01t01]
@@ -84,7 +84,7 @@ tasks:
 
   - id: e04s01t03
     title: "Route runtime and Sessions through Agent ownership"
-    status: failing
+    status: passing
     agent_type: "runtime-persistence-engineer"
     risk: high
     depends_on: [e04s01t02]
@@ -123,7 +123,7 @@ tasks:
 
   - id: e04s01t04
     title: "Enforce default Mia approval-required behavior"
-    status: failing
+    status: passing
     agent_type: "security-middleware-engineer"
     risk: high
     depends_on: [e04s01t02]
@@ -160,7 +160,7 @@ tasks:
 
   - id: e04s01t05
     title: "Expose the Agent lifecycle in CLI and REPL"
-    status: failing
+    status: passing
     agent_type: "cli-integration-engineer"
     risk: medium
     depends_on: [e04s01t03, e04s01t04]
@@ -198,7 +198,7 @@ tasks:
 
   - id: e04s01t06
     title: "Close Agent slice compatibility and quality gates"
-    status: failing
+    status: passing
     agent_type: "release-verification-engineer"
     risk: high
     depends_on: [e04s01t03, e04s01t04, e04s01t05]
