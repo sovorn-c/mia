@@ -12,7 +12,7 @@ from mia_agent.agents import AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.delegation import TaskRequest, TaskResult
-from mia_agent.orchestration import AgentRuntimeFactory
+from mia_agent.orchestration import AgentRuntimeFactory, RuntimeIdentity
 from mia_ai.providers.mock import MockProvider
 
 
@@ -149,6 +149,73 @@ async def test_ineligible_recipient_is_rejected_before_provider_or_session(tmp_p
     assert result.error
     assert provider.recorded_calls == []
     assert not (tmp_path / "agents" / "researcher" / "sessions").exists()
+
+
+@pytest.mark.asyncio
+async def test_delegate_tool_returns_serialized_task_result() -> None:
+    from mia_tools.delegate import DelegateTaskTool
+
+    result = TaskResult(
+        task_id="task",
+        caller_agent_id="caller",
+        recipient_agent_id="recipient",
+        child_run_id="run",
+        child_session_id="session",
+        outcome="succeeded",
+        response="done",
+    )
+
+    async def submit(_recipient: str, _prompt: str, _timeout: float) -> TaskResult:
+        return result
+
+    payload = await DelegateTaskTool(submit).execute("recipient", "work")
+    assert payload["outcome"] == "succeeded"
+    assert payload["task_id"] == "task"
+
+
+def test_delegate_tool_is_injected_only_at_depth_zero(tmp_path: Path) -> None:
+    manager = make_manager(tmp_path)
+    manager.create_agent(
+        "caller",
+        display_name="Caller",
+        tools=[],
+        delegation_targets=["recipient"],
+    )
+
+    class Service:
+        def for_caller(self, _identity: RuntimeIdentity):
+            async def submit(_recipient: str, _prompt: str, _timeout: float) -> TaskResult:
+                return TaskResult(
+                    task_id="task",
+                    caller_agent_id="caller",
+                    recipient_agent_id="recipient",
+                    child_run_id="run",
+                    child_session_id="session",
+                    outcome="failed",
+                    error="not run",
+                )
+
+            return submit
+
+    factory = make_factory(tmp_path, manager)
+    root = factory.build(
+        identity=RuntimeIdentity(
+            agent_id="caller", run_id="run-root", task_id="root", session_id="session-root"
+        ),
+        provider=MockProvider(),
+        delegation_service=Service(),
+        delegation_depth=0,
+    )
+    child = factory.build(
+        identity=RuntimeIdentity(
+            agent_id="caller", run_id="run-child", task_id="task", session_id="session-child"
+        ),
+        provider=MockProvider(),
+        delegation_service=Service(),
+        delegation_depth=1,
+    )
+    assert [tool.name for tool in root.harness.tools] == ["delegate_task"]
+    assert [tool.name for tool in child.harness.tools] == []
 
 
 def test_task_result_rejects_unknown_outcome_and_secret_values() -> None:
