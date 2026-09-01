@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.delegation import TaskRequest, TaskResult
 from mia_agent.orchestration import AgentRuntimeFactory, RuntimeIdentity
 from mia_ai.providers.mock import MockProvider
+from mia_ai.types import StreamChunk
 
 
 def make_manager(tmp_path: Path) -> AgentManager:
@@ -216,6 +218,63 @@ def test_delegate_tool_is_injected_only_at_depth_zero(tmp_path: Path) -> None:
     )
     assert [tool.name for tool in root.harness.tools] == ["delegate_task"]
     assert [tool.name for tool in child.harness.tools] == []
+
+
+class ErrorChunkProvider(MockProvider):
+    async def stream(self, **kwargs):
+        yield StreamChunk(type="error", error="provider secret sk-error")
+        yield StreamChunk(type="finish", finish_reason="stop")
+
+
+class SlowProvider(MockProvider):
+    async def stream(self, **kwargs):
+        await asyncio.sleep(0.2)
+        yield StreamChunk(type="finish", finish_reason="stop")
+
+
+@pytest.mark.asyncio
+async def test_provider_error_chunk_is_failed_not_success(tmp_path: Path) -> None:
+    manager = make_manager(tmp_path)
+    manager.create_agent("caller", display_name="Caller", tools=[], delegation_targets=["recipient"])
+    manager.create_agent("recipient", display_name="Recipient", tools=[])
+    from mia_agent.delegation import DelegationService
+
+    service = DelegationService(
+        agent_manager=manager,
+        factory=make_factory(tmp_path, manager),
+        provider=ErrorChunkProvider(),
+    )
+    result = await service.delegate(
+        TaskRequest(caller_agent_id="caller", recipient_agent_id="recipient", prompt="work")
+    )
+    assert result.outcome == "failed"
+    assert result.response is None
+    assert "sk-error" not in str(result.model_dump())
+
+
+@pytest.mark.asyncio
+async def test_timeout_is_truthful_and_does_not_leave_a_child_running(tmp_path: Path) -> None:
+    manager = make_manager(tmp_path)
+    manager.create_agent("caller", display_name="Caller", tools=[], delegation_targets=["recipient"])
+    manager.create_agent("recipient", display_name="Recipient", tools=[])
+    from mia_agent.delegation import DelegationService
+
+    service = DelegationService(
+        agent_manager=manager,
+        factory=make_factory(tmp_path, manager),
+        provider=SlowProvider(),
+    )
+    result = await service.delegate(
+        TaskRequest(
+            caller_agent_id="caller",
+            recipient_agent_id="recipient",
+            prompt="work",
+            timeout=0.01,
+        )
+    )
+    assert result.outcome == "timed-out"
+    await asyncio.sleep(0)
+    assert not [task for task in asyncio.all_tasks() if task is not asyncio.current_task() and not task.done()]
 
 
 def test_task_result_rejects_unknown_outcome_and_secret_values() -> None:
