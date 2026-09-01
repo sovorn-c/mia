@@ -226,6 +226,18 @@ class ErrorChunkProvider(MockProvider):
         yield StreamChunk(type="finish", finish_reason="stop")
 
 
+class CancelledProvider(MockProvider):
+    async def stream(self, **kwargs):
+        raise asyncio.CancelledError()
+        yield StreamChunk(type="finish")
+
+
+class NeverProvider(MockProvider):
+    async def stream(self, **kwargs):
+        await asyncio.Event().wait()
+        yield StreamChunk(type="finish")
+
+
 class SlowProvider(MockProvider):
     async def stream(self, **kwargs):
         await asyncio.sleep(0.2)
@@ -252,6 +264,65 @@ async def test_provider_error_chunk_is_failed_not_success(tmp_path: Path) -> Non
     assert result.outcome == "failed"
     assert result.response is None
     assert "sk-error" not in str(result.model_dump())
+
+
+@pytest.mark.asyncio
+async def test_max_steps_is_failed_not_success(tmp_path: Path) -> None:
+    manager = make_manager(tmp_path)
+    manager.create_agent("caller", display_name="Caller", tools=["read_file"], delegation_targets=["recipient"])
+    manager.create_agent(
+        "recipient", display_name="Recipient", tools=["read_file"], max_steps_per_turn=1
+    )
+    provider = MockProvider()
+    provider.queue_tool_call_response("read_file", {"path": "missing.txt"})
+    from mia_agent.delegation import DelegationService
+
+    result = await DelegationService(
+        agent_manager=manager,
+        factory=make_factory(tmp_path, manager),
+        provider=provider,
+    ).delegate(TaskRequest(caller_agent_id="caller", recipient_agent_id="recipient", prompt="work"))
+    assert result.outcome == "failed"
+    assert result.error and "max_steps" in result.error
+
+
+@pytest.mark.asyncio
+async def test_provider_cancellation_is_recorded_without_false_success(tmp_path: Path) -> None:
+    manager = make_manager(tmp_path)
+    manager.create_agent("caller", display_name="Caller", tools=[], delegation_targets=["recipient"])
+    manager.create_agent("recipient", display_name="Recipient", tools=[])
+    from mia_agent.delegation import DelegationService
+
+    result = await DelegationService(
+        agent_manager=manager,
+        factory=make_factory(tmp_path, manager),
+        provider=CancelledProvider(),
+    ).delegate(TaskRequest(caller_agent_id="caller", recipient_agent_id="recipient", prompt="work"))
+    assert result.outcome == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_caller_cancellation_is_recorded_and_propagated(tmp_path: Path) -> None:
+    manager = make_manager(tmp_path)
+    manager.create_agent("caller", display_name="Caller", tools=[], delegation_targets=["recipient"])
+    manager.create_agent("recipient", display_name="Recipient", tools=[])
+    from mia_agent.delegation import DelegationService
+
+    service = DelegationService(
+        agent_manager=manager,
+        factory=make_factory(tmp_path, manager),
+        provider=NeverProvider(),
+    )
+    task = asyncio.create_task(
+        service.delegate(TaskRequest(caller_agent_id="caller", recipient_agent_id="recipient", prompt="work"))
+    )
+    await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    records = list((tmp_path / "agents" / "recipient" / "sessions").glob("*.jsonl"))
+    assert records
+    assert any('"outcome": "cancelled"' in path.read_text() for path in records)
 
 
 @pytest.mark.asyncio
