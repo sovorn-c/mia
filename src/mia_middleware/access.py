@@ -7,7 +7,7 @@ import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any, Literal, cast
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from mia_middleware.pipeline import ToolCallContext
 
@@ -53,6 +53,11 @@ class AccessPolicy(BaseModel):
     access_level: AccessLevel = "approval-required"
     capabilities: set[str] | None = None
     full_access_confirmed: bool = False
+
+    @field_validator("access_level", mode="before")
+    @classmethod
+    def validate_access_level(cls, value: str) -> AccessLevel:
+        return normalize_access_level(value)
 
     @classmethod
     def from_legacy(cls, value: str, capabilities: Sequence[str] | None = None) -> AccessPolicy:
@@ -157,7 +162,8 @@ class AccessPolicyMiddleware:
     def __init__(
         self,
         *,
-        access_policy: str = "approval-required",
+        access_policy: str | None = None,
+        access_level: str | None = None,
         capabilities: Sequence[str] | None = None,
         approval_callback: ApprovalCallback | None = None,
         full_access_confirmed: bool = False,
@@ -167,7 +173,9 @@ class AccessPolicyMiddleware:
         task_id: str = "",
         session_id: str = "",
     ) -> None:
-        self.access_policy = normalize_access_level(access_policy)
+        self.access_policy = normalize_access_level(
+            access_policy or access_level or "approval-required"
+        )
         self.capabilities = None if capabilities is None else frozenset(capabilities)
         self.approval_callback = approval_callback
         self.full_access_confirmed = full_access_confirmed

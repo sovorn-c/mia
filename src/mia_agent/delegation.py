@@ -341,8 +341,13 @@ class DelegationService:
     @staticmethod
     def _persist_result(runtime: AgentRuntime | None, result: TaskResult) -> TaskResult:
         if runtime is not None:
+            entries = runtime.session_store.load_entries()
             runtime.session_store.append_entry(
-                CustomEntry(namespace="delegation", data=result.model_dump(exclude_none=True))
+                CustomEntry(
+                    parent_id=entries[-1].id if entries else None,
+                    namespace="delegation",
+                    data=result.model_dump(exclude_none=True),
+                )
             )
         return result
 

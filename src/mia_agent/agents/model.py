@@ -137,6 +137,11 @@ class Agent(BaseModel):
         return self
 
     @property
+    def id(self) -> str:
+        """Short identity spelling for integrations."""
+        return self.agent_id
+
+    @property
     def name(self) -> str:
         """Compatibility spelling for the display name."""
         return self.display_name
@@ -145,6 +150,16 @@ class Agent(BaseModel):
     def system_prompt(self) -> str:
         """Compatibility spelling for Agent instructions."""
         return self.instructions
+
+    @property
+    def access_level(self) -> AccessLevel:
+        """Alias used by policy-aware runtime callers."""
+        return self.access_policy
+
+    @property
+    def access(self) -> AccessLevel:
+        """Short alias for the effective configured access level."""
+        return self.access_policy
 
     @property
     def permission(self) -> LegacyPermission:

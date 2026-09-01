@@ -245,6 +245,39 @@ class SlowProvider(MockProvider):
 
 
 @pytest.mark.asyncio
+async def test_delegation_uses_restrictive_access_and_capability_intersection(
+    tmp_path: Path,
+) -> None:
+    manager = make_manager(tmp_path)
+    manager.create_agent(
+        "caller",
+        display_name="Caller",
+        tools=["read_file"],
+        access_policy="approval-required",
+        delegation_targets=["recipient"],
+    )
+    manager.create_agent(
+        "recipient",
+        display_name="Recipient",
+        tools=["read_file", "write_file"],
+        access_policy="full-access",
+        confirm_full_access=True,
+    )
+    provider = MockProvider()
+    provider.queue_text_response("safe result")
+    from mia_agent.delegation import DelegationService
+
+    result = await DelegationService(
+        agent_manager=manager,
+        factory=make_factory(tmp_path, manager),
+        provider=provider,
+    ).delegate(TaskRequest(caller_agent_id="caller", recipient_agent_id="recipient", prompt="work"))
+
+    assert result.outcome == "succeeded"
+    assert [tool["name"] for tool in provider.recorded_calls[0]["tools"]] == ["read_file"]
+
+
+@pytest.mark.asyncio
 async def test_provider_error_chunk_is_failed_not_success(tmp_path: Path) -> None:
     manager = make_manager(tmp_path)
     manager.create_agent(
