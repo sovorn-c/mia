@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any, Literal, cast
 
@@ -28,6 +29,7 @@ _LEGACY_ACCESS: dict[str, AccessLevel] = {
     "no_tools": "approval-required",
 }
 _SECRET_KEY_PARTS = ("api_key", "apikey", "token", "secret", "authorization", "password")
+_SECRET_VALUE_RE = re.compile(r"(?i)(?:bearer\s+|sk-|ghp_|xoxb-)[^\s,;]+")
 
 
 class PolicyRejectedError(PermissionError):
@@ -229,10 +231,8 @@ def sanitize_arguments(value: Any, key: str = "") -> Any:
         return {str(k): sanitize_arguments(nested, str(k)) for k, nested in value.items()}
     if isinstance(value, list):
         return [sanitize_arguments(item, key) for item in value]
-    if isinstance(value, str) and (
-        value.lower().startswith("bearer ") or value.startswith(("sk-", "ghp_", "xoxb-"))
-    ):
-        return "[REDACTED]"
+    if isinstance(value, str):
+        return _SECRET_VALUE_RE.sub("[REDACTED]", value)
     return value
 
 

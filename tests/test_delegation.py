@@ -235,7 +235,9 @@ class SlowProvider(MockProvider):
 @pytest.mark.asyncio
 async def test_provider_error_chunk_is_failed_not_success(tmp_path: Path) -> None:
     manager = make_manager(tmp_path)
-    manager.create_agent("caller", display_name="Caller", tools=[], delegation_targets=["recipient"])
+    manager.create_agent(
+        "caller", display_name="Caller", tools=[], delegation_targets=["recipient"]
+    )
     manager.create_agent("recipient", display_name="Recipient", tools=[])
     from mia_agent.delegation import DelegationService
 
@@ -255,7 +257,9 @@ async def test_provider_error_chunk_is_failed_not_success(tmp_path: Path) -> Non
 @pytest.mark.asyncio
 async def test_timeout_is_truthful_and_does_not_leave_a_child_running(tmp_path: Path) -> None:
     manager = make_manager(tmp_path)
-    manager.create_agent("caller", display_name="Caller", tools=[], delegation_targets=["recipient"])
+    manager.create_agent(
+        "caller", display_name="Caller", tools=[], delegation_targets=["recipient"]
+    )
     manager.create_agent("recipient", display_name="Recipient", tools=[])
     from mia_agent.delegation import DelegationService
 
@@ -274,7 +278,11 @@ async def test_timeout_is_truthful_and_does_not_leave_a_child_running(tmp_path: 
     )
     assert result.outcome == "timed-out"
     await asyncio.sleep(0)
-    assert not [task for task in asyncio.all_tasks() if task is not asyncio.current_task() and not task.done()]
+    assert not [
+        task
+        for task in asyncio.all_tasks()
+        if task is not asyncio.current_task() and not task.done()
+    ]
 
 
 def test_task_result_rejects_unknown_outcome_and_secret_values() -> None:

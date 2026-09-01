@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from mia_agent.events import (
+    AgentErrorEvent,
     AgentEvent,
     AssistantChunkEvent,
     StepEndEvent,
@@ -218,6 +219,7 @@ class AgentHarness:
             tool_calls: list[ToolCall] = []
             step_usage = TokenUsage()
             finish_reason: str | None = None
+            provider_error: str | None = None
 
             # Stream from LLM
             async for chunk in self.provider.stream(
@@ -235,6 +237,7 @@ class AgentHarness:
                     tool_calls.append(chunk.tool_call)
                 elif chunk.type == "error":
                     error_msg = chunk.error or "Unknown provider error"
+                    provider_error = error_msg
                     accumulated_text.append(f"\n[Error: {error_msg}]\n")
                     yield AssistantChunkEvent(delta_text=f"\n[Error: {error_msg}]\n")
                 elif chunk.type == "finish":
@@ -244,6 +247,8 @@ class AgentHarness:
                         total_cost += chunk.usage.cost_usd
 
             assistant_text = "".join(accumulated_text)
+            if provider_error is not None:
+                yield AgentErrorEvent(error=provider_error, step_index=step_index)
 
             # Record assistant response in message history & session store
             asst_msg = ChatMessage(
