@@ -16,6 +16,7 @@ import pytest
 from prompt_toolkit.document import Document
 from rich.console import Console
 
+from mia_agent.agents import AgentManager
 from mia_agent.orchestration import OrchestrationErrorEvent, OrchestrationEventEnvelope
 from mia_agent.session.entries import MessageEntry
 from mia_agent.session.jsonl import JsonlSessionStore
@@ -161,6 +162,28 @@ def test_double_escape_opens_tree_only_on_second_press() -> None:
 
     assert buffer.text == "/tree"
     buffer.validate_and_handle.assert_called_once_with()
+
+
+def test_repl_agent_command_selects_named_agent(tmp_path: Path) -> None:
+    manager = AgentManager(
+        agents_dir=tmp_path / "agents",
+        profiles_dir=tmp_path / "profiles",
+        sessions_base_dir=tmp_path / "legacy-sessions",
+    )
+    manager.create_agent("researcher", display_name="Researcher", tools=[])
+    repl = MiaREPL(
+        agent="mia",
+        agent_manager=manager,
+        cwd=tmp_path,
+        custom_provider=MockProvider(),
+    )
+    repl.console = Console(record=True, width=120)
+
+    assert repl.handle_slash_command("/agent") is True
+    assert "Mia" in repl.console.export_text()
+    assert repl.handle_slash_command("/agent researcher") is True
+    assert repl.agent_id == "researcher"
+    assert repl.profile_name == "researcher"
 
 
 def test_repl_slash_commands_suite(tmp_path: Path) -> None:
