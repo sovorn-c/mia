@@ -8,7 +8,7 @@
 - **Risk:** P0
 - **Context:** architecture, CLI, runtime events, compatibility, and documentation
 - **BCPs:** 5
-- **Status:** failing
+- **Status:** passing
 - **Requirement delta:** MODIFIED
 
 ## 2. User Story

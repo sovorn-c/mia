@@ -1,12 +1,12 @@
 story_id: e04s03
 story_title: "Direct Agent-to-Agent Delegation"
-status: failing
+status: passing
 requirement_delta: ADDED
 bcps: 8
 tasks:
   - id: e04s03t01
     title: "Define failing Task and Delegation contracts"
-    status: failing
+    status: passing
     agent_type: "orchestration-test-engineer"
     risk: high
     depends_on: [e04s02t06]
@@ -45,7 +45,7 @@ tasks:
 
   - id: e04s03t02
     title: "Implement synchronous one-hop Delegation service"
-    status: failing
+    status: passing
     agent_type: "async-runtime-engineer"
     risk: high
     depends_on: [e04s03t01]
@@ -84,7 +84,7 @@ tasks:
 
   - id: e04s03t03
     title: "Expose Delegation through a thin built-in Tool"
-    status: failing
+    status: passing
     agent_type: "tool-integration-engineer"
     risk: high
     depends_on: [e04s03t02]
@@ -121,7 +121,7 @@ tasks:
 
   - id: e04s03t04
     title: "Enforce delegated access and data minimization"
-    status: failing
+    status: passing
     agent_type: "delegation-security-engineer"
     risk: high
     depends_on: [e04s03t02, e04s03t03]
@@ -159,7 +159,7 @@ tasks:
 
   - id: e04s03t05
     title: "Make every delegated terminal outcome truthful"
-    status: failing
+    status: passing
     agent_type: "reliability-engineer"
     risk: high
     depends_on: [e04s03t02]
@@ -199,7 +199,7 @@ tasks:
 
   - id: e04s03t06
     title: "Close Delegation security and regression gates"
-    status: failing
+    status: passing
     agent_type: "orchestration-verification-engineer"
     risk: high
     depends_on: [e04s03t03, e04s03t04, e04s03t05]

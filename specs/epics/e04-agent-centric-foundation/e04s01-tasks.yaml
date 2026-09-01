@@ -1,6 +1,6 @@
 story_id: e04s01
 story_title: "Named Agent Vertical Slice"
-status: failing
+status: passing
 requirement_delta: MODIFIED
 bcps: 8
 tasks:

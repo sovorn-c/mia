@@ -1,20 +1,17 @@
 workflow_mode: solo-git
 session:
-  active_flow: plan
+  active_flow: verify
   active_epic_id: e04
-  active_story_id: e04s01
+  active_story_id: e04s04
   target_version: 0.4.0
 handoff:
-  next_skill: kickoff-branch
-  summary: 'Agent-centric vision and e04 scope are approved. The complete e04 planning
-    capsule contains four ordered failing stories, 24 implementation tasks, 32 acceptance
-    scenarios, explicit Agent/access/Delegation/compatibility contracts, and a high-risk
-    impact assessment. Begin with e04s01 contract tests on an isolated feature branch;
-    do not destructively migrate legacy Profile or Session data.
-
-    '
+  next_skill: verify-work
+  summary: >
+    e04 Agent-centric foundation is implemented on the isolated feature branch. Canonical Agent
+    identity, additive homes, access policies, direct Delegation, AgentRunner, Research, CLI
+    aliases, and secret-free attribution are covered by the focused and full test suites.
 git:
-  branch: main
+  branch: e04-agent-centric-foundation
 metrics:
   story_start: '2026-09-01T08:57:36Z'
   skill_timings:

@@ -4,7 +4,7 @@ slug: "agent-centric-foundation"
 title: "Agent-Centric Foundation"
 type: "feat"
 context: "domain, security, persistence, runtime, and CLI"
-status: "planned"
+status: "passing"
 bcps_total: 29
 scope: "specs/product/SCOPE_LATEST.yaml"
 impact: "specs/IMPACT_LATEST.md"
@@ -34,7 +34,7 @@ requirement_deltas:
 stories:
   - id: "e04s01"
     title: "Named Agent Vertical Slice"
-    status: "failing"
+    status: "passing"
     bcps: 8
     risk: "P0"
     delta: "MODIFIED"
@@ -44,7 +44,7 @@ stories:
 
   - id: "e04s02"
     title: "Agent-Owned State and Access Boundary"
-    status: "failing"
+    status: "passing"
     bcps: 8
     risk: "P0"
     delta: "MODIFIED"
@@ -54,7 +54,7 @@ stories:
 
   - id: "e04s03"
     title: "Direct Agent-to-Agent Delegation"
-    status: "failing"
+    status: "passing"
     bcps: 8
     risk: "P0"
     delta: "ADDED"
@@ -64,7 +64,7 @@ stories:
 
   - id: "e04s04"
     title: "Agent-First Compatibility Migration"
-    status: "failing"
+    status: "passing"
     bcps: 5
     risk: "P0"
     delta: "MODIFIED"
