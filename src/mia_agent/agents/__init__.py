@@ -1,6 +1,6 @@
 """Canonical Agent identity and registry APIs."""
 
-from mia_agent.agents.manager import AgentManager
+from mia_agent.agents.manager import AgentManager, default_agents_dir
 from mia_agent.agents.model import (
     BUILTIN_AGENTS,
     LEGACY_PERMISSION_MAP,
@@ -14,6 +14,7 @@ __all__ = [
     "Agent",
     "AgentManager",
     "BUILTIN_AGENTS",
+    "default_agents_dir",
     "LEGACY_PERMISSION_MAP",
     "normalize_agent_id",
 ]

@@ -409,6 +409,10 @@ class ModeRuntime:
     ) -> None:
         self.profile_manager = profile_manager or ProfileManager()
         self.factory = factory or AgentRuntimeFactory(profile_manager=self.profile_manager)
+        self.agent_runner = AgentRunner(
+            factory=self.factory,
+            agent_manager=self.factory.agent_manager,
+        )
         self.catalog = catalog or ModeCatalog(profile_manager=self.profile_manager)
 
     async def prompt(
@@ -417,6 +421,7 @@ class ModeRuntime:
         *,
         mode_name: str = "single",
         profile_name: str = "coding",
+        agent_id: str | None = None,
         provider: LLMProvider | None = None,
         model_override: str | None = None,
         session_id: str | None = None,
@@ -426,6 +431,23 @@ class ModeRuntime:
         context_window: int | None = None,
         runtime: AgentRuntime | None = None,
     ) -> AsyncIterator[OrchestrationEventEnvelope]:
+        if agent_id is not None:
+            if runtime is not None:
+                raise ValueError("canonical Agent prompts cannot reuse a legacy runtime")
+            async for envelope in self.agent_runner.prompt(
+                prompt_text,
+                agent_id=agent_id,
+                provider=provider,
+                model_override=model_override,
+                session_id=session_id,
+                run_id=run_id,
+                cwd=cwd,
+                compaction_threshold=compaction_threshold,
+                context_window=context_window,
+            ):
+                yield envelope
+            return
+
         mode = self.catalog.resolve(mode_name, profile_name)
         if mode.name == "research":
             if runtime is not None:
@@ -604,10 +626,12 @@ class AgentRuntimeFactory:
         agent_manager: AgentManager | None = None,
         profile_manager: ProfileManager | None = None,
         config_manager: ConfigManager | None = None,
+        delegation_service: Any | None = None,
     ) -> None:
         self.profile_manager = profile_manager or ProfileManager()
         self.agent_manager = agent_manager or AgentManager(profile_manager=self.profile_manager)
         self.config_manager = config_manager or ConfigManager()
+        self.delegation_service = delegation_service
 
     def build(
         self,
@@ -671,10 +695,15 @@ class AgentRuntimeFactory:
             BashTool(cwd=work_dir),
         ]
         tools = self.agent_manager.filter_tools(agent, available_tools)
-        if delegation_service is not None and delegation_depth == 0 and agent.delegation_targets:
+        active_delegation_service = delegation_service or self.delegation_service
+        if (
+            active_delegation_service is not None
+            and delegation_depth == 0
+            and agent.delegation_targets
+        ):
             from mia_tools.delegate import DelegateTaskTool
 
-            tools.append(DelegateTaskTool(delegation_service.for_caller(identity)))
+            tools.append(DelegateTaskTool(active_delegation_service.for_caller(identity)))
             if agent.tools is not None:
                 agent = agent.model_copy(update={"tools": [*agent.tools, "delegate_task"]})
         if agent.access_policy == "read-only":
@@ -766,7 +795,7 @@ class AgentRuntimeFactory:
                     access_policy=agent.access_policy,
                     capabilities=agent.tools,
                     approval_callback=approval_callback,
-                    full_access_confirmed=full_access_confirmed,
+                    full_access_confirmed=full_access_confirmed or agent.full_access_confirmed,
                     agent_id=agent.agent_id,
                     run_id=identity.run_id,
                     task_id=identity.task_id,

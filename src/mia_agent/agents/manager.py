@@ -15,7 +15,12 @@ from .model import BUILTIN_AGENTS, LEGACY_PERMISSION_MAP, Agent, normalize_agent
 if TYPE_CHECKING:
     from mia_agent.profiles.model import AgentProfile
 
-DEFAULT_AGENT_HOME = Path.home() / ".mia" / "agents"
+
+def default_agents_dir() -> Path:
+    return Path.home() / ".mia" / "agents"
+
+
+DEFAULT_AGENT_HOME = default_agents_dir()
 DEFAULT_SELECTION_FILE = ".default-agent"
 AGENT_DEFINITION_FILE = "agent.json"
 
@@ -37,7 +42,7 @@ class AgentManager:
             default_sessions_base_dir,
         )
 
-        self.agents_dir = (agents_dir or DEFAULT_AGENT_HOME).expanduser().resolve()
+        self.agents_dir = (agents_dir or default_agents_dir()).expanduser().resolve()
         self.profiles_dir = (profiles_dir or default_profiles_dir()).expanduser().resolve()
         self.sessions_base_dir = (
             (sessions_base_dir or default_sessions_base_dir()).expanduser().resolve()
@@ -101,12 +106,15 @@ class AgentManager:
         **fields: Any,
     ) -> Agent:
         """Create and persist a non-built-in Agent; legacy IDs may be shadowed natively."""
-        confirm_full_access = bool(
-            fields.pop("confirm_full_access", fields.pop("full_access_confirmed", False))
-        )
+        confirm_value = fields.pop("confirm_full_access", None)
+        if confirm_value is None:
+            confirm_value = fields.pop("full_access_confirmed", False)
+        confirm_full_access = bool(confirm_value)
         candidate = self._coerce_agent(agent, display_name=display_name, fields=fields)
-        if candidate.access_policy == "full-access" and not confirm_full_access:
-            raise ValueError("full-access Agent creation requires explicit confirmation")
+        if candidate.access_policy == "full-access":
+            if not confirm_full_access and not candidate.full_access_confirmed:
+                raise ValueError("full-access Agent creation requires explicit confirmation")
+            candidate = candidate.model_copy(update={"full_access_confirmed": True})
         if candidate.agent_id in BUILTIN_AGENTS:
             raise ValueError(f"Cannot create or overwrite built-in Agent '{candidate.agent_id}'.")
         target = self.agent_path(candidate.agent_id)
@@ -118,8 +126,10 @@ class AgentManager:
     def save_agent(self, agent: Agent, *, confirm_full_access: bool = False) -> Path:
         """Atomically save a native Agent and leave any legacy source untouched."""
         candidate = Agent.model_validate(agent.model_dump())
-        if candidate.access_policy == "full-access" and not confirm_full_access:
-            raise ValueError("full-access Agent persistence requires explicit confirmation")
+        if candidate.access_policy == "full-access":
+            if not confirm_full_access and not candidate.full_access_confirmed:
+                raise ValueError("full-access Agent persistence requires explicit confirmation")
+            candidate = candidate.model_copy(update={"full_access_confirmed": True})
         if candidate.agent_id in BUILTIN_AGENTS:
             raise ValueError(f"Cannot create or overwrite built-in Agent '{candidate.agent_id}'.")
         return self._write_agent(candidate)
@@ -140,16 +150,44 @@ class AgentManager:
             self._clear_default()
         return True
 
-    def set_default(self, agent_id: str) -> Agent:
+    def set_default(self, agent_id: str, *, confirm_full_access: bool = False) -> Agent:
         """Persist the default Agent selection after validating it exists."""
         agent = self.get_agent(agent_id)
+        if agent.access_policy == "full-access" and not (
+            confirm_full_access or agent.full_access_confirmed
+        ):
+            raise ValueError("selecting a full-access Agent requires explicit confirmation")
+        if (
+            confirm_full_access
+            and agent.access_policy == "full-access"
+            and not agent.full_access_confirmed
+        ):
+            agent = agent.model_copy(update={"full_access_confirmed": True})
+            if agent.agent_id not in BUILTIN_AGENTS:
+                self._write_agent(agent)
         self.agents_dir.mkdir(parents=True, exist_ok=True)
         self._atomic_write_text(self.agents_dir / DEFAULT_SELECTION_FILE, agent.agent_id + "\n")
         return agent
 
-    def use_agent(self, agent_id: str) -> Agent:
+    def use_agent(self, agent_id: str, *, confirm_full_access: bool = False) -> Agent:
         """Canonical command-oriented spelling for selecting the default Agent."""
-        return self.set_default(agent_id)
+        return self.set_default(agent_id, confirm_full_access=confirm_full_access)
+
+    def get(self, agent_id: str | None = None) -> Agent:
+        """Short command-oriented spelling for resolving an Agent."""
+        return self.get_agent(agent_id)
+
+    def create(self, agent: Agent | str, **fields: Any) -> Agent:
+        """Short command-oriented spelling for creating an Agent."""
+        return self.create_agent(agent, **fields)
+
+    def save(self, agent: Agent, **kwargs: Any) -> Path:
+        """Short command-oriented spelling for saving an Agent."""
+        return self.save_agent(agent, **kwargs)
+
+    def delete(self, agent_id: str) -> bool:
+        """Short command-oriented spelling for deleting an Agent."""
+        return self.delete_agent(agent_id)
 
     def inspect_agent(self, agent_id: str) -> dict[str, Any]:
         """Return an inspection record with source and collision diagnostics."""
@@ -359,4 +397,5 @@ __all__ = [
     "AGENT_DEFINITION_FILE",
     "AgentManager",
     "DEFAULT_AGENT_HOME",
+    "default_agents_dir",
 ]

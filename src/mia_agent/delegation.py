@@ -136,6 +136,7 @@ class DelegationService:
     ) -> None:
         self.agent_manager = agent_manager or (factory.agent_manager if factory else AgentManager())
         self.factory = factory or AgentRuntimeFactory(agent_manager=self.agent_manager)
+        self.factory.delegation_service = self
         self.provider = provider
 
     async def delegate(

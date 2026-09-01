@@ -84,6 +84,7 @@ class Agent(BaseModel):
         default="approval-required",
         validation_alias=AliasChoices("access_policy", "access"),
     )
+    full_access_confirmed: bool = False
     delegation_targets: list[str] = Field(default_factory=list)
     memory_path: str | None = None
     channel_identity: str | None = None

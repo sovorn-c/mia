@@ -232,10 +232,13 @@ def show_agent_command(
 @agent_app.command(name="use")
 def use_agent_command(
     agent_id: Annotated[str, typer.Argument(help="Agent ID to select by default")],
+    confirm_full_access: Annotated[
+        bool, typer.Option("--confirm-full-access", help="Explicitly opt into full-access")
+    ] = False,
 ) -> None:
     """Select the default Agent for future runs."""
     try:
-        agent = AgentManager().set_default(agent_id)
+        agent = AgentManager().set_default(agent_id, confirm_full_access=confirm_full_access)
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="AGENT_ID") from exc
     console.print(f"[bold green]✓ Default Agent is now {agent.agent_id}.[/bold green]")
