@@ -38,6 +38,28 @@ class PolicyRejectedError(PermissionError):
         super().__init__(f"Access policy rejected Tool invocation: {reason}")
 
 
+class EffectiveAccess(BaseModel):
+    """Monotonic access and capability result for one execution boundary."""
+
+    access_level: AccessLevel
+    capabilities: set[str] | None = None
+
+
+class AccessPolicy(BaseModel):
+    """Serializable policy preset separate from an Agent's capability scope."""
+
+    access_level: AccessLevel = "approval-required"
+    capabilities: set[str] | None = None
+    full_access_confirmed: bool = False
+
+    @classmethod
+    def from_legacy(cls, value: str, capabilities: Sequence[str] | None = None) -> AccessPolicy:
+        return cls(
+            access_level=normalize_access_level(value),
+            capabilities=None if capabilities is None else set(capabilities),
+        )
+
+
 class ApprovalRequest(BaseModel):
     """Sanitized, attributable request for one side-effecting Tool call."""
 
@@ -56,6 +78,67 @@ def normalize_access_level(value: str) -> AccessLevel:
     if normalized not in {"read-only", "approval-required", "full-access"}:
         raise ValueError("Unknown access policy. Use read-only, approval-required, or full-access.")
     return normalized  # type: ignore[return-value]
+
+
+def compose_effective_access(
+    caller_access: str | AccessPolicy,
+    recipient_access: str | AccessPolicy,
+    caller_capabilities: Sequence[str] | None = None,
+    recipient_capabilities: Sequence[str] | None = None,
+) -> EffectiveAccess:
+    """Choose the most restrictive level and intersect both capability scopes."""
+    caller = (
+        caller_access.access_level
+        if isinstance(caller_access, AccessPolicy)
+        else normalize_access_level(caller_access)
+    )
+    recipient = (
+        recipient_access.access_level
+        if isinstance(recipient_access, AccessPolicy)
+        else normalize_access_level(recipient_access)
+    )
+    levels: dict[AccessLevel, int] = {
+        "read-only": 0,
+        "approval-required": 1,
+        "full-access": 2,
+    }
+    effective_level = caller if levels[caller] <= levels[recipient] else recipient
+    caller_set = (
+        caller_access.capabilities
+        if isinstance(caller_access, AccessPolicy)
+        else None
+        if caller_capabilities is None
+        else set(caller_capabilities)
+    )
+    recipient_set = (
+        recipient_access.capabilities
+        if isinstance(recipient_access, AccessPolicy)
+        else None
+        if recipient_capabilities is None
+        else set(recipient_capabilities)
+    )
+    if caller_set is None:
+        capabilities = None if recipient_set is None else set(recipient_set)
+    elif recipient_set is None:
+        capabilities = set(caller_set)
+    else:
+        capabilities = set(caller_set & recipient_set)
+    return EffectiveAccess(access_level=effective_level, capabilities=capabilities)
+
+
+def effective_access(
+    caller_access: str | AccessPolicy,
+    recipient_access: str | AccessPolicy,
+    caller_capabilities: Sequence[str] | None = None,
+    recipient_capabilities: Sequence[str] | None = None,
+) -> EffectiveAccess:
+    """Short alias for the shared effective-access resolver."""
+    return compose_effective_access(
+        caller_access,
+        recipient_access,
+        caller_capabilities,
+        recipient_capabilities,
+    )
 
 
 def tool_effect(tool_name: str, metadata: Mapping[str, Any] | None = None) -> ToolEffect:
@@ -157,10 +240,14 @@ __all__ = [
     "AccessLevel",
     "AccessPolicyMiddleware",
     "ApprovalCallback",
+    "AccessPolicy",
     "ApprovalRequest",
+    "EffectiveAccess",
     "PolicyRejectedError",
     "TOOL_EFFECTS",
     "ToolEffect",
+    "compose_effective_access",
+    "effective_access",
     "normalize_access_level",
     "tool_effect",
 ]

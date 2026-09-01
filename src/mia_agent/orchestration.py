@@ -24,7 +24,7 @@ from mia_agent.session.tree import SessionTree
 from mia_ai.providers.anthropic import AnthropicProvider
 from mia_ai.providers.base import LLMProvider
 from mia_ai.providers.openai_compatible import OpenAICompatibleProvider
-from mia_middleware.access import AccessPolicyMiddleware, ApprovalCallback
+from mia_middleware.access import AccessPolicyMiddleware, ApprovalCallback, tool_effect
 from mia_middleware.pipeline import ToolPipeline
 from mia_middleware.security import SecurityGuardMiddleware
 from mia_middleware.telemetry import AuditLogMiddleware, CostBudgetMiddleware
@@ -498,21 +498,29 @@ class AgentRuntimeFactory:
         else:
             model_name = target_model
 
-        tools = self.agent_manager.filter_tools(
-            agent,
-            [
-                ReadFileTool(cwd=work_dir),
-                WriteFileTool(cwd=work_dir),
-                EditFileTool(cwd=work_dir),
-                BashTool(cwd=work_dir),
-            ],
-        )
+        available_tools = [
+            ReadFileTool(cwd=work_dir),
+            WriteFileTool(cwd=work_dir),
+            EditFileTool(cwd=work_dir),
+            BashTool(cwd=work_dir),
+        ]
+        tools = self.agent_manager.filter_tools(agent, available_tools)
+        if agent.access_policy == "read-only":
+            tools = [
+                tool
+                for tool in tools
+                if tool_effect(tool.name, {"effect": tool.effect}) == "non-mutating"
+            ]
         pipeline = self._build_pipeline(
             agent.middlewares,
             agent=agent,
             identity=identity,
             approval_callback=approval_callback,
             full_access_confirmed=full_access_confirmed,
+            tool_effects={
+                tool.name: tool_effect(tool.name, {"effect": tool.effect})
+                for tool in available_tools
+            },
         )
         session_store = JsonlSessionStore(session_dir / f"{identity.session_id}.jsonl")
         initial_messages, last_entry_id = self._restore_session(session_store)
@@ -571,6 +579,7 @@ class AgentRuntimeFactory:
         identity: RuntimeIdentity | None = None,
         approval_callback: ApprovalCallback | None = None,
         full_access_confirmed: bool = False,
+        tool_effects: dict[str, Any] | None = None,
     ) -> ToolPipeline:
         active: list[Any] = []
         if agent is not None and identity is not None and identity.profile is None:
@@ -584,6 +593,7 @@ class AgentRuntimeFactory:
                     run_id=identity.run_id,
                     task_id=identity.task_id,
                     session_id=identity.session_id,
+                    tool_effects=tool_effects,
                 )
             )
         if "security_guard" in middlewares:

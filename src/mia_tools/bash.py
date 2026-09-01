@@ -19,6 +19,7 @@ class BashTool(BaseTool):
     """Tool to execute shell commands asynchronously with process isolation."""
 
     name = "bash"
+    effect = "side-effecting"
     description = (
         "Execute a shell command asynchronously in the project directory. "
         "Captures combined stdout and stderr."

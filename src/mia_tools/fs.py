@@ -69,6 +69,7 @@ class ReadFileTool(BaseTool):
     """Tool to inspect file contents with line numbers and pagination."""
 
     name = "read_file"
+    effect = "non-mutating"
     description = "Read file contents with line numbers. Supports offset and limit for large files."
     parameters = {
         "type": "object",
@@ -138,6 +139,7 @@ class WriteFileTool(BaseTool):
     """Tool to create or overwrite a file atomically."""
 
     name = "write_file"
+    effect = "side-effecting"
     description = (
         "Write content to a file. Automatically creates parent directories if they do not exist."
     )
@@ -168,6 +170,7 @@ class EditFileTool(BaseTool):
     """Tool to perform exact, unique text replacements on a file."""
 
     name = "edit_file"
+    effect = "side-effecting"
     description = (
         "Make precise changes to a file by replacing oldText with newText. "
         "Each oldText block must appear exactly once in the target file."
