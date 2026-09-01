@@ -163,6 +163,9 @@ def create_agent_command(
     access: Annotated[
         str, typer.Option("--access", help="read-only, approval-required, or full-access")
     ] = "approval-required",
+    confirm_full_access: Annotated[
+        bool, typer.Option("--confirm-full-access", help="Explicitly opt into full-access")
+    ] = False,
 ) -> None:
     """Create a durable named Agent."""
     try:
@@ -172,6 +175,7 @@ def create_agent_command(
             instructions=instructions or "You are a helpful local AI Agent.",
             tools=[tool.strip() for tool in tools.split(",") if tool.strip()] if tools else None,
             access_policy=access,
+            confirm_full_access=confirm_full_access,
         )
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="AGENT_ID") from exc

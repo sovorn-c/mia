@@ -101,7 +101,12 @@ class AgentManager:
         **fields: Any,
     ) -> Agent:
         """Create and persist a non-built-in Agent; legacy IDs may be shadowed natively."""
+        confirm_full_access = bool(
+            fields.pop("confirm_full_access", fields.pop("full_access_confirmed", False))
+        )
         candidate = self._coerce_agent(agent, display_name=display_name, fields=fields)
+        if candidate.access_policy == "full-access" and not confirm_full_access:
+            raise ValueError("full-access Agent creation requires explicit confirmation")
         if candidate.agent_id in BUILTIN_AGENTS:
             raise ValueError(f"Cannot create or overwrite built-in Agent '{candidate.agent_id}'.")
         target = self.agent_path(candidate.agent_id)
@@ -110,9 +115,11 @@ class AgentManager:
         self._write_agent(candidate)
         return candidate
 
-    def save_agent(self, agent: Agent) -> Path:
+    def save_agent(self, agent: Agent, *, confirm_full_access: bool = False) -> Path:
         """Atomically save a native Agent and leave any legacy source untouched."""
         candidate = Agent.model_validate(agent.model_dump())
+        if candidate.access_policy == "full-access" and not confirm_full_access:
+            raise ValueError("full-access Agent persistence requires explicit confirmation")
         if candidate.agent_id in BUILTIN_AGENTS:
             raise ValueError(f"Cannot create or overwrite built-in Agent '{candidate.agent_id}'.")
         return self._write_agent(candidate)
