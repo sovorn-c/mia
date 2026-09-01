@@ -1,0 +1,79 @@
+story_id: e04s04
+verified_at: '2026-09-01T21:40:20Z'
+verifier: verify-work
+branch: e04-agent-centric-foundation
+phases:
+  preflight:
+    passed: true
+    checks:
+      - 'feature branch is not main/master'
+      - 'AGENTS.md and CLAUDE.md are byte-for-byte identical'
+      - 'git context is available'
+    note: 'bp-read-agents.sh is not present in this checkout; repository guidance was inspected directly.'
+  task_verification:
+    passed: true
+    tasks: [e04s04t01, e04s04t02, e04s04t03, e04s04t04, e04s04t05, e04s04t06]
+  security:
+    passed: true
+    report: specs/security/REVIEW.md
+    note: 'Manual diff/data-flow review found no HIGH or MEDIUM finding at confidence >= 8.'
+  blind_spots:
+    passed: null
+    skipped: true
+    note: 'scripts/check-blind-spots.sh is not present in this checkout.'
+  completeness:
+    passed: null
+    skipped: true
+    note: 'scripts/lib/completeness-critic.sh is not present in this checkout.'
+  build:
+    passed: true
+    command: 'uv build --offline'
+  typecheck:
+    passed: true
+    command: 'uv run --offline mypy src'
+  lint:
+    passed: true
+    commands:
+      - 'uv run --offline ruff format --check .'
+      - 'uv run --offline ruff check .'
+  tests:
+    passed: true
+    count: 138
+    command: 'uv run --offline pytest'
+  terminal_verdict:
+    command: 'UV_PROJECT_ENVIRONMENT=/Users/sovorn/dev/harness/mia/.venv uv run --offline ruff format --check . && UV_PROJECT_ENVIRONMENT=/Users/sovorn/dev/harness/mia/.venv uv run --offline ruff check . && UV_PROJECT_ENVIRONMENT=/Users/sovorn/dev/harness/mia/.venv uv run --offline mypy src && UV_PROJECT_ENVIRONMENT=/Users/sovorn/dev/harness/mia/.venv uv run --offline pytest && uv build --offline && UV_PROJECT_ENVIRONMENT=/Users/sovorn/dev/harness/mia/.venv uv run --offline python -c "import yaml; from pathlib import Path; [yaml.safe_load(p.read_text()) for p in Path(\"specs\").rglob(\"*.yaml\")]"'
+    exit_code: 0
+    captured_at: '2026-09-01T21:40:00Z'
+    note: 'Single contiguous mechanical-gate run.'
+  manual:
+    steps:
+      - step: 'Run mia --help and inspect Agent lifecycle commands'
+        expected: 'Agent-first help is available.'
+        actual: 'Help exposed --agent and the agent command group.'
+        passed: true
+      - step: 'Create, select, inspect, and list a named Agent'
+        expected: 'The Agent persists and is shown as selected.'
+        actual: 'verify-agent was created, selected, inspected, and listed.'
+        passed: true
+      - step: 'Run two canonical prompts in one Session'
+        expected: 'Run IDs differ while Agent and Session IDs remain stable.'
+        actual: 'Canonical AgentRunner UAT confirmed fresh Run IDs and stable Session ID.'
+        passed: true
+      - step: 'Run the Research Agent'
+        expected: 'Architect specialist runs before Research coordinator.'
+        actual: 'UAT observed architect/specialist followed by research/root.'
+        passed: true
+      - step: 'Approve a side-effecting Tool in the REPL'
+        expected: 'One approval is requested and the approved Tool executes.'
+        actual: 'write_file requested approval, was approved, and wrote verified.txt.'
+        passed: true
+      - step: 'Use legacy --profile and --mode aliases'
+        expected: 'Aliases remain functional and emit compatibility guidance.'
+        actual: 'Both commands emitted compatibility warnings and returned successfully.'
+        passed: true
+  gaps:
+    closed: true
+    known_infrastructure_gaps:
+      - 'bp-read-agents.sh unavailable'
+      - 'check-blind-spots.sh unavailable'
+      - 'completeness-critic.sh unavailable'

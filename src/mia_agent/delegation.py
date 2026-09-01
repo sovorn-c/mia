@@ -181,6 +181,9 @@ class DelegationService:
                 provider=self.provider,
                 access_policy_override=effective.access_level,
                 capabilities_override=effective.capabilities,
+                full_access_confirmed=(
+                    caller.full_access_confirmed and recipient.full_access_confirmed
+                ),
                 delegation_depth=1,
             )
         except Exception as exc:

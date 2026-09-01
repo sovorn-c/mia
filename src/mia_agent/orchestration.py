@@ -656,7 +656,7 @@ class AgentRuntimeFactory:
         compaction_threshold: float | None = None,
         context_window: int | None = None,
         approval_callback: ApprovalCallback | None = None,
-        full_access_confirmed: bool = False,
+        full_access_confirmed: bool | None = None,
         access_policy_override: str | None = None,
         capabilities_override: Collection[str] | None = None,
         delegation_service: Any | None = None,
@@ -730,7 +730,11 @@ class AgentRuntimeFactory:
             agent=agent,
             identity=identity,
             approval_callback=approval_callback,
-            full_access_confirmed=full_access_confirmed,
+            full_access_confirmed=(
+                agent.full_access_confirmed
+                if full_access_confirmed is None
+                else full_access_confirmed
+            ),
             tool_effects={
                 tool.name: tool_effect(tool.name, {"effect": tool.effect})
                 for tool in available_tools
