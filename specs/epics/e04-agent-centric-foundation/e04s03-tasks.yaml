@@ -1,0 +1,246 @@
+story_id: e04s03
+story_title: "Direct Agent-to-Agent Delegation"
+status: failing
+requirement_delta: ADDED
+bcps: 8
+tasks:
+  - id: e04s03t01
+    title: "Define failing Task and Delegation contracts"
+    status: failing
+    agent_type: "orchestration-test-engineer"
+    risk: high
+    depends_on: [e04s02t06]
+    story_steps: [1]
+    scenarios:
+      - SC-e04s03-P0-01
+      - SC-e04s03-P0-02
+      - SC-e04s03-P0-03
+      - SC-e04s03-P0-04
+      - SC-e04s03-P0-05
+      - SC-e04s03-P0-06
+      - SC-e04s03-P0-07
+      - SC-e04s03-P0-08
+      - SC-e04s03-P1-09
+    work:
+      - "Create tests/test_delegation.py before production implementation."
+      - "Specify TaskRequest/TaskResult validation, five terminal outcomes, target eligibility, one-hop depth, timeout bounds, attribution, data minimization, and Session separation."
+      - "Use scripted MockProvider variants for normal stop, provider exception/error chunk, max_steps, cancellation, and timeout."
+    files:
+      - tests/test_delegation.py
+      - tests/test_agent_loop.py
+      - tests/test_orchestration.py
+    verify: >-
+      uv run --offline pytest tests/test_delegation.py -k
+      'contract or validation or outcome or self or timeout or secret or attribution'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s03 Direct Agent-to-Agent Delegation"
+      sub_suite: "Task contracts"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Direct Agent-to-Agent Delegation"
+      feature: "Task request and result"
+      tags: [e04, e04s03, delegation, task, contract, security]
+
+  - id: e04s03t02
+    title: "Implement synchronous one-hop Delegation service"
+    status: failing
+    agent_type: "async-runtime-engineer"
+    risk: high
+    depends_on: [e04s03t01]
+    story_steps: [2]
+    scenarios:
+      - SC-e04s03-P0-01
+      - SC-e04s03-P0-02
+      - SC-e04s03-P0-03
+      - SC-e04s03-P1-09
+    work:
+      - "Add validated Task request/result models and one core DelegationService."
+      - "Resolve explicit eligible recipients, reject self/unknown/depth-one calls, and create unique Task/Run/Session IDs."
+      - "Build the recipient through the shared runtime factory and keep parent/child Session histories separate."
+      - "Persist non-secret parent/child attribution and one terminal outcome."
+    files:
+      - src/mia_agent/delegation.py
+      - src/mia_agent/agents/model.py
+      - src/mia_agent/agents/manager.py
+      - src/mia_agent/orchestration.py
+      - src/mia_agent/session/entries.py
+      - tests/test_delegation.py
+      - tests/test_sessions.py
+    verify: >-
+      uv run --offline pytest tests/test_delegation.py tests/test_sessions.py -k
+      'service or eligible or unique or child_session or one_hop or parent or append'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s03 Direct Agent-to-Agent Delegation"
+      sub_suite: "Delegation runtime"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Direct Agent-to-Agent Delegation"
+      feature: "Synchronous one-hop execution"
+      tags: [e04, e04s03, async, runtime, session, attribution]
+
+  - id: e04s03t03
+    title: "Expose Delegation through a thin built-in Tool"
+    status: failing
+    agent_type: "tool-integration-engineer"
+    risk: high
+    depends_on: [e04s03t02]
+    story_steps: [3]
+    scenarios:
+      - SC-e04s03-P0-01
+      - SC-e04s03-P0-02
+      - SC-e04s03-P0-03
+    work:
+      - "Add DelegateTaskTool as an adapter over an injected Delegation callable."
+      - "Expose recipient Agent ID, bounded Task text, and optional timeout only."
+      - "Inject the Tool only when depth is zero and the caller has eligible targets."
+      - "Return the same serialized TaskResult as the headless service without duplicating policy or runtime logic."
+    files:
+      - src/mia_tools/delegate.py
+      - src/mia_tools/__init__.py
+      - src/mia_agent/orchestration.py
+      - src/mia_agent/harness.py
+      - tests/test_delegation.py
+      - tests/test_agent_loop.py
+    verify: >-
+      uv run --offline pytest tests/test_delegation.py tests/test_agent_loop.py -k
+      'delegate_tool or visible or depth or recipient or serialized'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s03 Direct Agent-to-Agent Delegation"
+      sub_suite: "Agent Tool"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Direct Agent-to-Agent Delegation"
+      feature: "delegate_task capability"
+      tags: [e04, e04s03, tool, one-hop, integration]
+
+  - id: e04s03t04
+    title: "Enforce delegated access and data minimization"
+    status: failing
+    agent_type: "delegation-security-engineer"
+    risk: high
+    depends_on: [e04s03t02, e04s03t03]
+    story_steps: [4]
+    scenarios:
+      - SC-e04s03-P0-04
+      - SC-e04s03-P0-05
+    work:
+      - "Apply the shared most-restrictive access and capability-intersection resolver."
+      - "Keep permanent SecurityGuard, approval, argument validation, audit, and timeouts active."
+      - "Build the child prompt from Task text and non-secret attribution only."
+      - "Prove parent transcript, provider secrets, authorization data, and unrelated state never cross the boundary."
+    files:
+      - src/mia_agent/delegation.py
+      - src/mia_agent/orchestration.py
+      - src/mia_middleware/access.py
+      - src/mia_middleware/security.py
+      - tests/test_delegation.py
+      - tests/test_access_policy.py
+      - tests/test_middleware_pipeline.py
+    verify: >-
+      uv run --offline pytest tests/test_delegation.py tests/test_access_policy.py
+      tests/test_middleware_pipeline.py -k
+      'effective or restrict or capability or secret or transcript or escalation or security'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s03 Direct Agent-to-Agent Delegation"
+      sub_suite: "Delegation security"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Direct Agent-to-Agent Delegation"
+      feature: "Non-escalation and minimization"
+      tags: [e04, e04s03, access, secrets, transcript, security]
+
+  - id: e04s03t05
+    title: "Make every delegated terminal outcome truthful"
+    status: failing
+    agent_type: "reliability-engineer"
+    risk: high
+    depends_on: [e04s03t02]
+    story_steps: [5]
+    scenarios:
+      - SC-e04s03-P0-06
+      - SC-e04s03-P0-07
+      - SC-e04s03-P0-08
+    work:
+      - "Classify normal stop as success only when recipient response content exists."
+      - "Classify provider exception/error chunk, AgentErrorEvent, invalid terminal sequence, and max_steps as failed."
+      - "Use asyncio.timeout for the bounded child and map expiry to timed-out."
+      - "Record cancellation and re-raise caller CancelledError after child cleanup."
+      - "Ensure no non-success path emits or persists succeeded."
+    files:
+      - src/mia_agent/delegation.py
+      - src/mia_agent/harness.py
+      - src/mia_agent/events.py
+      - src/mia_agent/orchestration.py
+      - tests/test_delegation.py
+      - tests/test_agent_loop.py
+      - tests/test_orchestration.py
+    verify: >-
+      uv run --offline pytest tests/test_delegation.py tests/test_agent_loop.py
+      tests/test_orchestration.py -k
+      'succeeded or failed or rejected or cancelled or timed_out or max_steps or provider_error'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s03 Direct Agent-to-Agent Delegation"
+      sub_suite: "Terminal outcomes"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Direct Agent-to-Agent Delegation"
+      feature: "Truthful completion"
+      tags: [e04, e04s03, failure, cancellation, timeout, reliability]
+
+  - id: e04s03t06
+    title: "Close Delegation security and regression gates"
+    status: failing
+    agent_type: "orchestration-verification-engineer"
+    risk: high
+    depends_on: [e04s03t03, e04s03t04, e04s03t05]
+    story_steps: [6]
+    scenarios:
+      - SC-e04s03-P0-01
+      - SC-e04s03-P0-02
+      - SC-e04s03-P0-03
+      - SC-e04s03-P0-04
+      - SC-e04s03-P0-05
+      - SC-e04s03-P0-06
+      - SC-e04s03-P0-07
+      - SC-e04s03-P0-08
+      - SC-e04s03-P1-09
+    work:
+      - "Run all Delegation, access, Agent, Session, middleware, harness, and current orchestration tests."
+      - "Verify no background child survives timeout/cancellation and no secret/transcript crosses Sessions."
+      - "Run format, lint, and strict source typing."
+    files:
+      - tests/test_delegation.py
+      - tests/test_access_policy.py
+      - tests/test_agents.py
+      - tests/test_sessions.py
+      - tests/test_middleware_pipeline.py
+      - tests/test_agent_loop.py
+      - tests/test_orchestration.py
+      - tests/test_e2e_scenarios.py
+    verify: >-
+      uv run --offline ruff format --check .
+      && uv run --offline ruff check .
+      && uv run --offline mypy src
+      && uv run --offline pytest tests/test_delegation.py tests/test_access_policy.py
+      tests/test_agents.py tests/test_sessions.py tests/test_middleware_pipeline.py
+      tests/test_agent_loop.py tests/test_orchestration.py tests/test_e2e_scenarios.py
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s03 Direct Agent-to-Agent Delegation"
+      sub_suite: "Verification"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Direct Agent-to-Agent Delegation"
+      feature: "Delegation quality gate"
+      tags: [e04, e04s03, verification, regression, security]

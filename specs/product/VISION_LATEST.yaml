@@ -1,0 +1,289 @@
+# specs/product/VISION_LATEST.yaml — approved Mia product vision
+
+document:
+  title: "Mia Product Vision"
+  status: "approved"
+  approved_on: "2026-09-01"
+  reason_for_existence: >
+    Define what Mia is, who it serves, its primary product object, and the boundaries future scope
+    and implementation plans must follow.
+  planning_rule: >
+    Future scope, architecture, and implementation must align with this Agent-centric identity.
+    Resolve still-open product contracts within bounded initiatives rather than reopening the
+    canonical product identity.
+
+identity:
+  name: "Mia"
+  expanded_name: "Modular Intelligent Agent"
+  category: "Lightweight, modular local agent core"
+  one_liner: >
+    Mia is a lightweight local agent system where people create durable Agents that use skills,
+    tools, and plugins and can delegate tasks to other Agents.
+  vision: >
+    Let people work with trustworthy AI Agents as naturally as they work with employees,
+    specialists, or personal helpers, while giving developers a small core for extending Agent
+    behavior through explicit, permissioned plugins.
+
+positioning:
+  primary: "A general-purpose local agent system centered on named, durable, collaborating Agents."
+  default_experience: "Running `mia` opens the default personal Agent named Mia."
+  not_primary:
+    - "A coding-only agent"
+    - "A workflow builder requiring users to design orchestration graphs"
+    - "A catalog of Modes users must understand before assigning work"
+    - "An empty framework requiring configuration before first use"
+    - "An autonomous multi-agent swarm platform"
+  differentiation:
+    - "Agent-first interaction instead of workflow-first configuration."
+    - "One canonical identity term across users, configuration, documentation, and code."
+    - "Useful by default while remaining general at the core."
+    - "Agent-to-Agent delegation matching how people assign work to specialists."
+    - "Per-Agent plugins without giving plugins ownership of core integrity."
+    - "User-controlled access rather than one mandatory approval philosophy."
+    - "Durable sessions, attributable execution, and truthful outcomes as core guarantees."
+
+canonical_terms:
+  Agent: "Durable identity with configuration, state, capabilities, plugins, and an address for receiving Tasks."
+  Skill: "Reusable instructions, knowledge, or procedure."
+  Tool: "Callable capability exposed through Mia Core."
+  Plugin: "Installable executable extension."
+  Task: "Bounded work assigned to an Agent."
+  Delegation: "One Agent assigning a Task to another through Mia Core."
+  Run: "One execution of an Agent."
+  Session: "Durable conversation history."
+
+non_canonical_terms:
+  Assistant: "May describe an Agent informally but is not a product or domain entity."
+  Profile: "Current implementation/configuration term to migrate; not a separate target entity."
+  Bot: "May describe a messaging-channel presentation but is not a product or domain entity."
+  Mode: "Current implementation selector removed from the target product model."
+  Workflow: "Private implementation logic inside an Agent, Skill, or Plugin; not a top-level product object."
+
+product_principles:
+  - name: "One identity term"
+    rule: "Use Agent consistently; do not split the same concept into Assistant, Profile, or Bot taxonomies."
+  - name: "Agent first"
+    rule: "People create, select, configure, run, and delegate to named Agents."
+  - name: "Useful by default"
+    rule: "Running `mia` starts the default personal Agent without setup or graph design."
+  - name: "General at the core"
+    rule: "Core execution does not assume coding, research, or another vertical."
+  - name: "Delegation before workflow graphs"
+    rule: "An Agent assigns a bounded Task to another Agent through a core protocol."
+  - name: "Internal workflows stay internal"
+    rule: "Procedures may live inside an Agent, Skill, or Plugin without becoming required public objects."
+  - name: "Plugins provide executable extension"
+    rule: "Agents enable and configure Plugins; executable extension behavior belongs to Plugins."
+  - name: "Freedom inside integrity boundaries"
+    rule: "Plugins may implement arbitrary domain behavior but cannot bypass core security and lifecycle rules."
+  - name: "User-controlled trust"
+    rule: "Mia supports explicit approval, autonomous, read-only, no-tools, and full-access choices."
+  - name: "Honest capability"
+    rule: "Mia does not claim integrations, isolation, or autonomy that are not implemented."
+
+agent_model:
+  definition: >
+    A durable, addressable entity that combines identity, configuration, private state, enabled
+    capabilities, access policy, and collaboration behavior.
+  owns_or_selects:
+    - "Name, identity, role, and instructions"
+    - "Model and provider defaults"
+    - "Private memory and durable sessions"
+    - "Credential references and environment configuration"
+    - "Skills and Tools"
+    - "Enabled and configured Plugins"
+    - "Capability scope and default access policy"
+    - "A stable address for receiving delegated Tasks"
+  examples:
+    - "Mia — default personal Agent"
+    - "Research Agent"
+    - "Coding Agent"
+    - "Finance Agent"
+    - "Travel Agent"
+  execution_distinction: >
+    The Agent is durable. A Run is one execution of that Agent; it does not create a second identity
+    concept such as Agent Instance.
+
+capability_model:
+  skill:
+    rule: "Use Skill for reusable instruction, knowledge, or procedure, including a simple routine."
+  tool:
+    rule: "Use Tool for a callable action mediated by Mia Core."
+  plugin:
+    rule: >
+      Use Plugin for installable executable extension code. A Plugin may contribute Skills, Tools,
+      integrations, hooks, internal workflows, or complete Agent templates.
+    lifecycle:
+      - "Install the Plugin into Mia."
+      - "Explicitly enable and configure it per Agent unless it is a declared core-wide extension."
+      - "Approve its requested capabilities under the Agent's access policy."
+    never_owns:
+      - "Agent identity or core Task routing"
+      - "Credential secrecy"
+      - "Permission and approval enforcement"
+      - "Session integrity"
+      - "Canonical event attribution"
+      - "Cancellation and truthful terminal outcomes"
+  workflow:
+    rule: >
+      Workflow is optional private sequencing inside an Agent, Skill, or Plugin when work requires
+      multiple steps or collaborators. Users are not required to build or understand it.
+  mode:
+    rule: >
+      Mode is absent from the target product model because an Agent already selects identity,
+      capabilities, policy, and collaboration behavior.
+    current_compatibility: >
+      Current `single` and `research` Modes remain implemented until an approved migration replaces
+      or internalizes them.
+
+collaboration:
+  primary_primitive: "Agent-to-Agent Delegation"
+  definition: >
+    Mia Core routes a bounded Task from one Agent to another and returns an attributable result or
+    truthful failure, rejection, cancellation, or timeout.
+  user_examples:
+    - "Give this task to my Research Agent."
+    - "Ask my Coding Agent to implement the result."
+    - "Let my Review Agent check the answer before returning it."
+  core_contract:
+    - "Agent discovery and stable addressable identity"
+    - "Bounded Task submission and result delivery"
+    - "Caller and recipient attribution"
+    - "Permission propagation without silent escalation"
+    - "Failure, rejection, cancellation, and timeout semantics"
+    - "Session and Task persistence appropriate to the supported lifecycle"
+  agent_or_plugin_decides:
+    - "When delegation is useful"
+    - "Which eligible Agent should receive a Task"
+    - "How domain work is decomposed"
+    - "Whether private execution needs one or multiple steps"
+
+users:
+  - group: "Everyday users"
+    interaction: "Run `mia` and work with the default Agent."
+    concepts_needed: ["Agent"]
+  - group: "People with specialist work"
+    interaction: "Create, select, or delegate to named specialist Agents."
+    concepts_needed: ["Agent", "Task", "Delegation", "Access policy"]
+  - group: "Agent designers"
+    interaction: "Configure an Agent's identity, Skills, Tools, Plugins, state, and access."
+    concepts_needed: ["Agent", "Skill", "Tool", "Plugin"]
+  - group: "Plugin developers"
+    interaction: "Implement executable capabilities behind declared core contracts."
+    concepts_needed: ["Plugin API", "Tool API", "Delegation API", "Runtime events"]
+
+access_model:
+  principle: >
+    Capability scope, approval policy, execution isolation, and permanent integrity safeguards are
+    separate controls. An Agent identity is not automatically a security sandbox.
+  capability_scope:
+    question: "Which Tools, Plugins, resources, and recipient Agents may this Agent use?"
+    examples: ["files", "shell", "web", "notes", "workspace path", "network", "delegation targets"]
+  access_levels:
+    rule: >
+      Present three understandable presets over capability scope and approval behavior. An Agent can
+      still have no Tools, but that is capability configuration rather than an access level.
+    approved_levels:
+      - name: "read-only"
+        behavior: "Expose and run only non-mutating capabilities."
+      - name: "approval-required"
+        behavior: "Run safe reads automatically and require user confirmation before writes or other side effects."
+      - name: "full-access"
+        behavior: >
+          Run enabled capabilities without per-action approval after explicit opt-in and warning;
+          permanent credential and integrity safeguards remain mandatory.
+  permanent_integrity_rules:
+    - "Never leak credentials through output, logs, events, or delegated Tasks."
+    - "Validate Plugin and Tool inputs at trust boundaries."
+    - "Keep execution and delegated outcomes attributable."
+    - "Never report failed, rejected, cancelled, timed-out, or skipped work as successful."
+    - "Never let a Plugin or Delegation silently increase access."
+
+core_boundary:
+  core_owns:
+    - "Provider and streaming contracts"
+    - "Agent identity, discovery, execution, and Task routing"
+    - "Runs, Tasks, events, and truthful outcomes"
+    - "Sessions, memory boundaries, and context continuity"
+    - "Tool invocation and middleware"
+    - "Access-policy enforcement"
+    - "Plugin loading and contribution contracts"
+  agent_owns_or_selects:
+    - "Identity and role behavior"
+    - "Private configuration and state"
+    - "Enabled Skills, Tools, and Plugins"
+    - "Default collaboration strategy"
+  packaging_rule: >
+    Keep the default personal Agent and existing coding capabilities in the distribution until real
+    usage justifies separate packages. Prove the Plugin contract with one concrete Plugin and one
+    distributable Agent before designing a broad SDK.
+
+initial_product_boundary:
+  default_agent_promise:
+    - "General conversation, reasoning, and planning"
+    - "Durable local sessions"
+    - "Local file and note assistance"
+    - "Clear access-policy selection"
+    - "Optional web research when a supported capability is installed or bundled"
+  bundled_agents_to_evaluate:
+    - "Coding Agent"
+    - "Architect or Review Agent"
+    - "Research Agent"
+  near_term_exclusions:
+    - "Email and calendar automation"
+    - "Background schedules and autonomous jobs"
+    - "Browser control"
+    - "Unbounded autonomous agent teams"
+    - "Claims of broad personal-agent integration before the Tools exist"
+
+current_reality:
+  status: >
+    The implementation remains coding-oriented and Mode-centered. It has coding, architect,
+    code_mode, and minimal Profile objects; single and research Modes; a fixed sequential Workflow;
+    filesystem and shell Tools; middleware; and durable Sessions.
+  gaps_against_vision:
+    - "Agent is not yet the single canonical identity in configuration, commands, or code."
+    - "The default personal Agent is not implemented."
+    - "Agent-to-Agent messaging and Delegation are not general core contracts."
+    - "Mode remains the top-level execution selector."
+    - "Workflow remains a first-class fixed runtime definition rather than private logic."
+    - "There is no Plugin loader or per-Agent Plugin configuration contract."
+    - "The permission labels do not yet form a complete user-facing approval system."
+  migration_rule: >
+    Preserve working ModeRuntime and Profile behavior through the approved e04 compatibility
+    migration. Do not rename code outside that capsule or rewrite historical e03 artifacts merely
+    to resemble the target model.
+  documentation_rule: "Keep current capability claims honest until implementation catches up."
+
+settled_decisions:
+  - id: "VISION-01"
+    decision: >
+      The default Mia Agent enables read_file, write_file, edit_file, and bash under
+      approval-required access. Reads run automatically; writes and shell side effects require
+      confirmation. Permanent security guards remain active.
+  - id: "VISION-02"
+    decision: >
+      New Agents use additive Agent homes for configuration and private state. Existing Profile and
+      Session data stays readable through non-destructive compatibility. Provider secrets remain in
+      the machine-global credential store and Agents hold references, never copied secret values.
+  - id: "VISION-04"
+    decision: >
+      Use read-only, approval-required, and full-access. Having no Tools is capability configuration,
+      not an access level. Full-access never disables permanent credential or integrity safeguards.
+
+open_decisions:
+  - id: "VISION-03"
+    question: "What request/result protocol should govern Agent-to-Agent Delegation beyond the bounded e04 contract?"
+  - id: "VISION-05"
+    question: "What first executable Plugin and distributable Agent are sufficient to prove extension?"
+  - id: "VISION-06"
+    question: "Should web research be bundled, optional, or Plugin-provided in the first release?"
+
+next_step: >
+  Implement the approved Agent-Centric Foundation from
+  `specs/epics/e04-agent-centric-foundation/`, beginning with e04s01 contract tests on an isolated
+  branch. Keep Plugin SDK, automation, channels, and advanced orchestration deferred.
+
+verification:
+  command: >
+    uv run --offline python -c "import pathlib,yaml; yaml.safe_load(pathlib.Path('specs/product/VISION_LATEST.yaml').read_text())"

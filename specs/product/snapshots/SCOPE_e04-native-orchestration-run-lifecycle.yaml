@@ -1,0 +1,106 @@
+# specs/product/SCOPE_LATEST.yaml — Bounded PRD for Mia orchestration lifecycle hardening
+initiative_id: "e04"
+initiative_name: "Native Orchestration Run Identity and Lifecycle"
+status: "proposed"
+
+core_value: >
+  Make every Mia prompt produce a trustworthy, uniquely attributable orchestration result so
+  maintainers and future workflow authors can reason about success, failure, and recovery.
+
+summary: >
+  Mia's native orchestration vocabulary now defines an Orchestration Run as one prompt-scoped
+  execution and a Session as durable history that can span sequential runs. The implementation
+  still reuses run identity in interactive single mode and does not expose enough typed lifecycle
+  evidence to distinguish successful completion from limits, provider errors, cancellation, or
+  unstarted downstream work.
+
+  This initiative aligns observable native behavior with the canonical domain model. It covers
+  unique run identity, attributable lifecycle outcomes, and truthful failure propagation across
+  the existing single and research modes. It preserves the current one-agent AgentHarness seam,
+  append-only sessions, profile permissions, middleware, and terminal adapters.
+
+actors:
+  - "Mia users who need reliable completion and failure behavior"
+  - "Mia maintainers evolving ModeRuntime and AgentHarness"
+  - "Future workflow and plugin authors consuming attributed events"
+
+in_scope:
+  - id: "e04s01"
+    name: "Prompt-Scoped Run Identity"
+    description: >
+      Every submitted prompt receives one unique Orchestration Run identity across interactive,
+      headless, and resumed-session paths. Sequential runs may share a Session without sharing a
+      run identity, and existing event attribution remains intact.
+  - id: "e04s02"
+    name: "Truthful Native Lifecycle Outcomes"
+    description: >
+      Native orchestration exposes unambiguous terminal outcomes for Runs, Workflow Tasks, Agent
+      Instances, Turns, Steps, and Tool Invocations. Limits and unrecovered errors cannot appear
+      as success; recoverable tool failures remain distinguishable from policy rejection and
+      downstream unstarted work is represented as Skipped.
+
+out_of_scope:
+  - id: "oos-01"
+    name: "Concurrent input and per-session coordination"
+    rationale: "One-active-turn enforcement, queues, and active-turn cancellation require a separate concurrency design."
+  - id: "oos-02"
+    name: "Session lineage and retention hardening"
+    rationale: "Parent constraints, orphan prevention, branch retention, and safe deletion need separate persistence-focused acceptance criteria."
+  - id: "oos-03"
+    name: "Continuable child agents and durable task DAGs"
+    rationale: "The current one-shot workflow boundary remains sufficient while lifecycle attribution is stabilized."
+  - id: "oos-04"
+    name: "Legacy Herd or full-screen UI migration"
+    rationale: "The native headless runtime remains the architecture; legacy presentation and orchestration adapters are not required for this contract."
+  - id: "oos-05"
+    name: "Provider retry policy and new runtime dependencies"
+    rationale: "This initiative classifies existing outcomes and adds no new provider behavior or package dependency."
+
+constraints:
+  - "Preserve the invariant: Mode composes; Profile configures; Workflow coordinates; Agent executes; Plugin extends."
+  - "AgentHarness remains a one-agent, UI-independent executor."
+  - "Existing inner AgentEvent payloads and renderer behavior remain compatible unless an explicit lifecycle contract requires an additive envelope change."
+  - "Root and child session histories remain append-only JSONL trees."
+  - "Single and research modes remain explicit and deterministic."
+  - "All visible tools remain profile-filtered and middleware-protected."
+  - "Use Python 3.12+, strict Mypy, Ruff, offline tests, and no new runtime dependency."
+  - "Preserve all existing user-authored and completed e03 artifacts; the prior e03 scope is frozen under product/snapshots/."
+
+success_criteria:
+  - "Each submitted prompt has a unique run_id, including repeated prompts in one interactive Session and prompts after resume."
+  - "Every native event and terminal outcome can be attributed to its Mode, Run, Workflow Task, Agent Instance, Profile, and Session where applicable."
+  - "A successful Run requires successful final Coordinator completion. max_steps, unrecovered provider errors, and cancellation never produce a successful Run outcome."
+  - "Research-mode specialist failure prevents Coordinator execution and records downstream work as Skipped rather than silently omitting it."
+  - "Tool execution failure, policy rejection, cancellation, and successful completion remain distinguishable without exposing credentials or sensitive provider data."
+  - "Terminal lifecycle outcomes are immutable and illegal post-terminal transitions are rejected or impossible."
+  - "Existing single-mode behavior, session replay, profile permissions, middleware, CLI rendering, and all current tests remain green."
+  - "Focused lifecycle regression tests, Ruff, strict Mypy, offline pytest, build, and specification checks pass."
+
+references:
+  - "specs/product/snapshots/SCOPE_e03-native-orchestration.yaml"
+  - "specs/planning-context.yaml"
+  - "specs/product/GLOSSARY_LATEST.yaml"
+  - "specs/tech-architecture/tech-stack.md"
+  - "specs/adr/0001-prompt-scoped-orchestration-runs.md"
+
+prior_art:
+  - candidate: "Mia native orchestration seams"
+    source: "src/mia_agent/orchestration.py and src/mia_agent/harness.py"
+    verdict: "extend"
+    notes: "ModeRuntime already owns mode routing and event envelopes; AgentHarness already owns one-agent turns and session context."
+  - candidate: "Tau reusable harness lifecycle"
+    source: "/Users/sovorn/dev/pi/pi-architecture/tau/src/tau_agent/harness.py"
+    verdict: "adopt"
+    notes: "Reject overlapping prompts, keep active-run state in the harness boundary, and expose lifecycle state separately from transcript messages."
+  - candidate: "Tau append-only session tree"
+    source: "/Users/sovorn/dev/pi/pi-architecture/tau/dev-notes/architecture/phase-7-session-tree.md"
+    verdict: "adopt"
+    notes: "Keep durable history append-only and reconstruct active context by replaying a selected root-to-leaf path."
+  - candidate: "Pi stateful Agent lifecycle"
+    source: "/Users/sovorn/dev/pi/pi-architecture/pi/packages/agent/src/agent.ts"
+    verdict: "adopt"
+    notes: "Keep active-run ownership and abort state separate from the durable message transcript."
+  - candidate: "DeepSeek Harness tool outcome pipeline"
+    source: "/Users/sovorn/dev/pi/pi-architecture/deepseek-harness/packages/core/tools/src/index.ts"
+    verdict: "adapt"
+    notes: "Preserve explicit policy, execution, cancellation, and immutable result distinctions without importing the larger plugin framework."

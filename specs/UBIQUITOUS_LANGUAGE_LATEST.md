@@ -1,105 +1,145 @@
 # Ubiquitous Language
 
-> Human-readable projection of `specs/product/GLOSSARY_LATEST.yaml`, the canonical source of truth.
+> Human-readable projection of `specs/product/GLOSSARY_LATEST.yaml`, the canonical source of truth for Mia's draft target terminology.
 
-> **Core invariant:** Mode composes; Profile configures; Workflow coordinates; Agent executes; Plugin extends.
+> **Core invariant:** Agent acts; Skill guides; Tool enables; Plugin extends; Agent delegates through Mia Core.
 
-## Composition
+## One identity term: Agent
 
-| Term | Definition | Aliases to avoid |
-|------|------------|------------------|
-| **Mode** | User-selected orchestration composition binding one coordinator Profile to one validated Workflow and its enabled policies. | Persona, agent preset, Profile |
-| **Profile** | Reusable declarative configuration for one agent role, including prompt, model defaults, tools, permissions, middleware, and limits. | Mode, Workflow, Agent Instance, persona |
-| **Workflow** | Validated ordered definition of Workflow Stages executed by an Orchestration Run. | Profile, prompt template, Run, task DAG |
-| **Workflow Stage** | Named Workflow position declaring one Profile and either Specialist or Coordinator responsibility. | Workflow Task, Agent Instance, Turn, Step |
-| **Plugin** | Installable extension contributing capabilities without owning orchestration. | Mode Runtime, Agent Instance, workflow owner |
-| **Mode Runtime** | Headless domain service resolving a Mode, executing its Workflow, and emitting attributable orchestration events. | HerdManager, terminal UI, Agent Instance, Orchestration Run |
+Mia uses **Agent** everywhere for its primary product object.
 
-## Orchestration execution
+```text
+Mia Core
+  └── Agent
+        ├── Identity and instructions
+        ├── Model and configuration
+        ├── Memory and Sessions
+        ├── Skills and Tools
+        ├── Plugins
+        ├── Access Policy
+        └── Delegation to other Agents
+```
 
-| Term | Definition | Aliases to avoid |
-|------|------------|------------------|
-| **Orchestration Run** | One execution of a resolved Mode and Workflow for one submitted prompt. | CLI run, Session, Turn, agent run |
-| **Workflow Task** | Run-specific execution of one Workflow Stage by one Agent Instance. | Workflow Stage, backlog task, Turn, Step, subagent |
-| **Agent Instance** | One logical AgentHarness executor with one Runtime Identity, Profile, context, and Session. | Agent, Profile, Mode, Workflow, ManagedAgent |
-| **Runtime Identity** | Immutable attribution tuple joining Mode, Run, Task, Agent, Profile, Session, and optional parent Session identifiers. | Agent state, Session metadata, Event Envelope |
-| **Orchestration Event Envelope** | Attribution wrapper retaining one unchanged agent event or orchestration error with Runtime Identity fields. | Agent event, herd event, message envelope |
+**Assistant**, **Profile**, and **Bot** are not separate product or domain entities:
 
-## Execution roles
+- Use **Agent**, not Assistant.
+- Use **Agent**, not Profile, in the target model. Profile remains current implementation terminology until migration.
+- Use **Agent**, not Bot. Bot may remain ordinary channel-specific description.
+- Use **Run** for one execution of an Agent; do not create an Agent Instance identity.
 
-| Term | Definition | Aliases to avoid |
-|------|------------|------------------|
-| **Coordinator** | Required final Workflow role producing the Orchestration Run's user-facing result. | Lead agent, root agent, Mode Runtime |
-| **Specialist** | Optional non-final Workflow role producing task-local input for the Coordinator. | Coordinator, teammate, worker pool |
-| **One-shot Specialist** | Task-local Specialist Agent Instance returning one result without accepting later prompts. | Continuable Child, persistent teammate, durable worker |
-| **Continuable Child** | Deferred child agent identity accepting later prompts and supporting reconstruction after process restart. | One-shot Specialist, Workflow Task |
+Examples: **Mia**, **Research Agent**, **Coding Agent**, **Finance Agent**, and **Travel Agent**.
 
-## Durable conversation
+## Canonical terms
 
 | Term | Definition | Aliases to avoid |
 |------|------------|------------------|
-| **Session** | Durable conversation history shared by sequential Agent Instances in one conversation lineage. | Orchestration Run, Turn, transcript file, Workflow Task |
-| **Session Tree** | Append-only directed tree of Session Entries with one active root-to-leaf path. | Session, conversation list, run tree |
-| **Session Branch** | One root-to-leaf Session Tree path used to reconstruct active context. | Git branch, Session, child Session |
-| **Session Entry** | Immutable node containing a message, compaction, Session metadata, leaf pointer, or namespaced extension. | Event, chat message, checkpoint |
-| **Compaction Checkpoint** | Session Entry containing a summary replacing earlier entries during active-path replay. | Session snapshot, deleted history, summary message |
+| **Mia Core** | Trusted runtime owning Agent execution and routing, provider contracts, Sessions, Tools, permissions, Plugins, events, cancellation, and truthful outcomes. | Agent, workflow engine, plugin-owned runtime |
+| **Agent** | Durable, addressable intelligent entity combining identity, configuration, private state, capabilities, access policy, Plugins, and collaboration behavior. | Assistant, Profile, Bot, Agent Instance, Mode |
+| **Skill** | Reusable instructions, knowledge, or procedure teaching an Agent how to perform a capability. | Tool, Plugin, mandatory Workflow, scheduled Routine |
+| **Tool** | Callable capability exposed through Mia Core's validated invocation boundary. | Skill, Plugin package, unmediated function call |
+| **Plugin** | Installable executable package contributing Skills, Tools, integrations, hooks, private workflows, Agent templates, or other declared capabilities. | Agent identity, core runtime owner, permission bypass |
+| **Agent Template** | Shareable starting definition that becomes an independently configured Agent without carrying private user state. | Running Agent, shared credentials, Plugin runtime |
+| **Task** | Bounded work assigned to an Agent with one attributable Terminal Outcome. | Backlog task, Skill, Workflow Stage |
+| **Delegation** | Core-mediated assignment of a Task from one Agent to another. | Unattributed prompt injection, shared mutable Session, silent escalation |
+| **Run** | One prompt- or Task-scoped execution of one Agent. | Agent identity, CLI command, Session, long-lived process |
+| **Session** | Durable conversation history owned under a defined Agent boundary and reusable across Runs. | Agent, Run, active process |
+| **Access Policy** | Read-only, approval-required, or full-access; governs mutation and confirmation for enabled capabilities. | Agent, sandbox, Tool allowlist, no-tools level |
+| **Capability Scope** | Declared Tools, Plugins, resources, and delegation targets an Agent may use. | Access Policy, identity, system prompt |
 
-## Agent execution
+Having no Tools is Capability Scope configuration, not another Access Policy. Full-access removes per-action confirmation only after explicit opt-in; permanent credential and integrity safeguards remain mandatory.
 
-| Term | Definition | Aliases to avoid |
-|------|------------|------------------|
-| **Turn** | One user prompt and the agent activity required to reach one terminal Turn outcome. | Orchestration Run, Workflow Task, message, request |
-| **Step** | One model interaction within a Turn, including requested Tool Invocations and token usage. | Workflow Stage, Workflow Task, Turn, tool call |
-| **Tool Invocation** | One model-requested tool execution carried through middleware to one success or error result. | Workflow Task, Step, bash process, tool definition |
+## Extension model
 
-## State semantics
+```text
+Research Agent
+  ├── Skill: evaluate sources
+  ├── Tool: web search
+  └── Plugin: citation verifier
+```
 
-| Term | Definition | Aliases to avoid |
-|------|------------|------------------|
-| **Lifecycle State** | Derived semantic position of a runtime entity based on emitted events and terminal outcome. | Event, status message, legacy AgentState |
-| **Terminal Outcome** | Final success, failure, or cancellation result preventing further lifecycle transitions. | Done state, stop reason, error event |
-| **Skipped** | Workflow Task outcome showing execution never started after upstream failure or cancellation. | Cancelled, failed, pending |
+A simple reusable procedure is a **Skill**. A callable action is a **Tool**. Installable executable behavior belongs to a **Plugin**.
+
+A Plugin may contribute:
+
+- Skills and Tools.
+- External integrations.
+- Hooks at declared extension points.
+- Private multi-step workflows.
+- Agent Templates.
+
+Plugins may implement broad domain behavior but cannot bypass core permissions, credential secrecy, routing, Session integrity, event attribution, cancellation, or truthful outcomes.
+
+## Agent collaboration
+
+Agent-to-Agent **Delegation** is Mia's primary coordination primitive:
+
+```text
+Mia
+  → delegates a Task to Research Agent
+  → receives an attributable result
+  → delegates implementation to Coding Agent
+  → returns the final result
+```
+
+Mia Core owns discovery, routing, attribution, permission propagation, and Terminal Outcomes. An Agent or its Plugin decides when and how domain work should be delegated.
+
+## Execution terms
+
+| Term | Definition |
+|------|------------|
+| **Runtime Identity** | Immutable attribution identifying the Run, Agent, Session, and optional caller Agent and delegated Task. |
+| **Event Envelope** | Attribution wrapper retaining one unchanged agent, Tool, Delegation, or core event. |
+| **Session Tree** | Append-only directed tree of immutable Session Entries with one active path. |
+| **Turn** | One input and the Agent activity needed to reach one terminal Turn outcome. |
+| **Step** | One model interaction within a Turn, including requested Tool Invocations and usage. |
+| **Tool Invocation** | One model-requested Tool execution carried through core policy and middleware to a terminal result. |
+| **Terminal Outcome** | Final success, failure, rejection, cancellation, timeout, or skip result. |
+
+## Non-canonical terms
+
+| Term | Resolution |
+|------|------------|
+| **Assistant** | Use Agent. It may remain ordinary descriptive prose only. |
+| **Profile** | Use Agent in the target model. Profile describes current implementation until migration. |
+| **Bot** | Use Agent. Bot may describe a messaging-channel presentation only. |
+| **Agent Instance** | Use Agent for durable identity and Run for one execution. |
+| **Routine** | Use Skill for a reusable procedure; scheduling is separate. |
+| **Workflow** | Private implementation logic inside an Agent, Skill, or Plugin—not a top-level product object. |
+| **Mode** | Current ModeRuntime compatibility term; absent from the target product model. |
+
+Current `ModeRuntime`, `single`, `research`, `AgentProfile`, and fixed Workflow terminology remains valid documentation of implemented e03 behavior. It must not drive new target product design, and it should change only through a separately approved migration.
 
 ## Relationships
 
-- A **Mode** binds exactly one **Workflow** and one coordinator **Profile**.
-- A **Workflow** contains one or more ordered **Workflow Stages**.
-- The current **Workflow** has exactly one final **Coordinator** stage and at most one **Specialist** stage.
-- An **Orchestration Run** resolves one **Mode** and executes reached stages as **Workflow Tasks**.
-- Each **Workflow Task** uses exactly one **Agent Instance**, **Profile**, and **Session**.
-- A **Session** can be reopened by sequential **Agent Instances** across multiple **Orchestration Runs**.
-- A research **Orchestration Run** creates one **One-shot Specialist** before its **Coordinator**.
-- A child **Session** references its parent **Session** without merging either **Session Tree**.
-- A **Session Tree** contains immutable **Session Entries** and selects one active **Session Branch**.
-- A **Turn** belongs to one **Agent Instance** and contains ordered **Steps**.
-- A **Step** produces zero or more **Tool Invocations**.
-- Each emitted agent event remains unchanged inside one **Orchestration Event Envelope**.
+- An **Agent** selects Skills, Tools, Plugins, Access Policy, and Capability Scope.
+- One Agent may own multiple Sessions and execute multiple Runs.
+- A Plugin may contribute an Agent Template but does not become the installed Agent.
+- A Skill may describe a procedure; a Plugin may execute one; neither makes Workflow a public object.
+- One caller Agent delegates one Task to one recipient Agent through Mia Core.
+- Mia Core enforces identity, routing, permissions, attribution, Session integrity, and Terminal Outcomes.
+- A Plugin cannot silently expand its Agent's Capability Scope.
+- A Run executes one Agent and may originate from direct input or a delegated Task.
+- A Turn belongs to one Run and may produce Tool Invocations or Delegations.
 
 ## Example dialogue
 
-> **Dev:** "Does research **Mode** create a second **Profile**?"
+> **User:** “Ask my Research Agent to investigate this, then give the result to my Coding Agent.”
 >
-> **Domain expert:** "No. The **Mode** selects a **Workflow** whose stages reference existing **Profiles**."
+> **Mia:** Mia Core routes one attributable Task to each Agent and returns their results.
 >
-> **Dev:** "Is the specialist stage itself an agent?"
+> **Developer:** “Is that a Mode or public Workflow?”
 >
-> **Domain expert:** "No. The **Workflow Stage** is a definition. Its **Workflow Task** runs through one **One-shot Specialist** **Agent Instance**."
+> **Domain expert:** No. Delegation is the core protocol. Any multi-step procedure remains private to the Agent, Skill, or Plugin.
 >
-> **Dev:** "Can that specialist continue after the **Orchestration Run** ends?"
+> **Developer:** “Is the configured object a Profile or Agent?”
 >
-> **Domain expert:** "No. Its **Session** remains durable, but continuation belongs to the deferred **Continuable Child** concept."
->
-> **Dev:** "How do we know whether the task succeeded?"
->
-> **Domain expert:** "Derive its **Lifecycle State** from attributable events until it reaches one **Terminal Outcome**."
+> **Domain expert:** Agent. Profile is only current implementation terminology pending migration.
 
 ## Flagged ambiguities
 
-- **Agent** previously meant product, configuration, executor, or legacy ManagedAgent. Use **Mia**, **Profile**, or **Agent Instance**.
-- **Run** can mean the `mia run` command. Use **Orchestration Run** for domain execution.
-- **Task** can mean planning work. Use **Workflow Task** only for run-specific stage execution.
-- **Stage** can mean definition or execution. Use **Workflow Stage** for the definition and **Workflow Task** for execution.
-- **Coordinator** can mean role, stage, or executor. Qualify it as coordinator role, stage, or Agent Instance when needed.
-- **Specialist** does not imply continuity. Use **One-shot Specialist** now and **Continuable Child** only for deferred behavior.
-- **Session** does not mean Run or Turn. Use **Session Tree** for storage shape and **Session Branch** for replay selection.
-- **State** must not import legacy Herd semantics. Use **Lifecycle State** derived from native orchestration events.
+- **Agent scope:** Agent combines durable identity and configuration; Run is temporary execution.
+- **Plugin freedom:** Broad behavior is allowed, but core integrity contracts remain mandatory.
+- **Agent isolation:** Logical identity and state isolation does not itself imply process or filesystem sandboxing.
+- **Task:** Use Task for runtime work assigned to an Agent and backlog task for planning.
+- **Run:** Use Run for Agent execution and `mia run` only for the CLI command.
+- **Session:** Use Session for durable history, not Agent identity or active execution.

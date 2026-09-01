@@ -1,0 +1,243 @@
+story_id: e04s01
+story_title: "Named Agent Vertical Slice"
+status: failing
+requirement_delta: MODIFIED
+bcps: 8
+tasks:
+  - id: e04s01t01
+    title: "Lock the canonical Agent contracts with failing tests"
+    status: failing
+    agent_type: "domain-test-engineer"
+    risk: high
+    depends_on: []
+    story_steps: [1]
+    scenarios:
+      - SC-e04s01-P0-01
+      - SC-e04s01-P0-02
+      - SC-e04s01-P0-03
+      - SC-e04s01-P0-04
+      - SC-e04s01-P0-05
+      - SC-e04s01-P1-07
+    work:
+      - "Create tests/test_agents.py before implementation."
+      - "Specify Agent identity validation, reserved built-ins, default Mia, CRUD/default selection, native/legacy precedence, atomic persistence, Session fallback, and secret-free serialization."
+      - "Use temporary homes and existing legacy Profile/Session fixtures; do not touch the real user home."
+    files:
+      - tests/test_agents.py
+      - tests/test_profiles.py
+      - tests/test_sessions.py
+    verify: >-
+      uv run --offline pytest tests/test_agents.py -k
+      'model or default_mia or reserved or legacy or persist or session or secret'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s01 Named Agent Vertical Slice"
+      sub_suite: "Agent contracts"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Named Agent Vertical Slice"
+      feature: "Canonical Agent identity"
+      tags: [e04, e04s01, agent, contract, persistence, security]
+
+  - id: e04s01t02
+    title: "Implement Agent and AgentManager with additive compatibility"
+    status: failing
+    agent_type: "python-domain-engineer"
+    risk: high
+    depends_on: [e04s01t01]
+    story_steps: [2]
+    scenarios:
+      - SC-e04s01-P0-01
+      - SC-e04s01-P0-02
+      - SC-e04s01-P0-03
+      - SC-e04s01-P0-04
+      - SC-e04s01-P0-05
+      - SC-e04s01-P1-07
+    work:
+      - "Create the canonical Agent model and AgentManager using the existing small model/manager split."
+      - "Move built-in source-of-truth definitions to Agent; keep AgentProfile/ProfileManager as thin compatibility aliases or adapters."
+      - "Reserve built-in IDs, validate path-safe IDs, make writes atomic, and report native/legacy collisions deterministically."
+      - "Project legacy custom Profile JSON into Agent without rewriting it; explicit save creates native data only."
+      - "Exclude secret values from the Agent schema and serialization."
+    files:
+      - src/mia_agent/agents/__init__.py
+      - src/mia_agent/agents/model.py
+      - src/mia_agent/agents/manager.py
+      - src/mia_agent/profiles/model.py
+      - src/mia_agent/profiles/manager.py
+      - tests/test_agents.py
+      - tests/test_profiles.py
+    verify: >-
+      uv run --offline pytest tests/test_agents.py tests/test_profiles.py -k
+      'builtin or compatib or create or list or show or use or delete or reserved or secret'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s01 Named Agent Vertical Slice"
+      sub_suite: "Agent registry"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Named Agent Vertical Slice"
+      feature: "Agent persistence and compatibility"
+      tags: [e04, e04s01, agent, manager, migration, path-safety]
+
+  - id: e04s01t03
+    title: "Route runtime and Sessions through Agent ownership"
+    status: failing
+    agent_type: "runtime-persistence-engineer"
+    risk: high
+    depends_on: [e04s01t02]
+    story_steps: [3]
+    scenarios:
+      - SC-e04s01-P0-02
+      - SC-e04s01-P0-04
+      - SC-e04s01-P0-05
+      - SC-e04s01-P1-07
+    work:
+      - "Resolve runtime configuration through AgentManager rather than a second Profile source of truth."
+      - "Write new Sessions under Agent homes and resolve existing Sessions through native-first legacy fallback."
+      - "Preserve provider resolution, Tool filtering, middleware, compaction, append-only replay, and active-path behavior."
+      - "Persist Agent attribution without copying credential values."
+    files:
+      - src/mia_agent/orchestration.py
+      - src/mia_agent/session/entries.py
+      - src/mia_agent/session/jsonl.py
+      - src/mia_cli/repl.py
+      - tests/test_agents.py
+      - tests/test_orchestration.py
+      - tests/test_sessions.py
+    verify: >-
+      uv run --offline pytest tests/test_agents.py tests/test_orchestration.py tests/test_sessions.py -k
+      'agent or factory or resume or session or legacy or secret'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s01 Named Agent Vertical Slice"
+      sub_suite: "Runtime and Sessions"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Named Agent Vertical Slice"
+      feature: "Agent-owned execution"
+      tags: [e04, e04s01, runtime, session, compatibility]
+
+  - id: e04s01t04
+    title: "Enforce default Mia approval-required behavior"
+    status: failing
+    agent_type: "security-middleware-engineer"
+    risk: high
+    depends_on: [e04s01t02]
+    story_steps: [4]
+    scenarios:
+      - SC-e04s01-P0-01
+      - SC-e04s01-P0-06
+    work:
+      - "Add the minimal frontend-independent approval callback and policy middleware contract."
+      - "Allow read_file automatically for default Mia; require approval for write_file, edit_file, and bash."
+      - "Reject side effects when approval is denied or unavailable."
+      - "Keep SecurityGuard and capability filtering active after approval."
+    files:
+      - src/mia_middleware/access.py
+      - src/mia_middleware/pipeline.py
+      - src/mia_agent/orchestration.py
+      - src/mia_cli/main.py
+      - src/mia_cli/repl.py
+      - tests/test_access_policy.py
+      - tests/test_middleware_pipeline.py
+    verify: >-
+      uv run --offline pytest tests/test_access_policy.py tests/test_middleware_pipeline.py -k
+      'approval or default_mia or read_only or missing_callback or security'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s01 Named Agent Vertical Slice"
+      sub_suite: "Default access"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Named Agent Vertical Slice"
+      feature: "Approval-required default"
+      tags: [e04, e04s01, approval, middleware, security]
+
+  - id: e04s01t05
+    title: "Expose the Agent lifecycle in CLI and REPL"
+    status: failing
+    agent_type: "cli-integration-engineer"
+    risk: medium
+    depends_on: [e04s01t03, e04s01t04]
+    story_steps: [5]
+    scenarios:
+      - SC-e04s01-P0-01
+      - SC-e04s01-P0-02
+      - SC-e04s01-P0-03
+      - SC-e04s01-P0-05
+    work:
+      - "Add canonical --agent and /agent selection."
+      - "Add mia agent create, list, show, use, and delete with actionable validation errors."
+      - "Launch Mia as default when neither command input nor saved default selects another Agent."
+      - "Keep legacy command behavior available for later warning alignment in e04s04."
+    files:
+      - src/mia_cli/main.py
+      - src/mia_cli/repl.py
+      - src/mia_cli/interactive_input.py
+      - tests/test_cli_repl.py
+      - tests/test_cli_print_mode.py
+      - tests/test_agents.py
+    verify: >-
+      uv run --offline pytest tests/test_agents.py tests/test_cli_repl.py tests/test_cli_print_mode.py -k
+      'agent or default_mia or create or list or show or use or delete'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s01 Named Agent Vertical Slice"
+      sub_suite: "CLI lifecycle"
+      severity: critical
+      epic: "Agent-Centric Foundation"
+      story: "Named Agent Vertical Slice"
+      feature: "Agent commands"
+      tags: [e04, e04s01, cli, repl, agent]
+
+  - id: e04s01t06
+    title: "Close Agent slice compatibility and quality gates"
+    status: failing
+    agent_type: "release-verification-engineer"
+    risk: high
+    depends_on: [e04s01t03, e04s01t04, e04s01t05]
+    story_steps: [6]
+    scenarios:
+      - SC-e04s01-P0-01
+      - SC-e04s01-P0-02
+      - SC-e04s01-P0-03
+      - SC-e04s01-P0-04
+      - SC-e04s01-P0-05
+      - SC-e04s01-P0-06
+      - SC-e04s01-P1-07
+    work:
+      - "Run the Agent, Profile, Session, middleware, orchestration, CLI, and e2e regression suites."
+      - "Verify no source file or fixture contains copied provider secrets."
+      - "Confirm format, lint, and strict source typing before changing task status."
+    files:
+      - tests/test_agents.py
+      - tests/test_profiles.py
+      - tests/test_sessions.py
+      - tests/test_access_policy.py
+      - tests/test_orchestration.py
+      - tests/test_cli_repl.py
+      - tests/test_cli_print_mode.py
+      - tests/test_e2e_scenarios.py
+    verify: >-
+      uv run --offline ruff format --check .
+      && uv run --offline ruff check .
+      && uv run --offline mypy src
+      && uv run --offline pytest tests/test_agents.py tests/test_profiles.py tests/test_sessions.py
+      tests/test_access_policy.py tests/test_middleware_pipeline.py tests/test_orchestration.py
+      tests/test_cli_repl.py tests/test_cli_print_mode.py tests/test_e2e_scenarios.py
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s01 Named Agent Vertical Slice"
+      sub_suite: "Verification"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Named Agent Vertical Slice"
+      feature: "Compatibility and quality gate"
+      tags: [e04, e04s01, regression, quality, security]

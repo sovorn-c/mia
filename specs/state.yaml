@@ -1,23 +1,26 @@
 workflow_mode: solo-git
 session:
   active_flow: plan
-  active_epic_id: null
-  active_story_id: null
-  target_version: 0.3.0
+  active_epic_id: e04
+  active_story_id: e04s01
+  target_version: 0.4.0
 handoff:
-  next_skill: plan-release
-  summary: Epic e03 and BUG-001 remain complete. e04 scope now defines native orchestration
-    Run identity and lifecycle hardening; the prior e03 scope is preserved as a product snapshot.
-    Ready to sequence e04 before slicing stories.
+  next_skill: kickoff-branch
+  summary: >
+    Agent-centric vision and e04 scope are approved. The complete e04 planning capsule contains
+    four ordered failing stories, 24 implementation tasks, 32 acceptance scenarios, explicit
+    Agent/access/Delegation/compatibility contracts, and a high-risk impact assessment. Begin with
+    e04s01 contract tests on an isolated feature branch; do not destructively migrate legacy
+    Profile or Session data.
 git:
   branch: main
 metrics:
   story_start: '2026-09-01T08:57:36Z'
   skill_timings:
     plan-work:
-      calls: 2
-      total_seconds: 275.0
-      avg_seconds: 137.5
+      calls: 3
+      total_seconds: 10599.0
+      avg_seconds: 3533.0
     develop-tdd:
       calls: 3
       total_seconds: 3577.0

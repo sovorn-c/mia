@@ -1,51 +1,61 @@
-# specs/planning-context.yaml — written by elaborate-spec; consumed by scope-work and slice-tasks
-feature_name: "Mia Canonical Orchestration Domain Foundation"
+# specs/planning-context.yaml — active planning context for e04 Agent-Centric Foundation
+feature_name: "Agent-Centric Foundation"
 problem_statement: >
-  Mia has settled orchestration vocabulary, but lifecycle identity, ownership, states,
-  legal transitions, terminal outcomes, and recovery semantics remain fragmented across
-  runtime models, typed events, session trees, architecture prose, and legacy herd concepts.
+  Mia's approved product model has one canonical identity, Agent, while the implementation still
+  exposes Profile and Mode as primary concepts, does not enforce its permission labels, stores no
+  native Agent homes, and offers only fixed research composition rather than direct Delegation.
 actors:
-  - "Mia maintainers"
-  - "Feature planners"
-  - "Future plugin and workflow authors"
+  - "Everyday users working with the default Mia Agent"
+  - "Users creating coding, research, review, or domain specialist Agents"
+  - "Agent designers configuring capability and access boundaries"
+  - "Mia runtime, security, Session, CLI, and future Plugin maintainers"
 solution_summary: >
-  Standardize the orchestration and execution domain language, entity relationships,
-  semantic state models, legal transitions, failure propagation, and invariants without
-  changing runtime code or requiring new persistence.
+  Introduce additive named Agent identity and storage with default Mia; enforce read-only,
+  approval-required, and full-access while keeping secrets machine-global; add one synchronous
+  one-hop attributable Delegation primitive; and move preferred runtime/CLI language to Agent while
+  retaining Profile/Mode data and commands as non-destructive v0.4 compatibility adapters.
 constraints:
-  - "Preserve the invariant: Mode composes; Profile configures; Workflow coordinates; Agent executes; Plugin extends."
-  - "Treat lifecycle states as normative semantics derivable from typed events today."
-  - "Mark durable run/task state persistence and restart recovery as deferred."
-  - "Preserve current event payloads, session formats, public APIs, and existing specification content."
-  - "Keep exactly one final coordinator stage and at most one specialist stage in the current workflow contract."
-  - "Keep AgentHarness responsible for exactly one agent and independent from terminal UI code."
-  - "Keep root and child transcripts in append-only JSONL session trees."
+  - "Agent is the only target identity term; Assistant, Profile, Bot, Agent Instance, and Mode are not new target entities."
+  - "Default Mia enables read_file, write_file, edit_file, and bash under approval-required access."
+  - "Having no Tools is Capability Scope configuration, not another access level."
+  - "Provider secrets stay in the machine-global credential store; Agent and Task data contains references only."
+  - "Full-access bypasses per-action approval only and never disables permanent security or integrity rules."
+  - "Delegation is one synchronous bounded Task to one explicit eligible recipient with no recursion."
+  - "Legacy Profile and Session data remains readable and is never moved, rewritten, or deleted implicitly."
+  - "AgentHarness remains a one-Agent headless loop independent from terminal UI code."
+  - "No new runtime dependency is introduced."
 out_of_scope:
-  - "Runtime implementation changes"
-  - "Persistence schemas or migrations"
-  - "Public API changes"
-  - "Continuable child agents"
-  - "Durable team mailbox and shared task DAG coordination"
-  - "Concurrent turns and active-turn cancellation"
-  - "Plugin loading"
-  - "Adoption of legacy Herd AgentState semantics"
+  - "General Plugin SDK, marketplace, and remote installation"
+  - "Persistent teams, mailboxes, queues, retries, and DAG orchestration"
+  - "Parallel or recursive Delegation and background automation"
+  - "External channels, browser automation, email, calendars, and schedules"
+  - "OS/process/filesystem/network sandboxing"
+  - "Per-Agent copied credential stores"
+  - "General workflow builders or public Mode configuration"
 success_criteria:
-  - "Every core domain term has one canonical definition and explicit aliases to avoid."
-  - "Entity relationships identify ownership, cardinality, and durable identity boundaries."
-  - "Every core lifecycle defines initial, active, terminal, and illegal transitions."
-  - "Failure, cancellation, and downstream-skip propagation are explicit."
-  - "Invariants distinguish current guarantees from deferred recovery semantics."
-  - "Code and specification contradictions are labeled instead of silently normalized."
-  - "Legacy herd and Textual concepts cannot become native orchestration terms by accident."
+  - "Default Mia and at least two named Agents can be created, selected, persisted, inspected, and reopened."
+  - "Exactly three access levels are enforced and missing approval fails closed."
+  - "Agent-owned state is explicit without claiming sandbox isolation."
+  - "No provider secret is persisted in Agent, Session, approval, event, audit, or Delegation artifacts."
+  - "One Agent delegates one bounded Task to an eligible Agent with monotonic access and attributable terminal outcome."
+  - "Canonical single and research journeys require no public Mode or Workflow selection."
+  - "Legacy Profile/Mode commands, imports, files, and Sessions remain usable through warning adapters."
+  - "Every prompt receives a unique Run ID while resumed Session identity remains stable."
+  - "Ruff, strict Mypy, offline pytest, package build, YAML, scope, and plan-consistency checks pass."
 key_decisions:
-  - decision: "Standardize the current native orchestration domain before adding new capabilities."
-    rationale: "Stable language and lifecycle contracts reduce ambiguity in every later orchestration feature."
-  - decision: "Cover orchestration and execution lifecycles, not the whole product surface."
-    rationale: "Providers, credentials, and terminal presentation support orchestration but do not own its core state model."
-  - decision: "Define normative semantic states without requiring persistent state records."
-    rationale: "Current typed events can derive lifecycle state while storage and recovery remain deferred."
-  - decision: "Keep specs/product/GLOSSARY_LATEST.yaml canonical."
-    rationale: "The existing specs cockpit already assigns glossary ownership there."
-  - decision: "Maintain specs/UBIQUITOUS_LANGUAGE_LATEST.md as a synchronized human-readable projection."
-    rationale: "This satisfies define-language output while retaining one declared source of truth."
-next_skill: "plan-release"
+  - decision: "Use additive Agent homes with native-first legacy fallback."
+    rationale: "This establishes ownership without risking destructive migration or data loss."
+  - decision: "Keep credentials machine-global and reference provider/account identity from Agents."
+    rationale: "Per-Agent secret copies add leakage and precedence risk without providing true sandboxing."
+  - decision: "Use read-only, approval-required, and full-access only."
+    rationale: "Capability availability and approval are separate; empty Tools already represents no capability."
+  - decision: "Ship direct one-hop synchronous Delegation before richer orchestration."
+    rationale: "It proves Agent collaboration while avoiding queues, cycles, scheduling, and recovery semantics."
+  - decision: "Redefine current Profile/Mode architecture broadly through compatibility adapters."
+    rationale: "One canonical Agent runtime prevents dual architecture while preserving existing user data and commands."
+artifacts:
+  scope: "specs/product/SCOPE_LATEST.yaml"
+  epic: "specs/epics/e04-agent-centric-foundation/epic.yaml"
+  impact: "specs/IMPACT_LATEST.md"
+  release_plan: "specs/release-plan.yaml"
+next_skill: "kickoff-branch"

@@ -1,6 +1,6 @@
 # specs/release-plan.yaml — Release index & WSJF epic sequencing
-version: "0.3.0"
-target_release: "v0.3.0-native-orchestration"
+version: "0.4.0"
+target_release: "v0.4.0-agent-centric-foundation"
 
 epics:
   - id: "e01"
@@ -44,5 +44,19 @@ epics:
     bcps_total: 12
     stories_count: 2
     directory: "specs/epics/e03-native-orchestration"
+
+  - id: "e04"
+    slug: "agent-centric-foundation"
+    title: "Agent-Centric Foundation"
+    wsjf:
+      business_value: 21
+      time_criticality: 21
+      risk_reduction: 21
+      job_size: 13
+      score: 4.8
+    status: "planned"
+    bcps_total: 29
+    stories_count: 4
+    directory: "specs/epics/e04-agent-centric-foundation"
 
 

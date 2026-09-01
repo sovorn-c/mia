@@ -1,242 +1,224 @@
-# specs/product/GLOSSARY_LATEST.yaml — canonical Mia orchestration ubiquitous language
-document:
-  title: "Mia Orchestration Ubiquitous Language"
-  status: "canonical"
-  authority: "This YAML file is the source of truth for Mia domain terminology."
-  projection: "specs/UBIQUITOUS_LANGUAGE_LATEST.md"
-  scope: "Native orchestration and agent execution"
-  domain_model: "specs/tech-architecture/tech-stack.md#10-canonical-orchestration-domain-model"
-  decision_records:
-    - "specs/adr/0001-prompt-scoped-orchestration-runs.md"
+# specs/product/GLOSSARY_LATEST.yaml — canonical Mia ubiquitous language
 
-invariant: "Mode composes; Profile configures; Workflow coordinates; Agent executes; Plugin extends."
+document:
+  title: "Mia Agent-Centric Ubiquitous Language"
+  status: "approved"
+  authority: "This YAML file is the source of truth for Mia target product terminology."
+  projection: "specs/UBIQUITOUS_LANGUAGE_LATEST.md"
+  scope: "Agent identity, capability, extension, delegation, and execution"
+  product_vision: "specs/product/VISION_LATEST.yaml"
+  current_runtime_model: "specs/tech-architecture/tech-stack.md#10-implemented-e03-orchestration-domain-model"
+  decision_note: >
+    Historical e03 artifacts and current Profile, ModeRuntime, and Workflow code describe implemented
+    behavior and are not rewritten by this product-language update.
+
+invariant: "Agent acts; Skill guides; Tool enables; Plugin extends; Agent delegates through Mia Core."
 
 classification_rules:
-  - "Mode, Profile, Workflow, and Workflow Stage are immutable definitions, not runtime state holders."
-  - "Orchestration Run, Workflow Task, Agent Instance, Turn, Step, and Tool Invocation are runtime entities."
-  - "Runtime Identity and Orchestration Event Envelope are value objects, not independent actors."
-  - "Session, Session Tree, Session Branch, and Compaction Checkpoint describe durable conversation history."
+  - "Agent is the single canonical term for a durable configured and addressable intelligent entity."
+  - "Do not create separate Assistant, Profile, or Bot domain entities."
+  - "A Run is one execution of an Agent, not a second identity concept."
+  - "A Skill is reusable instruction or procedure; a Tool is callable capability; a Plugin is installable executable code."
+  - "A Task is bounded work and Delegation routes a Task from one Agent to another through Mia Core."
+  - "Workflow is private implementation logic, not a required public product object."
+  - "Mode and Profile are current-runtime compatibility terms, not target product concepts."
+  - "Mia Core owns identity, routing, permissions, sessions, event integrity, cancellation, and truthful outcomes."
 
 terms:
-  - term: "Mode"
-    group: "Composition"
-    kind: "definition"
-    definition: "User-selected orchestration composition that binds one coordinator profile to one validated workflow and its enabled policies."
-    responsibility: "Composes"
-    avoid: ["persona", "agent preset", "profile", "runtime mode instance"]
+  - term: "Mia Core"
+    group: "Foundation"
+    kind: "platform_core"
+    definition: >
+      Lightweight runtime that owns Agent execution and routing, provider contracts, Sessions,
+      Tools, permissions, Plugins, events, cancellation, and truthful outcomes.
+    responsibility: "Provides the trusted execution and collaboration boundary"
+    avoid: ["Agent", "workflow engine", "plugin-owned runtime"]
 
-  - term: "Profile"
-    group: "Composition"
-    kind: "definition"
-    definition: "Reusable declarative configuration for one agent role, including prompt, model defaults, tools, permissions, middleware, and limits."
-    responsibility: "Configures"
-    avoid: ["mode", "workflow", "agent instance", "persona"]
+  - term: "Agent"
+    group: "Identity"
+    kind: "durable_entity"
+    identity: "agent_id"
+    definition: >
+      Durable, addressable intelligent entity combining identity, configuration, private state,
+      capabilities, access policy, Plugins, and collaboration behavior.
+    responsibility: "Receives work, acts through capabilities, and may delegate Tasks"
+    examples: ["Mia", "Research Agent", "Coding Agent", "Finance Agent", "Travel Agent"]
+    avoid: ["Assistant", "Profile", "Bot", "Agent Instance", "Mode"]
 
-  - term: "Workflow"
-    group: "Composition"
-    kind: "definition"
-    definition: "Validated ordered definition of workflow stages executed by an orchestration run."
-    responsibility: "Coordinates"
-    avoid: ["profile", "prompt template", "run", "task DAG"]
+  - term: "Skill"
+    group: "Capabilities"
+    kind: "reusable_instruction"
+    definition: "Reusable instructions, knowledge, or procedure teaching an Agent how to perform a capability."
+    responsibility: "Guides behavior"
+    avoid: ["Tool", "Plugin", "mandatory Workflow", "scheduled Routine"]
 
-  - term: "Workflow Stage"
-    group: "Composition"
-    kind: "definition"
-    definition: "Named position in a workflow that declares one profile and either specialist or coordinator responsibility."
-    responsibility: "Defines one ordered unit of coordination"
-    avoid: ["workflow task", "agent instance", "turn", "step"]
+  - term: "Tool"
+    group: "Capabilities"
+    kind: "callable_capability"
+    definition: "Callable capability exposed through Mia Core's validated invocation boundary."
+    responsibility: "Enables an Agent to act"
+    avoid: ["Skill", "Plugin package", "unmediated function call"]
 
   - term: "Plugin"
-    group: "Composition"
-    kind: "definition"
-    definition: "Installable extension that contributes capabilities without owning orchestration."
-    responsibility: "Extends"
-    avoid: ["mode runtime", "agent instance", "workflow owner"]
+    group: "Extension"
+    kind: "installable_executable_extension"
+    definition: >
+      Installable executable package contributing Skills, Tools, integrations, hooks, private
+      workflows, Agent templates, or other declared capabilities.
+    responsibility: "Extends Agents through explicit installation and enablement"
+    avoid: ["Agent identity", "core runtime owner", "permission bypass"]
 
-  - term: "Mode Runtime"
-    group: "Composition"
-    kind: "domain_service"
-    definition: "Headless domain service that resolves a mode, executes its workflow, and emits attributable orchestration events."
-    responsibility: "Runs modes"
-    avoid: ["HerdManager", "terminal UI", "agent instance", "orchestration run"]
+  - term: "Agent Template"
+    group: "Extension"
+    kind: "distributable_definition"
+    definition: >
+      Shareable starting definition that becomes an independently configured Agent when installed,
+      without carrying another user's private credentials, memory, or Sessions.
+    responsibility: "Distributes a reusable Agent design"
+    avoid: ["running Agent", "shared private state", "Plugin runtime"]
 
-  - term: "Orchestration Run"
+  - term: "Task"
+    group: "Collaboration"
+    kind: "runtime_entity"
+    identity: "task_id"
+    definition: "Bounded work assigned to an Agent with one attributable terminal outcome."
+    responsibility: "Owns one bounded unit of work"
+    avoid: ["backlog task", "Skill", "Workflow Stage", "unbounded conversation"]
+
+  - term: "Delegation"
+    group: "Collaboration"
+    kind: "core_protocol"
+    definition: >
+      Core-mediated assignment of a Task from one Agent to another with attributable input, output,
+      permission context, failure, rejection, cancellation, and timeout semantics.
+    responsibility: "Coordinates Agents without requiring a public workflow graph"
+    avoid: ["unattributed prompt injection", "shared mutable Session", "silent privilege escalation"]
+
+  - term: "Run"
     group: "Execution"
-    kind: "entity"
+    kind: "runtime_entity"
     identity: "run_id"
-    definition: "One execution of a resolved mode and workflow for one submitted prompt."
-    responsibility: "Owns workflow progress and terminal outcome"
-    avoid: ["CLI run", "session", "turn", "agent run"]
-
-  - term: "Workflow Task"
-    group: "Execution"
-    kind: "entity"
-    identity: "task_id within one orchestration run"
-    definition: "Run-specific execution of one workflow stage by one agent instance."
-    responsibility: "Owns one stage execution outcome"
-    avoid: ["workflow stage", "backlog task", "turn", "step", "subagent"]
-
-  - term: "Agent Instance"
-    group: "Execution"
-    kind: "entity"
-    identity: "agent_id within one orchestration run"
-    definition: "One logical AgentHarness executor with one runtime identity, profile, context, and session."
-    responsibility: "Executes"
-    avoid: ["agent", "profile", "mode", "workflow", "ManagedAgent"]
+    definition: "One prompt- or Task-scoped execution of one Agent."
+    responsibility: "Owns execution progress and one truthful terminal outcome"
+    avoid: ["Agent identity", "CLI command", "Session", "long-lived process"]
 
   - term: "Runtime Identity"
     group: "Execution"
     kind: "value_object"
-    definition: "Immutable attribution tuple joining mode, run, task, agent, profile, session, and optional parent session identifiers."
-    responsibility: "Attributes one agent instance"
-    avoid: ["agent state", "session metadata", "event envelope"]
+    definition: >
+      Immutable attribution identifying the Run, executing Agent, Session, and optional caller Agent
+      and delegated Task.
+    responsibility: "Attributes execution and collaboration events"
+    avoid: ["Agent configuration", "Session metadata", "display-only label"]
 
-  - term: "Orchestration Event Envelope"
+  - term: "Event Envelope"
     group: "Execution"
     kind: "value_object"
-    definition: "Attribution wrapper that retains one unchanged agent event or orchestration error with runtime identity fields."
-    responsibility: "Makes emitted events attributable"
-    avoid: ["agent event", "herd event", "message envelope"]
-
-  - term: "Coordinator"
-    group: "Execution roles"
-    kind: "role"
-    definition: "Required final workflow role that produces the orchestration run's user-facing result."
-    responsibility: "Synthesizes the final result"
-    avoid: ["lead agent", "root agent", "mode runtime"]
-
-  - term: "Specialist"
-    group: "Execution roles"
-    kind: "role"
-    definition: "Optional non-final workflow role that produces task-local input for the coordinator."
-    responsibility: "Produces delegated input"
-    avoid: ["coordinator", "teammate", "worker pool"]
-
-  - term: "One-shot Specialist"
-    group: "Execution roles"
-    kind: "agent_lifecycle"
-    definition: "Task-local specialist agent instance that returns one result and cannot accept later prompts."
-    responsibility: "Executes one delegated workflow task"
-    avoid: ["continuable child", "persistent teammate", "durable worker"]
-
-  - term: "Continuable Child"
-    group: "Execution roles"
-    kind: "deferred_entity"
-    definition: "Deferred child agent identity that can accept later prompts and be reconstructed after process restart."
-    responsibility: "Deferred beyond the canonical foundation"
-    avoid: ["one-shot specialist", "workflow task"]
+    definition: "Attribution wrapper retaining one unchanged agent, Tool, Delegation, or core event."
+    responsibility: "Makes emitted activity attributable"
+    avoid: ["chat message", "mutable status record", "unattributed log"]
 
   - term: "Session"
     group: "Conversation"
-    kind: "entity"
+    kind: "durable_entity"
     identity: "session_id"
-    definition: "Durable conversation history shared by sequential agent instances in one conversation lineage."
-    responsibility: "Persists conversation context across agent instances"
-    avoid: ["orchestration run", "turn", "transcript file", "workflow task"]
+    definition: "Durable conversation history owned under a defined Agent boundary and reusable across Runs."
+    responsibility: "Persists context without becoming an Agent or Run"
+    avoid: ["Agent", "Run", "transcript file", "active process"]
 
   - term: "Session Tree"
     group: "Conversation"
     kind: "aggregate"
-    definition: "Append-only directed tree of session entries with one active root-to-leaf path."
+    definition: "Append-only directed tree of immutable Session Entries with one active root-to-leaf path."
     responsibility: "Owns durable conversation branching"
-    avoid: ["session", "conversation list", "run tree"]
-
-  - term: "Session Branch"
-    group: "Conversation"
-    kind: "entity_path"
-    identity: "active leaf entry identifier"
-    definition: "One root-to-leaf path through a session tree used to reconstruct active context."
-    responsibility: "Selects replay context"
-    avoid: ["Git branch", "session", "child session"]
-
-  - term: "Session Entry"
-    group: "Conversation"
-    kind: "entity"
-    identity: "entry id"
-    definition: "Immutable append-only node containing a message, compaction, session metadata, leaf pointer, or namespaced extension."
-    responsibility: "Records one durable history fact"
-    avoid: ["event", "chat message", "checkpoint"]
-
-  - term: "Compaction Checkpoint"
-    group: "Conversation"
-    kind: "session_entry"
-    definition: "Session entry containing a summary that replaces earlier entries during active-path replay."
-    responsibility: "Reduces replay context without rewriting history"
-    avoid: ["session snapshot", "deleted history", "summary message"]
+    avoid: ["Agent hierarchy", "Run tree", "mutable transcript"]
 
   - term: "Turn"
-    group: "Agent execution"
-    kind: "entity"
-    identity: "turn_index within one agent instance"
-    definition: "One user prompt and the agent activity required to reach one terminal turn outcome."
-    responsibility: "Owns ordered execution steps"
-    avoid: ["orchestration run", "workflow task", "message", "request"]
+    group: "Execution"
+    kind: "runtime_entity"
+    identity: "turn_index within one Run"
+    definition: "One input and the Agent activity needed to reach one terminal Turn outcome."
+    responsibility: "Owns ordered model interaction Steps"
+    avoid: ["Run", "Task", "message"]
 
   - term: "Step"
-    group: "Agent execution"
-    kind: "entity"
-    identity: "step_index within one turn"
-    definition: "One model interaction within a turn, including any requested tool invocations and token usage."
-    responsibility: "Advances a turn"
-    avoid: ["workflow stage", "workflow task", "turn", "tool call"]
+    group: "Execution"
+    kind: "runtime_entity"
+    identity: "step_index within one Turn"
+    definition: "One model interaction within a Turn, including requested Tool Invocations and usage."
+    responsibility: "Advances a Turn"
+    avoid: ["Workflow Stage", "Task", "Turn"]
 
   - term: "Tool Invocation"
-    group: "Agent execution"
-    kind: "entity"
-    identity: "call_id within one step"
-    definition: "One model-requested tool execution carried through middleware to one success or error result."
+    group: "Execution"
+    kind: "runtime_entity"
+    identity: "call_id within one Step"
+    definition: "One model-requested Tool execution carried through core policy and middleware to a terminal result."
     responsibility: "Executes one authorized capability request"
-    avoid: ["workflow task", "step", "bash process", "tool definition"]
+    avoid: ["Task", "Step", "unmediated Plugin call"]
 
-  - term: "Lifecycle State"
-    group: "State semantics"
-    kind: "value"
-    definition: "Derived semantic position of a runtime entity based on its emitted events and terminal outcome."
-    responsibility: "Constrains legal transitions"
-    avoid: ["event", "status message", "legacy AgentState"]
+  - term: "Access Policy"
+    group: "Trust"
+    kind: "policy"
+    definition: >
+      One of read-only, approval-required, or full-access, governing whether enabled capabilities
+      may mutate state and whether side effects require confirmation.
+    responsibility: "Controls approval and mutation while Capability Scope defines which capabilities exist"
+    avoid: ["Agent", "sandbox", "Tool allowlist", "no-tools access level"]
+
+  - term: "Capability Scope"
+    group: "Trust"
+    kind: "policy"
+    definition: "Declared Tools, Plugins, resources, and delegation targets an Agent may use."
+    responsibility: "Bounds available capability"
+    avoid: ["Access Policy", "identity", "system prompt"]
 
   - term: "Terminal Outcome"
     group: "State semantics"
     kind: "value"
-    definition: "Final success, failure, or cancellation result after which a runtime entity cannot transition again."
-    responsibility: "Closes a lifecycle"
-    avoid: ["done state", "stop reason", "error event"]
+    definition: "Final success, failure, rejection, cancellation, timeout, or skip result after which an entity cannot transition."
+    responsibility: "Closes a Run, Task, Turn, or Tool Invocation truthfully"
+    avoid: ["done", "stop reason", "status message"]
 
-  - term: "Skipped"
-    group: "State semantics"
-    kind: "task_outcome"
-    definition: "Workflow task outcome indicating execution never started because an upstream task failed or was cancelled."
-    responsibility: "Explains unexecuted downstream work"
-    avoid: ["cancelled", "failed", "pending"]
+non_canonical_terms:
+  - term: "Assistant"
+    resolution: "Use Agent. Assistant may remain ordinary descriptive prose only."
+  - term: "Profile"
+    resolution: "Use Agent in the target model. Profile describes current implementation until migration."
+  - term: "Bot"
+    resolution: "Use Agent. Bot may describe a messaging-channel presentation only."
+  - term: "Agent Instance"
+    resolution: "Use Agent for identity and Run for one execution."
+  - term: "Routine"
+    resolution: "Use Skill for a reusable procedure; scheduling is a separate future capability."
+  - term: "Workflow"
+    resolution: "Use only for private multi-step logic inside an Agent, Skill, or Plugin."
+  - term: "Mode"
+    resolution: "Use only when documenting current ModeRuntime behavior; do not add it to the target model."
 
 relationships:
-  - "A Mode binds exactly one Workflow and one coordinator Profile."
-  - "A Workflow contains one or more ordered Workflow Stages."
-  - "The current Workflow contract has exactly one final Coordinator stage and at most one Specialist stage."
-  - "An Orchestration Run resolves exactly one Mode and executes reached Workflow Stages as Workflow Tasks."
-  - "Each Workflow Task is executed by exactly one Agent Instance using exactly one Profile and Session."
-  - "A Session can be reopened by sequential Agent Instances across multiple Orchestration Runs."
-  - "A research Orchestration Run creates one One-shot Specialist before its Coordinator."
-  - "A child Session references its parent Session without merging either Session Tree."
-  - "A Session Tree contains immutable Session Entries and selects one active Session Branch."
-  - "A Turn belongs to one Agent Instance and contains ordered Steps."
-  - "A Step can produce zero or more Tool Invocations."
-  - "Every emitted agent event is retained inside one Orchestration Event Envelope."
+  - "An Agent selects Skills, Tools, Plugins, Access Policy, and Capability Scope."
+  - "One Agent can own multiple Sessions and execute multiple sequential Runs."
+  - "A Plugin may contribute an Agent Template but does not become the installed Agent."
+  - "A Skill may describe a procedure; a Plugin may execute one; neither requires Workflow as a public object."
+  - "One caller Agent delegates one Task to one recipient Agent through Mia Core."
+  - "Mia Core enforces identity, routing, permissions, attribution, Session integrity, and Terminal Outcomes."
+  - "A Plugin cannot silently expand the Capability Scope of an Agent that enables it."
+  - "A Run executes exactly one Agent and may originate from direct input or a delegated Task."
+  - "A Session preserves history across Runs under explicit Agent ownership rules."
+  - "A Turn belongs to one Run and may produce Tool Invocations or Delegations."
+  - "Profile, Mode, and ModeRuntime describe current implementation only and must not drive new target design."
 
 flagged_ambiguities:
-  - term: "Agent"
-    resolution: "Use Agent Instance for the executor, Profile for configuration, and Mia for the product."
-  - term: "Run"
-    resolution: "Use Orchestration Run for domain execution and `mia run` only for the CLI command."
+  - term: "Agent scope"
+    resolution: "Agent combines durable identity and configuration; Run is its temporary execution."
+  - term: "Plugin freedom"
+    resolution: "Plugins may implement broad domain behavior but remain constrained by core security, permission, attribution, and lifecycle contracts."
+  - term: "Agent isolation"
+    resolution: "Agent is a logical identity and state boundary; filesystem or process isolation must be implemented and claimed separately."
   - term: "Task"
-    resolution: "Use Workflow Task for stage execution and backlog task for planning work."
-  - term: "Stage"
-    resolution: "Use Workflow Stage for a definition and Workflow Task for its run-specific execution."
-  - term: "Coordinator"
-    resolution: "Use Coordinator for the role; say coordinator stage or coordinator agent instance when identity matters."
-  - term: "Specialist"
-    resolution: "Use One-shot Specialist for the current lifecycle and Continuable Child only for the deferred capability."
+    resolution: "Use Task for runtime work assigned to an Agent and backlog task for planning work."
+  - term: "Run"
+    resolution: "Use Run for Agent execution and `mia run` only for the CLI command."
   - term: "Session"
-    resolution: "Use Session for durable conversation history, Session Tree for storage shape, and Session Branch for replay selection."
-  - term: "State"
-    resolution: "Use Lifecycle State for derived domain semantics; never import legacy Herd AgentState into native orchestration."
+    resolution: "Use Session for durable history, not Agent identity or active execution."

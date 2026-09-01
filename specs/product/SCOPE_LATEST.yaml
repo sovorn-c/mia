@@ -1,106 +1,180 @@
-# specs/product/SCOPE_LATEST.yaml — Bounded PRD for Mia orchestration lifecycle hardening
+# specs/product/SCOPE_LATEST.yaml — Bounded PRD for Mia Agent-Centric Foundation
 initiative_id: "e04"
-initiative_name: "Native Orchestration Run Identity and Lifecycle"
-status: "proposed"
+initiative_name: "Agent-Centric Foundation"
+status: "approved"
+supersedes: "specs/product/snapshots/SCOPE_e04-native-orchestration-run-lifecycle.yaml"
 
 core_value: >
-  Make every Mia prompt produce a trustworthy, uniquely attributable orchestration result so
-  maintainers and future workflow authors can reason about success, failure, and recovery.
+  Let users create and work with durable named Agents, including the default Mia Agent, and let one
+  Agent safely delegate a bounded Task to another without exposing Mode or Workflow concepts.
 
 summary: >
-  Mia's native orchestration vocabulary now defines an Orchestration Run as one prompt-scoped
-  execution and a Session as durable history that can span sequential runs. The implementation
-  still reuses run identity in interactive single mode and does not expose enough typed lifecycle
-  evidence to distinguish successful completion from limits, provider errors, cancellation, or
-  unstarted downstream work.
+  Mia's approved product identity now centers one canonical object: the Agent. An Agent combines a
+  durable identity with configuration, state, capabilities, access policy, and an address for
+  receiving Tasks. Mia is the default personal Agent; coding, research, review, and other roles are
+  named specialist Agents. Agent-to-Agent Delegation is the primary coordination primitive, while
+  Workflow remains private implementation logic and Mode is absent from the target product model.
 
-  This initiative aligns observable native behavior with the canonical domain model. It covers
-  unique run identity, attributable lifecycle outcomes, and truthful failure propagation across
-  the existing single and research modes. It preserves the current one-agent AgentHarness seam,
-  append-only sessions, profile permissions, middleware, and terminal adapters.
+  The current product still exposes Profile and Mode concepts and supports only a fixed research
+  sequence. This initiative establishes the smallest meaningful Agent-centered foundation: named
+  Agent lifecycle, a default Mia Agent, compatibility for existing Profiles, explicit Agent-owned
+  state and access boundaries, and one synchronous attributable Delegation path. It preserves
+  current working capabilities while creating a stable seam for later Plugins and richer teams.
 
 actors:
-  - "Mia users who need reliable completion and failure behavior"
-  - "Mia maintainers evolving ModeRuntime and AgentHarness"
-  - "Future workflow and plugin authors consuming attributed events"
+  - "Everyday users working with the default Mia Agent"
+  - "Users creating specialist Agents for coding, research, review, or domain work"
+  - "Agent designers configuring identity, capabilities, state, and access"
+  - "Future Plugin developers extending Agents through a stable core boundary"
 
 in_scope:
   - id: "e04s01"
-    name: "Prompt-Scoped Run Identity"
+    name: "Named Agent Vertical Slice"
     description: >
-      Every submitted prompt receives one unique Orchestration Run identity across interactive,
-      headless, and resumed-session paths. Sequential runs may share a Session without sharing a
-      run identity, and existing event attribution remains intact.
+      Agent becomes the canonical configurable and addressable product object. Users can create,
+      list, inspect, select, and persist named Agents, and a default personal Agent named Mia works
+      without prior configuration. Existing built-in Profiles remain usable through a documented,
+      non-destructive compatibility path.
+
   - id: "e04s02"
-    name: "Truthful Native Lifecycle Outcomes"
+    name: "Agent-Owned State and Access Boundary"
     description: >
-      Native orchestration exposes unambiguous terminal outcomes for Runs, Workflow Tasks, Agent
-      Instances, Turns, Steps, and Tool Invocations. Limits and unrecovered errors cannot appear
-      as success; recoverable tool failures remain distinguishable from policy rejection and
-      downstream unstarted work is represented as Skipped.
+      Each Agent has an explicit ownership boundary for identity, instructions, model defaults,
+      capabilities, Plugin references, access level, Sessions, memory, credential references, and
+      channel identity where supported. The contract distinguishes logical Agent ownership from
+      filesystem or process sandboxing, keeps provider secrets machine-global by reference, and
+      supports read-only, approval-required, and full-access without silent escalation.
+
+  - id: "e04s03"
+    name: "Direct Agent-to-Agent Delegation"
+    description: >
+      One Agent can synchronously assign one bounded Task to one eligible recipient Agent and
+      receive one attributable terminal result. Caller, recipient, Task, Run, Session, access
+      context, rejection, failure, cancellation, and timeout remain distinguishable. Delegation
+      does not require users to define a Mode or public Workflow.
+
+  - id: "e04s04"
+    name: "Agent-First Compatibility Migration"
+    description: >
+      Existing coding, architecture, minimal, single, and research behavior remains available
+      through Agents during migration. Mode and Workflow stop being target product choices and are
+      treated as compatibility or private execution behavior without breaking current Sessions,
+      Tools, middleware protections, CLI use, or headless execution.
 
 out_of_scope:
   - id: "oos-01"
-    name: "Concurrent input and per-session coordination"
-    rationale: "One-active-turn enforcement, queues, and active-turn cancellation require a separate concurrency design."
+    name: "General Plugin SDK and marketplace"
+    rationale: >
+      Deferred until the Agent boundary and one concrete extension use case prove what the Plugin
+      contract must expose; speculative extension points would lock in unnecessary complexity.
+
   - id: "oos-02"
-    name: "Session lineage and retention hardening"
-    rationale: "Parent constraints, orphan prevention, branch retention, and safe deletion need separate persistence-focused acceptance criteria."
+    name: "Persistent Agent mailboxes and ongoing conversations between Agents"
+    rationale: >
+      This initiative proves one synchronous bounded Delegation first; durable inboxes, delayed
+      delivery, and resumable peer conversations require separate lifecycle and storage design.
+
   - id: "oos-03"
-    name: "Continuable child agents and durable task DAGs"
-    rationale: "The current one-shot workflow boundary remains sufficient while lifecycle attribution is stabilized."
+    name: "Parallel teams, group coordination, and Task DAGs"
+    rationale: >
+      Concurrency, fan-out, merge semantics, scheduling, and partial failure are deferred until the
+      direct Delegation contract is trustworthy.
+
   - id: "oos-04"
-    name: "Legacy Herd or full-screen UI migration"
-    rationale: "The native headless runtime remains the architecture; legacy presentation and orchestration adapters are not required for this contract."
+    name: "Background schedules and autonomous jobs"
+    rationale: >
+      Cron, routines, unattended execution, wake-up behavior, and notification delivery introduce
+      operational and approval concerns beyond the interactive Agent foundation.
+
   - id: "oos-05"
-    name: "Provider retry policy and new runtime dependencies"
-    rationale: "This initiative classifies existing outcomes and adds no new provider behavior or package dependency."
+    name: "External messaging channels and broad personal integrations"
+    rationale: >
+      Telegram, Slack, Discord, email, calendar, and browser control depend on channel-specific
+      identity, credentials, permissions, and delivery contracts not needed to prove local Agents.
+
+  - id: "oos-06"
+    name: "Filesystem or process sandbox implementation"
+    rationale: >
+      Agent ownership and capability scope are defined here, but Docker, VM, OS-user, and per-Agent
+      process isolation require a separate security and execution initiative.
+
+  - id: "oos-07"
+    name: "Arbitrary workflow authoring"
+    rationale: >
+      Users coordinate Agents through Delegation. Multi-step workflow engines, visual builders,
+      branching graphs, and user-authored orchestration languages are not required for this model.
+
+  - id: "oos-08"
+    name: "Comprehensive provider retry and recovery policy"
+    rationale: >
+      Delegation must report provider failure truthfully, but automatic retries, fallback routing,
+      circuit breakers, and restart recovery need separate product decisions.
 
 constraints:
-  - "Preserve the invariant: Mode composes; Profile configures; Workflow coordinates; Agent executes; Plugin extends."
-  - "AgentHarness remains a one-agent, UI-independent executor."
-  - "Existing inner AgentEvent payloads and renderer behavior remain compatible unless an explicit lifecycle contract requires an additive envelope change."
-  - "Root and child session histories remain append-only JSONL trees."
-  - "Single and research modes remain explicit and deterministic."
-  - "All visible tools remain profile-filtered and middleware-protected."
-  - "Use Python 3.12+, strict Mypy, Ruff, offline tests, and no new runtime dependency."
-  - "Preserve all existing user-authored and completed e03 artifacts; the prior e03 scope is frozen under product/snapshots/."
+  - "Use Agent as the only new canonical identity term; do not introduce Assistant, Profile, Bot, Agent Instance, or Mode as target entities."
+  - "Preserve current Profile data, ModeRuntime internals, Workflow behavior, Sessions, Tools, and CLI journeys through explicit compatibility until separately removed."
+  - "Make Agent the preferred command and configuration surface; retain Profile and Mode commands only as documented temporary aliases during e04 migration."
+  - "Use only read-only, approval-required, and full-access as access levels; having no Tools remains capability configuration."
+  - "Default Mia enables read_file, write_file, edit_file, and bash under approval-required access; reads run automatically and writes or shell side effects require confirmation."
+  - "Keep provider secrets in the machine-global credential store and store only provider/account references in Agent state or delegated Tasks."
+  - "Keep Workflow private to an Agent, Skill, or Plugin; do not require users to author orchestration graphs."
+  - "Limit Delegation to one synchronous bounded Task and one recipient per call in this initiative."
+  - "Never let Delegation or Plugin configuration silently expand caller or recipient access."
+  - "Keep Agent logical ownership distinct from claims of filesystem, process, network, or credential isolation."
+  - "Keep Agent execution headless and independent from Rich, Textual, Typer, or another UI framework."
+  - "Keep Session history append-only and preserve existing durable data without destructive migration."
+  - "Keep every visible Tool behind capability filtering, approval policy, middleware, audit, and error handling."
+  - "Use Python 3.12+, strict Mypy, Ruff, deterministic offline tests, and no new runtime dependency unless separately approved."
 
 success_criteria:
-  - "Each submitted prompt has a unique run_id, including repeated prompts in one interactive Session and prompts after resume."
-  - "Every native event and terminal outcome can be attributed to its Mode, Run, Workflow Task, Agent Instance, Profile, and Session where applicable."
-  - "A successful Run requires successful final Coordinator completion. max_steps, unrecovered provider errors, and cancellation never produce a successful Run outcome."
-  - "Research-mode specialist failure prevents Coordinator execution and records downstream work as Skipped rather than silently omitting it."
-  - "Tool execution failure, policy rejection, cancellation, and successful completion remain distinguishable without exposing credentials or sensitive provider data."
-  - "Terminal lifecycle outcomes are immutable and illegal post-terminal transitions are rejected or impossible."
-  - "Existing single-mode behavior, session replay, profile permissions, middleware, CLI rendering, and all current tests remain green."
-  - "Focused lifecycle regression tests, Ruff, strict Mypy, offline pytest, build, and specification checks pass."
+  - "Running `mia` without Agent configuration starts the default personal Agent named Mia."
+  - "A user can create, list, inspect, select, and reopen at least two named Agents with stable unique identities."
+  - "Existing coding, architect, code_mode, and minimal configurations remain available through a documented compatibility path without data loss."
+  - "The system defines and enforces which configuration and durable state belongs to each Agent, while clearly stating that logical ownership is not automatic sandboxing."
+  - "Each Agent selects read-only, approval-required, or full-access; no-Tools behavior is configured through capabilities rather than another access level."
+  - "Provider secrets remain machine-global and neither Agent files nor delegated Tasks contain copied secret values."
+  - "An Agent can delegate one bounded Task to another eligible Agent and receive one attributable result."
+  - "Direct and delegated execution have unique Run and Task identities and retain caller, recipient, Agent, Session, and access-policy attribution."
+  - "Successful, failed, rejected, cancelled, and timed-out delegated Tasks remain distinguishable and cannot be reported as success."
+  - "Delegation applies the effective caller and recipient access constraints without silent privilege escalation."
+  - "Users can perform the supported single-Agent and research journeys without selecting a Mode or defining a Workflow."
+  - "Current Sessions, Tools, middleware protections, headless execution, CLI behavior, and deterministic provider tests remain compatible."
+  - "Focused Agent and Delegation tests, Ruff, strict Mypy, offline pytest, build, and specification checks pass."
 
 references:
-  - "specs/product/snapshots/SCOPE_e03-native-orchestration.yaml"
-  - "specs/planning-context.yaml"
+  - "specs/product/VISION_LATEST.yaml"
   - "specs/product/GLOSSARY_LATEST.yaml"
+  - "specs/UBIQUITOUS_LANGUAGE_LATEST.md"
+  - "specs/product/snapshots/SCOPE_e03-native-orchestration.yaml"
+  - "specs/product/snapshots/SCOPE_e04-native-orchestration-run-lifecycle.yaml"
   - "specs/tech-architecture/tech-stack.md"
   - "specs/adr/0001-prompt-scoped-orchestration-runs.md"
 
 prior_art:
-  - candidate: "Mia native orchestration seams"
-    source: "src/mia_agent/orchestration.py and src/mia_agent/harness.py"
-    verdict: "extend"
-    notes: "ModeRuntime already owns mode routing and event envelopes; AgentHarness already owns one-agent turns and session context."
-  - candidate: "Tau reusable harness lifecycle"
-    source: "/Users/sovorn/dev/pi/pi-architecture/tau/src/tau_agent/harness.py"
-    verdict: "adopt"
-    notes: "Reject overlapping prompts, keep active-run state in the harness boundary, and expose lifecycle state separately from transcript messages."
-  - candidate: "Tau append-only session tree"
-    source: "/Users/sovorn/dev/pi/pi-architecture/tau/dev-notes/architecture/phase-7-session-tree.md"
-    verdict: "adopt"
-    notes: "Keep durable history append-only and reconstruct active context by replaying a selected root-to-leaf path."
-  - candidate: "Pi stateful Agent lifecycle"
-    source: "/Users/sovorn/dev/pi/pi-architecture/pi/packages/agent/src/agent.ts"
-    verdict: "adopt"
-    notes: "Keep active-run ownership and abort state separate from the durable message transcript."
-  - candidate: "DeepSeek Harness tool outcome pipeline"
-    source: "/Users/sovorn/dev/pi/pi-architecture/deepseek-harness/packages/core/tools/src/index.ts"
+  - candidate: "Mia current AgentProfile and AgentRuntimeFactory seams"
+    source: "src/mia_agent/profiles/ and src/mia_agent/orchestration.py"
+    verdict: "extend and migrate"
+    notes: >
+      Preserve working configuration, runtime construction, Tool filtering, middleware, and Session
+      behavior while moving the canonical product boundary to Agent.
+
+  - candidate: "Hermes independent agent profiles and Bot Mode"
+    source: "https://hermes-agent.nousresearch.com/docs/user-guide/profiles"
     verdict: "adapt"
-    notes: "Preserve explicit policy, execution, cancellation, and immutable result distinctions without importing the larger plugin framework."
+    notes: >
+      Adopt durable named identity, separate state, and specialist collaboration principles without
+      adopting Profile/Bot as Mia's canonical terminology or importing Hermes's full surface.
+
+  - candidate: "Grok Bot named digital coworkers and approval choices"
+    source: "https://x.ai/news/introducing-grok-bot"
+    verdict: "adapt"
+    notes: >
+      Adopt the simple model of assigning work to named specialists and separating approvals from
+      identity without requiring cloud computers or opaque orchestration.
+
+  - candidate: "Tau and Pi one-agent execution seams"
+    source: "/Users/sovorn/dev/pi/pi-architecture/tau/src/tau_agent/harness.py and /Users/sovorn/dev/pi/pi-architecture/pi/packages/agent/src/agent.ts"
+    verdict: "adopt"
+    notes: >
+      Keep one Agent execution loop small and deterministic; add coordination through an explicit
+      Task boundary rather than merging multiple Agents into one harness.

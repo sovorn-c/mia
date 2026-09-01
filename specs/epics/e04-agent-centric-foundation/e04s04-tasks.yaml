@@ -1,0 +1,246 @@
+story_id: e04s04
+story_title: "Agent-First Compatibility Migration"
+status: failing
+requirement_delta: MODIFIED
+bcps: 5
+tasks:
+  - id: e04s04t01
+    title: "Specify AgentRunner and compatibility behavior"
+    status: failing
+    agent_type: "compatibility-test-engineer"
+    risk: high
+    depends_on: [e04s03t06]
+    story_steps: [1]
+    scenarios:
+      - SC-e04s04-P0-01
+      - SC-e04s04-P0-02
+      - SC-e04s04-P0-03
+      - SC-e04s04-P0-04
+      - SC-e04s04-P0-05
+      - SC-e04s04-P0-06
+      - SC-e04s04-P1-07
+      - SC-e04s04-P1-08
+    work:
+      - "Add failing tests for canonical AgentRunner, Agent event envelopes, unique prompt-scoped Run IDs, stable resumed Session IDs, and old metadata reads."
+      - "Specify single and Research Agent journeys plus legacy Profile/Mode command, import, built-in ID, and warning behavior."
+      - "Hash legacy fixtures before/after reads to prove no destructive rewrite."
+    files:
+      - tests/test_orchestration.py
+      - tests/test_agents.py
+      - tests/test_sessions.py
+      - tests/test_cli_repl.py
+      - tests/test_cli_print_mode.py
+      - tests/test_profiles.py
+    verify: >-
+      uv run --offline pytest tests/test_orchestration.py tests/test_agents.py tests/test_sessions.py
+      tests/test_cli_repl.py tests/test_cli_print_mode.py tests/test_profiles.py -k
+      'agent_runner or envelope or unique_run or research or compatib or warning or legacy_metadata'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s04 Agent-First Compatibility Migration"
+      sub_suite: "Migration contracts"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Agent-First Compatibility Migration"
+      feature: "Canonical and legacy parity"
+      tags: [e04, e04s04, migration, compatibility, contract]
+
+  - id: e04s04t02
+    title: "Make AgentRunner the canonical prompt path"
+    status: failing
+    agent_type: "runtime-refactor-engineer"
+    risk: high
+    depends_on: [e04s04t01]
+    story_steps: [2]
+    scenarios:
+      - SC-e04s04-P0-01
+      - SC-e04s04-P0-05
+      - SC-e04s04-P0-06
+    work:
+      - "Introduce or rename the canonical AgentRunner without duplicating AgentHarness or factory logic."
+      - "Require Agent/Run/Task/Session fields in canonical event envelopes and generate a fresh Run ID per prompt."
+      - "Keep ModeRuntime, RuntimeIdentity, and orchestration envelope imports as thin compatibility adapters where needed."
+      - "Read legacy orchestration metadata and append canonical metadata without rewriting history."
+    files:
+      - src/mia_agent/orchestration.py
+      - src/mia_agent/events.py
+      - src/mia_agent/session/entries.py
+      - src/mia_cli/main.py
+      - src/mia_cli/repl.py
+      - tests/test_orchestration.py
+      - tests/test_sessions.py
+    verify: >-
+      uv run --offline pytest tests/test_orchestration.py tests/test_sessions.py -k
+      'single or agent_runner or envelope or unique_run or resumed or compatib or legacy_metadata'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s04 Agent-First Compatibility Migration"
+      sub_suite: "Canonical runtime"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Agent-First Compatibility Migration"
+      feature: "AgentRunner and attribution"
+      tags: [e04, e04s04, runtime, events, run-id, session]
+
+  - id: e04s04t03
+    title: "Internalize Research composition behind a Research Agent"
+    status: failing
+    agent_type: "research-runtime-engineer"
+    risk: high
+    depends_on: [e04s04t02]
+    story_steps: [3]
+    scenarios:
+      - SC-e04s04-P0-02
+      - SC-e04s04-P0-03
+      - SC-e04s04-P0-06
+    work:
+      - "Add built-in Agent research and keep its specialist/coordinator sequence private to AgentRunner."
+      - "Use core Task/Delegation attribution and existing architect specialist behavior."
+      - "Map legacy --mode research plus selected Profile/Agent to the same private execution path with coordinator continuity."
+      - "Preserve stop-on-specialist-failure, cancellation, access, Tool, and Session behavior."
+    files:
+      - src/mia_agent/agents/manager.py
+      - src/mia_agent/orchestration.py
+      - src/mia_agent/delegation.py
+      - tests/test_orchestration.py
+      - tests/test_delegation.py
+    verify: >-
+      uv run --offline pytest tests/test_orchestration.py tests/test_delegation.py -k
+      'research or specialist or coordinator or legacy_mode or failure or cancellation or security'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s04 Agent-First Compatibility Migration"
+      sub_suite: "Research Agent"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Agent-First Compatibility Migration"
+      feature: "Private research composition"
+      tags: [e04, e04s04, research, delegation, compatibility]
+
+  - id: e04s04t04
+    title: "Make Agent language canonical across CLI and REPL"
+    status: failing
+    agent_type: "cli-migration-engineer"
+    risk: high
+    depends_on: [e04s04t02, e04s04t03]
+    story_steps: [4]
+    scenarios:
+      - SC-e04s04-P0-03
+      - SC-e04s04-P0-04
+      - SC-e04s04-P0-06
+      - SC-e04s04-P1-07
+    work:
+      - "Use --agent, /agent, and mia agent as the preferred interactive and print surfaces."
+      - "Remove Mode from normal canonical execution help."
+      - "Keep --profile, /profile, mia profile, --mode, code_mode, and supported Python imports as v0.4 aliases with actionable warnings."
+      - "Route every alias through canonical Agent selection and security enforcement."
+    files:
+      - src/mia_cli/main.py
+      - src/mia_cli/repl.py
+      - src/mia_cli/interactive_input.py
+      - src/mia_agent/profiles/__init__.py
+      - src/mia_agent/profiles/model.py
+      - src/mia_agent/profiles/manager.py
+      - tests/test_cli_repl.py
+      - tests/test_cli_print_mode.py
+      - tests/test_profiles.py
+      - tests/test_agents.py
+    verify: >-
+      uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py
+      tests/test_profiles.py tests/test_agents.py -k
+      'agent or profile_alias or mode_alias or warning or builtin or code_mode or security'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s04 Agent-First Compatibility Migration"
+      sub_suite: "CLI migration"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Agent-First Compatibility Migration"
+      feature: "Agent-first commands"
+      tags: [e04, e04s04, cli, repl, deprecation, aliases]
+
+  - id: e04s04t05
+    title: "Synchronize active documentation and migration guidance"
+    status: failing
+    agent_type: "technical-documentation-engineer"
+    risk: medium
+    depends_on: [e04s04t04]
+    story_steps: [5]
+    scenarios:
+      - SC-e04s04-P1-07
+      - SC-e04s04-P1-08
+    work:
+      - "Update README, current help/module descriptions, active specs, and examples to present Mia as a general-purpose local Agent core."
+      - "Document default Mia, Agent lifecycle, three access levels, global secret storage, Sessions, direct Delegation, Research Agent, and v0.4 aliases."
+      - "Leave archived initial plans, snapshots, and completed historical epic wording intact or explicitly historical."
+      - "Keep AGENTS.md and CLAUDE.md byte-for-byte identical after current guidance changes."
+    files:
+      - README.md
+      - AGENTS.md
+      - CLAUDE.md
+      - specs/product/VISION_LATEST.yaml
+      - specs/product/GLOSSARY_LATEST.yaml
+      - specs/UBIQUITOUS_LANGUAGE_LATEST.md
+      - specs/tech-architecture/tech-stack.md
+      - src/mia_cli/main.py
+      - src/mia_cli/repl.py
+    verify: >-
+      uv run --offline python -c "from pathlib import Path; assert 'Agent' in Path('README.md').read_text(); assert Path('AGENTS.md').read_bytes() == Path('CLAUDE.md').read_bytes()"
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s04 Agent-First Compatibility Migration"
+      sub_suite: "Documentation"
+      severity: critical
+      epic: "Agent-Centric Foundation"
+      story: "Agent-First Compatibility Migration"
+      feature: "Terminology and migration guidance"
+      tags: [e04, e04s04, docs, terminology, migration]
+
+  - id: e04s04t06
+    title: "Run the final e04 compatibility and quality gate"
+    status: failing
+    agent_type: "release-verification-engineer"
+    risk: high
+    depends_on: [e04s04t03, e04s04t04, e04s04t05]
+    story_steps: [6]
+    scenarios:
+      - SC-e04s04-P0-01
+      - SC-e04s04-P0-02
+      - SC-e04s04-P0-03
+      - SC-e04s04-P0-04
+      - SC-e04s04-P0-05
+      - SC-e04s04-P0-06
+      - SC-e04s04-P1-07
+      - SC-e04s04-P1-08
+    work:
+      - "Run all Agent, access, Delegation, runtime, Session, CLI, compatibility, and security tests."
+      - "Run the full project quality suite and package build."
+      - "Validate YAML/spec consistency, active terminology, legacy fixture hashes, and no copied secret values."
+    files:
+      - src/
+      - tests/
+      - README.md
+      - specs/
+      - pyproject.toml
+    verify: >-
+      uv run --offline ruff format --check .
+      && uv run --offline ruff check .
+      && uv run --offline mypy src
+      && uv run --offline pytest
+      && uv build
+      && uv run --offline python -c "import yaml; from pathlib import Path; [yaml.safe_load(p.read_text()) for p in Path('specs').rglob('*.yaml')]"
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s04 Agent-First Compatibility Migration"
+      sub_suite: "Release gate"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Agent-First Compatibility Migration"
+      feature: "e04 completion"
+      tags: [e04, e04s04, release, regression, quality, security]

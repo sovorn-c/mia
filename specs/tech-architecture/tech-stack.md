@@ -28,9 +28,9 @@ graph TD
 
 ---
 
-The canonical composition invariant is: **Mode composes; Profile configures; Workflow coordinates; Agent executes; Plugin extends.**
+The implemented e03 composition invariant is: **Mode composes; Profile configures; Workflow coordinates; Agent executes; Plugin extends.** It documents current runtime behavior, not the approved target product taxonomy. The Agent-centric direction in `specs/product/VISION_LATEST.yaml` uses Agent as the single identity term, removes public Mode, keeps Workflow internal, and centers Agent-to-Agent Delegation. The approved e04 planning capsule defines the additive compatibility migration; implementation has not started.
 
-`ModeRuntime` is the shared headless execution seam for both `mia` and `mia run`. It resolves explicit `single` or `research` workflows, delegates construction to `AgentRuntimeFactory`, and emits `OrchestrationEventEnvelope` values that retain the inner `AgentEvent`. `AgentRuntimeFactory` owns provider, profile, tools, middleware, session restoration, compaction, and lineage metadata. `AgentHarness` remains a one-agent executor with no terminal UI dependency. Research children are task-local and durable, but not continuable.
+`ModeRuntime` is the current shared headless execution seam for both `mia` and `mia run`. It resolves explicit `single` or `research` workflows, delegates construction to `AgentRuntimeFactory`, and emits `OrchestrationEventEnvelope` values that retain the inner `AgentEvent`. `AgentRuntimeFactory` owns provider, profile, tools, middleware, session restoration, compaction, and lineage metadata. `AgentHarness` remains a one-agent executor with no terminal UI dependency. Research children are task-local and durable, but not continuable.
 
 ## 2. Terminal UI Architecture & Paradigm Comparison
 
@@ -211,9 +211,9 @@ Mia uses a profile-driven execution model enforced via the `SecurityGuardMiddlew
 
 ---
 
-## 10. Canonical Orchestration Domain Model
+## 10. Implemented e03 Orchestration Domain Model
 
-`specs/product/GLOSSARY_LATEST.yaml` is the canonical terminology source. `specs/UBIQUITOUS_LANGUAGE_LATEST.md` is its human-readable projection.
+This section records the current ModeRuntime architecture and its previously accepted lifecycle semantics. `specs/product/GLOSSARY_LATEST.yaml` and `specs/UBIQUITOUS_LANGUAGE_LATEST.md` define the approved Agent-centric target language. Existing Profile, Mode, Workflow Task, Agent Instance, Coordinator, and Specialist descriptions below remain implementation evidence until the approved e04 migration replaces or internalizes them.
 
 ### Aggregate ownership
 
