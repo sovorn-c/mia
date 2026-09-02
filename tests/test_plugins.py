@@ -9,6 +9,7 @@ import pytest
 from mia_agent.agents import AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
+from mia_agent.events import ToolResultEvent
 from mia_agent.orchestration import AgentRuntimeFactory, RuntimeIdentity
 from mia_agent.plugins import PluginManager
 from mia_ai.providers.mock import MockProvider
@@ -88,3 +89,46 @@ def test_enabled_plugin_tools_are_composed_into_agent_runtime(tmp_path: Path) ->
         "note_read",
     ]
     assert [tool.plugin_id for tool in runtime.harness.tools] == ["notes"] * 3
+
+
+@pytest.mark.asyncio
+async def test_plugin_tool_uses_existing_access_policy_pipeline(tmp_path: Path) -> None:
+    agents = make_agent_manager(tmp_path)
+    agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+    plugins.install("notes")
+    plugins.enable("alpha", "notes")
+    provider = MockProvider()
+    provider.queue_tool_call_response(
+        "note_create",
+        {"title": "Private", "content": "Approval protected"},
+    )
+    provider.queue_text_response("created")
+    approvals = []
+    runtime = AgentRuntimeFactory(
+        agent_manager=agents,
+        plugin_manager=plugins,
+        config_manager=ConfigManager(
+            config_path=tmp_path / "config.json",
+            credential_store=FileCredentialStore(path=tmp_path / "credentials.json"),
+        ),
+    ).build(
+        identity=RuntimeIdentity(
+            agent_id="alpha",
+            run_id="run-1",
+            task_id="root",
+            session_id="session-1",
+        ),
+        provider=provider,
+        cwd=tmp_path,
+        approval_callback=lambda request: approvals.append(request) or True,
+    )
+
+    events = [event async for event in runtime.harness.prompt("create a note")]
+
+    result = next(event for event in events if isinstance(event, ToolResultEvent))
+    assert result.is_error is False
+    assert result.plugin_id == "notes"
+    assert approvals[0].tool_name == "note_create"
+    assert approvals[0].effect == "side-effecting"
+    assert list((tmp_path / "agents" / "alpha" / "plugins" / "notes").glob("*.json"))
