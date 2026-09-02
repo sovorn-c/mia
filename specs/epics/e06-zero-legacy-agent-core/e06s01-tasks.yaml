@@ -14,7 +14,7 @@ scenarios:
 tasks:
   - id: e06s01t01
     title: Specify Agent-only runtime contracts
-    status: failing
+    status: passing
     risk: P0
     depends_on: []
     story_steps: [1]

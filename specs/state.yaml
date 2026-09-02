@@ -6,7 +6,10 @@ session:
   target_version: 0.6.0
 handoff:
   next_skill: develop-tdd
-  summary: 'e06 Zero-Legacy Agent Core branch is isolated from a green main baseline. Execute e06s01 first with vertical red/green/refactor cycles, then advance through the dependent TUI, core removal, and project-surface stories. Keep all unverified tasks failing.'
+  summary: e06 Zero-Legacy Agent Core branch is isolated from a green main baseline.
+    Execute e06s01 first with vertical red/green/refactor cycles, then advance through
+    the dependent TUI, core removal, and project-surface stories. Keep all unverified
+    tasks failing.
 git:
   branch: e06-zero-legacy-agent-core
 metrics:
@@ -20,6 +23,7 @@ metrics:
       calls: 5
       total_seconds: 10063.0
       avg_seconds: 2012.6
+      _start: '2026-09-02T05:35:22Z'
     verify-work:
       calls: 3
       total_seconds: 1103.0
