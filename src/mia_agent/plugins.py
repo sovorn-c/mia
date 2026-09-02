@@ -127,6 +127,13 @@ class AgentTemplate(BaseModel):
             raise ValueError("Agent Templates cannot request full-access")
         return value
 
+    @model_validator(mode="after")
+    def validate_configuration_requirements(self) -> AgentTemplate:
+        unknown = set(self.plugin_config) - set(self.required_plugins)
+        if unknown:
+            raise ValueError("Template Plugin configuration has an unmet required Plugin")
+        return self
+
 
 class PluginManifest(BaseModel):
     """Strict, serializable description of one bundled Plugin."""
