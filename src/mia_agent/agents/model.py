@@ -93,6 +93,7 @@ class Agent(BaseModel):
     max_steps_per_turn: int = 25
     tools: list[str] | None = None
     plugins: list[str] = Field(default_factory=list)
+    plugin_config: dict[str, dict[str, Any]] = Field(default_factory=dict)
     access_policy: AccessLevel = Field(
         default="approval-required",
         validation_alias=AliasChoices("access_policy", "access"),
@@ -136,6 +137,17 @@ class Agent(BaseModel):
         normalized = [normalize_plugin_id(plugin_id) for plugin_id in value]
         if len(normalized) != len(set(normalized)):
             raise ValueError("Agent Plugin IDs contain duplicates")
+        return normalized
+
+    @field_validator("plugin_config")
+    @classmethod
+    def validate_plugin_config(cls, value: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        normalized: dict[str, dict[str, Any]] = {}
+        for plugin_id, config in value.items():
+            key = normalize_plugin_id(plugin_id)
+            if key in normalized:
+                raise ValueError(f"Agent Plugin configuration contains duplicate '{key}'")
+            normalized[key] = _validate_metadata(config)
         return normalized
 
     @field_validator("metadata")
