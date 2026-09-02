@@ -44,6 +44,31 @@ def test_agent_plugin_ids_are_normalized_and_unique() -> None:
         Agent(agent_id="alpha", plugins=["../notes"])
 
 
+def test_malformed_installed_plugin_state_fails_closed(tmp_path: Path) -> None:
+    agents = make_agent_manager(tmp_path)
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+    plugins.state_path.parent.mkdir(parents=True)
+    plugins.state_path.write_text("not json", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="state is invalid"):
+        plugins.list_installed()
+
+
+def test_incompatible_installed_plugin_state_fails_before_tool_build(tmp_path: Path) -> None:
+    agents = make_agent_manager(tmp_path)
+    alpha = agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+    plugins.install("notes")
+    plugins.enable(alpha.agent_id, "notes")
+    plugins.state_path.write_text(
+        '{"plugins": [{"plugin_id": "notes", "version": "9.9.9", "api_version": 1}]}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="incompatible"):
+        plugins.resolve_tools(agents.get_agent(alpha.agent_id))
+
+
 def test_bundled_notes_plugin_installs_without_network(tmp_path: Path) -> None:
     agents = make_agent_manager(tmp_path)
     plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
