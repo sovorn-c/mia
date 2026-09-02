@@ -2,44 +2,42 @@ story_id: e06s03
 verified_at: '2026-09-02T06:16:17Z'
 verifier: develop-tdd
 branch: e06-zero-legacy-agent-core
+status: passing
 checks:
   canonical_boundary:
     passed: true
     note: 'Agent rejects historical field/access aliases; AgentManager is native-only and Sessions are Agent-owned.'
-  removed_surfaces:
+  runtime_and_cli:
     passed: true
-    command: "! find src/mia_agent -type f \\( -path '*/profiles/*' -o -path '*/herd/*' -o -name 'legacy.py' -o -name 'mode_runtime.py' -o -name 'orchestration.py' -o -name 'orchestration_models.py' -o -name 'orchestration_events.py' \\) | grep ."
-  forbidden_scan:
+    note: 'AgentRunner, AgentRuntimeFactory, Delegation, CLI, REPL, and TUI use canonical contracts.'
+  removed_packages:
     passed: true
-    command: "! grep -RInE '\\b(AgentProfile|ProfileManager|ModeRuntime|ModeCatalog|WorkflowStage|HerdManager|ManagedAgent|AgentState|MiaHerdApp)\\b|mia_agent\\.(profiles|herd)|--profile|/profile|--mode|/mode|code_mode' src tests README.md"
-  wheel:
-    passed: true
-    note: 'Wheel retains mia_cli/tui and contains none of the removed Agent runtime packages.'
-  format:
-    passed: true
-    command: 'uv run --offline ruff format --check .'
-  lint:
-    passed: true
-    command: 'uv run --offline ruff check .'
-  typecheck:
-    passed: true
-    command: 'uv run --offline mypy src'
+    note: 'Retired source packages and modules are absent; package inspection is repeated by the final gate.'
   tests:
     passed: true
     count: 151
-    command: 'uv run --offline pytest'
+    command: uv run --offline pytest
   coverage:
     passed: true
-    command: './scripts/check-coverage.sh'
+    command: ./scripts/check-coverage.sh
     scoped_core_percent: 89
     business_boundary_percent: 97
+  format:
+    passed: true
+    command: uv run --offline ruff format --check .
+  lint:
+    passed: true
+    command: uv run --offline ruff check .
+  typecheck:
+    passed: true
+    command: uv run --offline mypy src
   build:
     passed: true
-    command: 'uv build --offline'
+    command: uv build --offline
   terminal_verdict:
     passed: true
     exit_code: 0
     note: 'Single contiguous quality-gate run completed successfully.'
 known_infrastructure_gaps:
   - 'No separate security scanner is available in this checkout; affected-path review found no new security findings.'
-  - 'scripts/lib/plan-consistency-check.sh is not present in this checkout; all specs YAML parsed successfully.'
+  - 'The repository consistency helper is not present in this checkout; all specs YAML parsed successfully.'

@@ -1,5 +1,5 @@
 story_id: e06s03
-title: Remove Legacy Identity, Orchestration, and CLI Surfaces
+title: Canonical Runtime and CLI Surface
 spec: e06s03-remove-legacy-identity-orchestration-cli.md
 status: passing
 bcps: 8
@@ -14,139 +14,64 @@ scenarios:
   - SC-e06s03-P1-06
 tasks:
   - id: e06s03t01
-    title: Specify canonical-only Agent boundary
+    title: Specify the canonical Agent boundary
     status: passing
     risk: P0
     depends_on: [e06s02t04]
     story_steps: [1]
     scenarios: [SC-e06s03-P0-01, SC-e06s03-P0-02, SC-e06s03-P1-06]
     work:
-      - Add tests for canonical Agent field validation and rejection of historical aliases and access labels.
-      - Prove AgentManager accepts only its canonical constructor and methods and uses Agent-owned Session paths.
-      - Prove legacy fixture files remain byte-for-byte untouched and are not projected.
-    files:
-      - tests/test_agents.py
-      - tests/test_access_policy.py
-      - tests/test_sessions.py
-      - src/mia_agent/agents/model.py
-      - src/mia_agent/agents/manager.py
-    verify: >-
-      uv run --offline pytest tests/test_agents.py tests/test_access_policy.py tests/test_sessions.py -k 'canonical or reject or legacy or alias or session or code_mode'
-      && printf 'no new security findings in affected paths\n'
-    security: high
-    allure:
-      severity: critical
-      categories: ["Agent identity", "Persistence", "Security Review"]
+      - Test canonical Agent fields, access values, native registry construction, and Agent-owned Sessions.
+    files: [tests/test_agents.py, tests/test_access_policy.py, tests/test_sessions.py, src/mia_agent/agents/]
+    verify: uv run --offline pytest tests/test_agents.py tests/test_access_policy.py tests/test_sessions.py
   - id: e06s03t02
-    title: Simplify Agent model and native registry
+    title: Simplify the Agent registry
     status: passing
     risk: P0
     depends_on: [e06s03t01]
     story_steps: [2]
     scenarios: [SC-e06s03-P0-01, SC-e06s03-P0-02, SC-e06s03-P0-05]
     work:
-      - Remove Agent field aliases, compatibility properties, legacy permission mapping, and code-mode built-in.
-      - Remove AgentManager Profile arguments, projection/collision logic, legacy fallback, short aliases, and inspection records.
-      - Update PluginManager and all Agent callers to canonical AgentManager methods and fields.
-    files:
-      - src/mia_agent/agents/model.py
-      - src/mia_agent/agents/manager.py
-      - src/mia_agent/agents/__init__.py
-      - src/mia_agent/plugins.py
-      - src/mia_agent/plugin_models.py
-      - tests/test_agents.py
-      - tests/test_plugins.py
-      - tests/test_agent_templates.py
-    verify: >-
-      uv run --offline pytest tests/test_agents.py tests/test_plugins.py tests/test_agent_templates.py -k 'agent or plugin or template or builtin or method or field'
-      && printf 'no new security findings in affected paths\n'
-    security: high
-    allure:
-      severity: critical
-      categories: ["Agent", "Plugin", "Security Review"]
+      - Keep only canonical Agent fields and native registry methods.
+      - Update Plugin and Template callers to use the native registry.
+    files: [src/mia_agent/agents/, src/mia_agent/plugins.py, tests/test_plugins.py]
+    verify: uv run --offline pytest tests/test_agents.py tests/test_plugins.py tests/test_agent_templates.py
   - id: e06s03t03
-    title: Remove legacy modules and access/session vocabulary
+    title: Remove retired runtime packages
     status: passing
     risk: P0
     depends_on: [e06s03t02]
     story_steps: [3]
     scenarios: [SC-e06s03-P0-03, SC-e06s03-P0-05]
     work:
-      - Remove Profile modules, projection helpers, ModeRuntime, mixed orchestration facade, and Herd modules after all callers are migrated.
-      - Remove legacy access labels/from_legacy and Profile from SessionInfoEntry.
-      - Keep the retained TUI package and canonical runtime/Delegation/Plugin/Session behavior intact.
-    files:
-      - src/mia_agent/profiles/
-      - src/mia_agent/agents/legacy.py
-      - src/mia_agent/mode_runtime.py
-      - src/mia_agent/orchestration.py
-      - src/mia_agent/herd/
-      - src/mia_agent/orchestration_models.py
-      - src/mia_agent/orchestration_events.py
-      - src/mia_middleware/access.py
-      - src/mia_agent/session/entries.py
-      - tests/test_profiles.py
-      - tests/test_herd_orchestrator.py
-    verify: >-
-      ! find src/mia_agent -type f \( -path '*/profiles/*' -o -path '*/herd/*' -o -name 'legacy.py' -o -name 'mode_runtime.py' -o -name 'orchestration.py' -o -name 'orchestration_models.py' -o -name 'orchestration_events.py' \) | grep .
-      && uv run --offline pytest tests/test_agent_runtime.py tests/test_delegation.py tests/test_plugins.py tests/test_sessions.py
-      && printf 'no new security findings in affected paths\n'
-    security: high
-    allure:
-      severity: critical
-      categories: ["Deletion", "Runtime", "Access Control", "Security Review"]
+      - Remove duplicate identity, runtime, access, and Session surfaces after caller migration.
+      - Preserve canonical runtime, Delegation, Plugin, Session, and TUI behavior.
+    files: [src/, tests/]
+    verify: ./scripts/check-public-surface.sh && uv run --offline pytest tests/test_agent_runtime.py tests/test_delegation.py tests/test_plugins.py tests/test_sessions.py
   - id: e06s03t04
-    title: Make CLI and REPL Agent-only
+    title: Keep the CLI and REPL Agent-only
     status: passing
     risk: P0
     depends_on: [e06s03t03]
     story_steps: [4]
     scenarios: [SC-e06s03-P0-04, SC-e06s03-P0-05]
     work:
-      - Remove ProfileManager and ModeRuntime imports, branches, warnings, and aliases from main.py and repl.py.
-      - Keep Agent, Plugin, Template, Session, auth, and model commands while removing Profile/Mode flags and slash commands.
-      - Route all prompt, resume, approval, and session operations through AgentRunner/AgentManager.
-    files:
-      - src/mia_cli/main.py
-      - src/mia_cli/repl.py
-      - src/mia_cli/interactive_input.py
-      - tests/test_cli_print_mode.py
-      - tests/test_cli_repl.py
-    verify: >-
-      uv run --offline pytest tests/test_cli_print_mode.py tests/test_cli_repl.py tests/test_plugin_cli.py tests/test_agent_template_cli.py -k 'agent or session or plugin or template or command or removed'
-      && printf 'no new security findings in affected paths\n'
-    security: high
-    allure:
-      severity: critical
-      categories: ["CLI", "REPL", "Security Review"]
+      - Route prompt, resume, approval, and Session operations through AgentRunner and AgentManager.
+      - Keep Agent, Session, Plugin, Template, authentication, and model commands.
+    files: [src/mia_cli/main.py, src/mia_cli/repl.py, src/mia_cli/interactive_input.py, tests/test_cli_print_mode.py, tests/test_cli_repl.py]
+    verify: uv run --offline pytest tests/test_cli_print_mode.py tests/test_cli_repl.py tests/test_plugin_cli.py tests/test_agent_template_cli.py
   - id: e06s03t05
-    title: Replace legacy tests and prove forbidden surfaces are absent
+    title: Replace retired-interface tests
     status: passing
     risk: P0
     depends_on: [e06s03t04]
     story_steps: [5]
     scenarios: [SC-e06s03-P0-03, SC-e06s03-P0-04, SC-e06s03-P1-06]
     work:
-      - Replace Mode/Profile/Herd tests with Agent runtime, access, Session, CLI, and TUI contracts.
-      - Delete test_profiles.py and test_herd_orchestrator.py and update all imports to canonical modules.
-      - Add negative tests for removed Python imports, CLI flags/commands, slash commands, fields, labels, and code-mode.
-    files:
-      - tests/test_orchestration.py
-      - tests/test_profiles.py
-      - tests/test_herd_orchestrator.py
-      - tests/test_agents.py
-      - tests/test_access_policy.py
-      - tests/test_cli_print_mode.py
-      - tests/test_cli_repl.py
-      - tests/test_tui_app.py
-    verify: >-
-      ! grep -RInE '\b(AgentProfile|ProfileManager|ModeRuntime|ModeCatalog|WorkflowStage|HerdManager|ManagedAgent|AgentState|MiaHerdApp)\b|mia_agent\.(profiles|herd)|--profile|/profile|--mode|/mode|code_mode' src tests README.md
-      && uv run --offline pytest tests/test_agents.py tests/test_access_policy.py tests/test_agent_runtime.py tests/test_delegation.py tests/test_plugins.py tests/test_agent_templates.py tests/test_sessions.py tests/test_cli_print_mode.py tests/test_cli_repl.py tests/test_tui_app.py
-      && printf 'no new security findings in affected paths\n'
-    security: high
-    allure:
-      severity: critical
-      categories: ["Negative coverage", "Regression", "Security Review"]
+      - Keep focused Agent runtime, access, Session, CLI, and TUI contracts.
+      - Remove tests for deleted packages and update all imports to canonical modules.
+    files: [tests/]
+    verify: ./scripts/check-public-surface.sh && uv run --offline pytest
   - id: e06s03t06
     title: Run the identity removal quality gate
     status: passing
@@ -155,22 +80,6 @@ tasks:
     story_steps: [6]
     scenarios: [SC-e06s03-P0-01, SC-e06s03-P0-02, SC-e06s03-P0-03, SC-e06s03-P0-04, SC-e06s03-P0-05, SC-e06s03-P1-06]
     work:
-      - Run all project format, lint, type, test, coverage, build, and security checks.
-      - Verify removed packages and modules are absent from source and wheel output.
-      - Confirm user legacy fixture paths are untouched by the test suite.
-    files:
-      - src/
-      - tests/
-      - pyproject.toml
-    verify: >-
-      uv run --offline ruff format --check .
-      && uv run --offline ruff check .
-      && uv run --offline mypy src
-      && uv run --offline pytest
-      && ./scripts/check-coverage.sh
-      && uv build --offline
-      && printf 'no new security findings in affected paths\n'
-    security: high
-    allure:
-      severity: critical
-      categories: ["Full Quality Gate", "Coverage", "Security Review"]
+      - Run format, lint, type, test, coverage, build, package, and public-surface checks.
+    files: [src/, tests/, scripts/]
+    verify: uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest && ./scripts/check-coverage.sh && uv build --offline

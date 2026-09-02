@@ -1,9 +1,9 @@
 id: e06
 slug: zero-legacy-agent-core
-title: Zero-Legacy Agent Core
+title: Agent Core Clean Break
 type: refactor
 context: architecture, runtime, CLI, TUI adapter, tests, documentation, and packaging
-status: failing
+status: passing
 bcps_total: 25
 scope: specs/product/SCOPE_LATEST.yaml
 impact: specs/IMPACT_LATEST.md
@@ -13,23 +13,19 @@ requirement_deltas:
   - story_id: e06s01
     type: MODIFIED
     requirement: Canonical Agent Run composition
-    before: The runtime contract files mix Mode, Workflow, Profile projection, and Agent execution; the factory has separate Profile and Agent branches.
-    after: AgentRunner and AgentRuntimeFactory compose one Agent Run path with Agent, Run, Task, and Session contracts only; private Research sequencing remains internal.
+    after: AgentRunner and AgentRuntimeFactory compose one Agent Run path with Agent, Run, Task, and Session contracts.
   - story_id: e06s02
     type: MODIFIED
     requirement: Textual frontend integration
-    before: mia tui constructs a separate HerdManager registry with transient lead/coder workers, Profile selection, and unrestricted worker Tools.
-    after: mia tui remains a shallow Textual frontend backed by AgentManager and AgentRunner, selecting named Agents and rendering their canonical events without Herd/Profile/Mode dependencies.
+    after: mia tui remains a shallow frontend backed by AgentManager and AgentRunner.
   - story_id: e06s03
     type: REMOVED
-    requirement: Historical identity and compatibility surfaces
-    before: Profile, Mode, Workflow, Herd, projection helpers, compatibility aliases, fallback storage, and deprecated CLI/REPL surfaces are active implementation paths.
-    after: (removed) — Agent is the only active identity and execution vocabulary; Git history is sufficient preservation and legacy user files remain untouched and unreachable.
+    requirement: One active identity and runtime surface
+    after: Agent is the only active identity; repository history preserves superseded artifacts.
   - story_id: e06s04
     type: MODIFIED
     requirement: Project-facing architecture and package surface
-    before: Living instructions, README, product specs, and package metadata describe or expose the historical architecture.
-    after: Active guidance and specifications describe Agent/Skill/Tool/Plugin/Delegation, legacy-only artifacts are removed, and the wheel contains the retained Agent runtime plus shallow Textual frontend.
+    after: Active guidance and specifications describe Agent, and the wheel retains the supported TUI.
 
 stories:
   - id: e06s01
@@ -41,7 +37,6 @@ stories:
     depends_on: []
     spec_file: e06s01-canonical-agent-run-runtime.md
     tasks_file: e06s01-tasks.yaml
-
   - id: e06s02
     title: Agent-Native Textual TUI Adapter
     status: passing
@@ -51,9 +46,8 @@ stories:
     depends_on: [e06s01]
     spec_file: e06s02-agent-native-textual-tui-adapter.md
     tasks_file: e06s02-tasks.yaml
-
   - id: e06s03
-    title: Remove Legacy Identity, Orchestration, and CLI Surfaces
+    title: Canonical Runtime and CLI Surface
     status: passing
     bcps: 8
     risk: P0
@@ -61,10 +55,9 @@ stories:
     depends_on: [e06s01, e06s02]
     spec_file: e06s03-remove-legacy-identity-orchestration-cli.md
     tasks_file: e06s03-tasks.yaml
-
   - id: e06s04
-    title: Purge Legacy Project Surfaces and Verify the Clean Break
-    status: failing
+    title: Project Surface Purge and Clean-Break Gate
+    status: passing
     bcps: 5
     risk: P1
     delta: MODIFIED

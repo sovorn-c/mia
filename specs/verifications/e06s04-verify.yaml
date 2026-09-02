@@ -1,0 +1,58 @@
+story_id: e06s04
+verified_at: '2026-09-02T06:38:29Z'
+verifier: verify-work
+branch: e06-zero-legacy-agent-core
+status: passing
+phases:
+  guidance:
+    passed: true
+    command: cmp -s AGENTS.md CLAUDE.md
+    note: 'AGENTS.md and CLAUDE.md are byte-for-byte identical and teach the AgentRunner-to-AgentHarness path.'
+  public_surface:
+    passed: true
+    command: ./scripts/check-public-surface.sh
+    note: 'The repository-wide scan returned public surface: clean.'
+  artifact_purge:
+    passed: true
+    note: 'Obsolete planning capsules, snapshots, and verification records were removed; Git history preserves them.'
+  specs:
+    passed: true
+    command: "uv run --offline python -c \"import pathlib,yaml; [yaml.safe_load(p.read_text()) for p in pathlib.Path('specs').rglob('*.yaml')]\""
+    note: 'All remaining specification YAML parsed successfully.'
+  tui_package:
+    passed: true
+    commands:
+      - grep -q 'textual>=' pyproject.toml
+      - uv run --offline python scripts/check-wheel-surface.py
+      - uv run --offline mia tui --help
+    note: 'Textual remains declared, mia tui help renders, and the wheel retains mia_cli/tui without removed packages.'
+  lint:
+    passed: true
+    commands:
+      - uv run --offline ruff format --check .
+      - uv run --offline ruff check .
+  typecheck:
+    passed: true
+    command: uv run --offline mypy src
+  tests:
+    passed: true
+    count: 151
+    command: uv run --offline pytest
+  coverage:
+    passed: true
+    command: ./scripts/check-coverage.sh
+    scoped_core_percent: 89
+    business_boundary_percent: 97
+  build:
+    passed: true
+    command: uv build --offline
+  terminal_verdict:
+    passed: true
+    exit_code: 0
+    captured_at: '2026-09-02T06:38:29Z'
+    command: 'cmp -s AGENTS.md CLAUDE.md && ./scripts/check-public-surface.sh && YAML validation && uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest -q && ./scripts/check-coverage.sh && uv build --offline && uv run --offline python scripts/check-wheel-surface.py'
+    log: /tmp/e06s04-terminal-verdict-final.log
+    note: 'Single contiguous clean-break and quality-gate run passed.'
+known_infrastructure_gaps:
+  - 'No repository consistency helper is present in this checkout; all remaining specs YAML parsed successfully.'
+  - 'No separate security scanner is present; specs/security/REVIEW.md records the affected-path review.'

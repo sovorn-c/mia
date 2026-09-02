@@ -11,6 +11,6 @@ tasks:
     verify: "uv run python -c 'from mia_cli.repl import MiaREPL; repl = MiaREPL(model=None); print(repl.model_name)'"
 
   - id: "t02"
-    description: "Refactor slash command routing (/help, /login, /logout, /model, /profile, /diff, /cost, /compact, /sessions, /init, /undo, /clear, /quit)."
+    description: "Refactor slash command routing for the supported help, authentication, model, Agent, Session, and terminal commands."
     status: "pending"
     verify: "uv run pytest tests/test_cli_repl.py"

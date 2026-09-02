@@ -1,89 +1,21 @@
-# specs/release-plan.yaml — Release index & WSJF epic sequencing
+# specs/release-plan.yaml — release index
 version: "0.6.0"
-target_release: "v0.6.0-zero-legacy-agent-core"
+target_release: "v0.6.0-agent-core"
 
+# Completed releases remain listed only when their capsule still exists.
 epics:
   - id: "e01"
     slug: "minimal-stream-repl"
-    title: "Minimalist Pi/Tau-Style Stream REPL & Robust Auth"
-    wsjf:
-      business_value: 13
-      time_criticality: 13
-      risk_reduction: 8
-      job_size: 5
-      score: 6.8
+    title: "Minimal Stream REPL and Authentication"
     status: "completed"
-    bcps_total: 16
-    stories_count: 4
     directory: "specs/epics/e01-minimal-stream-repl"
-
   - id: "e02"
     slug: "stream-repl-polish"
-    title: "Stream-First REPL Polish: prompt_toolkit, Minimalist Stream, & Inspection"
-    wsjf:
-      business_value: 20
-      time_criticality: 15
-      risk_reduction: 8
-      job_size: 5
-      score: 8.6
+    title: "Stream-First REPL Polish"
     status: "completed"
-    bcps_total: 18
-    stories_count: 4
     directory: "specs/epics/e02-stream-repl-polish"
-
-  - id: "e03"
-    slug: "native-orchestration"
-    title: "Native Orchestration Runtime"
-    wsjf:
-      business_value: 21
-      time_criticality: 13
-      risk_reduction: 13
-      job_size: 8
-      score: 5.9
-    status: "completed"
-    bcps_total: 12
-    stories_count: 2
-    directory: "specs/epics/e03-native-orchestration"
-
-  - id: "e04"
-    slug: "agent-centric-foundation"
-    title: "Agent-Centric Foundation"
-    wsjf:
-      business_value: 21
-      time_criticality: 21
-      risk_reduction: 21
-      job_size: 13
-      score: 4.8
-    status: "completed"
-    bcps_total: 29
-    stories_count: 4
-    directory: "specs/epics/archive/e04-agent-centric-foundation"
-
-  - id: "e05"
-    slug: "plugin-agent-template-foundation"
-    title: "Plugin and Agent Template Foundation"
-    wsjf:
-      business_value: 21
-      time_criticality: 13
-      risk_reduction: 21
-      job_size: 13
-      score: 4.2
-    status: "completed"
-    bcps_total: 21
-    stories_count: 3
-    directory: "specs/epics/archive/e05-plugin-agent-template-foundation"
-
-  - id: e06
+  - id: "e06"
     slug: "zero-legacy-agent-core"
-    title: "Zero-Legacy Agent Core"
-    wsjf:
-      business_value: 21
-      time_criticality: 13
-      risk_reduction: 21
-      job_size: 13
-      score: 4.2
-    status: "planned"
-    bcps_total: 25
-    stories_count: 4
+    title: "Agent Core Clean Break"
+    status: "completed"
     directory: "specs/epics/e06-zero-legacy-agent-core"
-

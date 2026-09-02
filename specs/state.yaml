@@ -5,11 +5,10 @@ session:
   active_story_id: e06s04
   target_version: 0.6.0
 handoff:
-  next_skill: develop-tdd
+  next_skill: audit-code
   summary: >-
-    e06s01 canonical runtime, e06s02 Agent-native TUI, and e06s03 clean-break identity/runtime/CLI removal
-    are passing on the isolated branch. Continue develop-tdd with e06s04: purge remaining project-facing
-    legacy artifacts while preserving Agent, Plugin, Delegation, Session, and TUI behavior.
+    e06s01 through e06s04 are passing on the isolated branch. Agent-centric runtime, CLI, TUI, project
+    surfaces, package checks, and the full offline quality gate are complete. Run audit-code before release.
 git:
   branch: e06-zero-legacy-agent-core
 metrics:

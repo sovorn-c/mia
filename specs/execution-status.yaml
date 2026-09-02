@@ -1,166 +1,31 @@
-# specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
+# specs/execution-status.yaml — delivery status
 version: 0.6.0
-updated_at: '2026-09-02T06:01:10Z'
+updated_at: '2026-09-02T06:30:00Z'
 gate_trace:
   verdict: WAIVED
-  generated_at: '2026-08-21T23:11:33Z'
-  rationale: 'This repository has no traceability matrix, blind-spot report, or generation scripts. Manual
-    refutation found no missing e03s01 verify evidence: the story records implementation commits, all
-    seven tasks have deterministic verify commands, and 88 tests pass.'
+  generated_at: '2026-09-02T06:30:00Z'
+  rationale: 'The traceability helper is not present; story verification evidence and the full quality gate are recorded manually.'
   heuristic_ratio: null
   downgrade_applied: false
 epics:
   e01:
-    title: Minimalist Pi/Tau-Style Stream REPL & Robust Auth
+    title: Minimal Stream REPL and Authentication
     status: completed
-    stories:
-      e01s01:
-        title: Rock-Solid Terminal Input & Dual-Mode Picker (Arrow & Number)
-        status: completed
-        bcps: 3
-        tasks_total: 2
-        tasks_passing: 0
-        tasks_failing: 0
-      e01s02:
-        title: Resilient Provider Key Probe & Connection Diagnostics
-        status: completed
-        bcps: 4
-        tasks_total: 2
-        tasks_passing: 0
-        tasks_failing: 0
-      e01s03:
-        title: Pi-Style Scoped Model Switcher & 12 Slash Commands Suite
-        status: completed
-        bcps: 5
-        tasks_total: 2
-        tasks_passing: 0
-        tasks_failing: 0
-      e01s04:
-        title: Minimalist Stream Rendering & Live Tool Diffs
-        status: completed
-        bcps: 4
-        tasks_total: 2
-        tasks_passing: 0
-        tasks_failing: 0
+    stories: {}
   e02:
-    title: 'Stream-First REPL Polish: prompt_toolkit, Minimalist Stream, & Inspection'
+    title: Stream-First REPL Polish
     status: completed
     stories:
-      e02s01:
-        title: prompt_toolkit Integration, Floating Slash Autocomplete & Pinned Status Footer
-        status: completed
-        bcps: 5
-        tasks_total: 3
-        tasks_passing: 3
-        tasks_failing: 0
-      e02s02:
-        title: Minimalist Working Stream & carrot_bounce Animation
-        status: completed
-        bcps: 5
-        tasks_total: 2
-        tasks_passing: 2
-        tasks_failing: 0
-      e02s03:
-        title: Post-Turn Inspection (Ctrl+O) & JSONL Session Tree Navigator (Esc / /tree)
-        status: completed
-        bcps: 4
-        tasks_total: 2
-        tasks_passing: 2
-        tasks_failing: 0
       e02s04:
-        title: Pi/Tau Keybindings (Ctrl+C clear, Ctrl+D exit, /stop) & Context Auto-Discovery
+        title: Context discovery and terminal controls
         status: completed
         bcps: 4
         tasks_total: 2
         tasks_passing: 2
-        tasks_failing: 0
-  e03:
-    title: Native Orchestration Runtime
-    status: completed
-    stories:
-      e03s01:
-        title: Native Orchestration Mode Vertical Slice
-        status: passing
-        bcps: 5
-        risk: P0
-        tasks_total: 7
-        tasks_passing: 7
-        tasks_failing: 0
-      e03s02:
-        title: Essential Slash Command Contract Alignment
-        status: passing
-        bcps: 7
-        risk: P1
-        tasks_total: 7
-        tasks_passing: 7
-        tasks_failing: 0
-  e04:
-    title: Agent-Centric Foundation
-    status: passing
-    stories:
-      e04s01:
-        title: Named Agent Vertical Slice
-        status: passing
-        bcps: 8
-        risk: P0
-        tasks_total: 6
-        tasks_passing: 6
-        tasks_failing: 0
-      e04s02:
-        title: Agent-Owned State and Access Boundary
-        status: passing
-        bcps: 8
-        risk: P0
-        tasks_total: 6
-        tasks_passing: 6
-        tasks_failing: 0
-      e04s03:
-        title: Direct Agent-to-Agent Delegation
-        status: passing
-        bcps: 8
-        risk: P0
-        tasks_total: 6
-        tasks_passing: 6
-        tasks_failing: 0
-      e04s04:
-        title: Agent-First Compatibility Migration
-        status: passing
-        bcps: 5
-        risk: P0
-        tasks_total: 6
-        tasks_passing: 6
-        tasks_failing: 0
-  e05:
-    title: Plugin and Agent Template Foundation
-    status: passing
-    stories:
-      e05s01:
-        title: Notes Plugin Vertical Slice
-        status: passing
-        bcps: 8
-        risk: P0
-        tasks_total: 5
-        tasks_passing: 5
-        tasks_failing: 0
-      e05s02:
-        title: Per-Agent Plugin Lifecycle and Integrity Boundary
-        status: passing
-        bcps: 8
-        risk: P0
-        tasks_total: 6
-        tasks_passing: 6
-        tasks_failing: 0
-      e05s03:
-        title: Portable Notes Agent Template
-        status: passing
-        bcps: 5
-        risk: P0
-        tasks_total: 5
-        tasks_passing: 5
         tasks_failing: 0
   e06:
-    title: Zero-Legacy Agent Core
-    status: failing
+    title: Agent Core Clean Break
+    status: passing
     stories:
       e06s01:
         title: Canonical Agent Run Runtime
@@ -179,7 +44,7 @@ epics:
         tasks_passing: 4
         tasks_failing: 0
       e06s03:
-        title: Remove Legacy Identity, Orchestration, and CLI Surfaces
+        title: Canonical Runtime and CLI Surface
         status: passing
         bcps: 8
         risk: P0
@@ -187,10 +52,10 @@ epics:
         tasks_passing: 6
         tasks_failing: 0
       e06s04:
-        title: Purge Legacy Project Surfaces and Verify the Clean Break
-        status: failing
+        title: Project Surface Purge and Clean-Break Gate
+        status: passing
         bcps: 5
         risk: P1
         tasks_total: 4
-        tasks_passing: 0
-        tasks_failing: 4
+        tasks_passing: 4
+        tasks_failing: 0
