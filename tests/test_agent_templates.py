@@ -40,3 +40,18 @@ def test_notes_agent_template_is_allowlisted_and_serializable(tmp_path: Path) ->
 
     with pytest.raises(ValidationError):
         AgentTemplate(template_id="unsafe", unknown_private_field="secret")
+
+
+def test_notes_template_instantiates_an_independent_agent(tmp_path: Path) -> None:
+    agents, plugins = make_managers(tmp_path)
+    plugins.install("notes")
+
+    created = plugins.instantiate("notes-agent", "my-notes")
+
+    assert created.agent_id == "my-notes"
+    assert created.access_policy == "approval-required"
+    assert created.plugins == ["notes"]
+    assert created.plugin_config == {"notes": {"notebook_name": "Personal"}}
+    assert created.full_access_confirmed is False
+    assert agents.get_agent("my-notes") == created
+    assert not (tmp_path / "agents" / ".default-agent").exists()
