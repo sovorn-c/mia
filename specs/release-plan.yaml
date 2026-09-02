@@ -68,8 +68,8 @@ epics:
       risk_reduction: 21
       job_size: 13
       score: 4.2
-    status: "planned"
+    status: "completed"
     bcps_total: 21
     stories_count: 3
-    directory: "specs/epics/e05-plugin-agent-template-foundation"
+    directory: "specs/epics/archive/e05-plugin-agent-template-foundation"
 
