@@ -241,6 +241,7 @@ def show_agent_command(
     console.print(f"Description: {agent.description}")
     console.print(f"Access: {agent.access_policy}")
     console.print(f"Tools: {', '.join(agent.tools) if agent.tools else '(none)'}")
+    console.print(f"Plugins: {', '.join(agent.plugins) if agent.plugins else '(none)'}")
     console.print(f"Source: {inspection['source']}")
     if inspection["collision"]:
         console.print(
