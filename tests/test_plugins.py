@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from mia_agent.agents import AgentManager
+from mia_agent.agents import Agent, AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.events import ToolResultEvent
@@ -21,6 +21,14 @@ def make_agent_manager(tmp_path: Path) -> AgentManager:
         profiles_dir=tmp_path / "profiles",
         sessions_base_dir=tmp_path / "legacy-sessions",
     )
+
+
+def test_agent_plugin_ids_are_normalized_and_unique() -> None:
+    assert Agent(agent_id="alpha", plugins=["Notes"]).plugins == ["notes"]
+    with pytest.raises(ValueError, match="duplicate"):
+        Agent(agent_id="alpha", plugins=["notes", "Notes"])
+    with pytest.raises(ValueError, match="Plugin ID"):
+        Agent(agent_id="alpha", plugins=["../notes"])
 
 
 def test_bundled_notes_plugin_installs_without_network(tmp_path: Path) -> None:
