@@ -19,6 +19,7 @@ from mia_agent.orchestration import (
     ModeRuntime,
     OrchestrationErrorEvent,
 )
+from mia_agent.plugins import PluginManager
 from mia_agent.profiles.manager import ProfileManager
 from mia_cli.renderers.rich_stream import RichStreamRenderer
 from mia_middleware.access import ApprovalCallback, ApprovalRequest
@@ -31,10 +32,12 @@ app = typer.Typer(
 profile_app = typer.Typer(help="Manage legacy profile aliases.")
 agent_app = typer.Typer(help="Create, inspect, and select named Agents.")
 sessions_app = typer.Typer(help="Inspect and manage saved session trees.")
+plugin_app = typer.Typer(help="Install and manage bundled Plugins.")
 
 app.add_typer(agent_app, name="agent")
 app.add_typer(profile_app, name="profile")
 app.add_typer(sessions_app, name="sessions")
+app.add_typer(plugin_app, name="plugin")
 
 console = Console()
 
@@ -270,6 +273,94 @@ def delete_agent_command(
     if not deleted:
         raise typer.BadParameter(f"Agent '{agent_id}' was not found", param_hint="AGENT_ID")
     console.print(f"[bold green]✓ Deleted Agent {agent_id}.[/bold green]")
+
+
+@plugin_app.command(name="list")
+def list_plugins_command() -> None:
+    """List bundled and explicitly installed Plugins."""
+    manager = PluginManager(agent_manager=AgentManager())
+    installed = {item.plugin_id for item in manager.list_installed()}
+    table = Table(title="Mia Plugins")
+    table.add_column("Plugin", style="bold cyan")
+    table.add_column("Version", style="magenta")
+    table.add_column("Status", style="green")
+    for manifest in manager.list_available():
+        table.add_row(
+            manifest.plugin_id,
+            manifest.version,
+            "installed" if manifest.plugin_id in installed else "available",
+        )
+    console.print(table)
+
+
+@plugin_app.command(name="show")
+def show_plugin_command(
+    plugin_id: Annotated[str, typer.Argument(help="Plugin ID")],
+) -> None:
+    """Inspect one bundled Plugin manifest."""
+    try:
+        manifest = PluginManager(agent_manager=AgentManager()).get_manifest(plugin_id)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="PLUGIN_ID") from exc
+    console.print(f"[bold cyan]{manifest.display_name}[/bold cyan] ({manifest.plugin_id})")
+    console.print(f"Version: {manifest.version}")
+    console.print(f"Description: {manifest.description}")
+    console.print(f"Tools: {', '.join(manifest.tools) if manifest.tools else '(none)'}")
+
+
+@plugin_app.command(name="install")
+def install_plugin_command(
+    plugin_id: Annotated[str, typer.Argument(help="Bundled Plugin ID")],
+) -> None:
+    """Install one bundled Plugin locally."""
+    try:
+        installed = PluginManager(agent_manager=AgentManager()).install(plugin_id)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="PLUGIN_ID") from exc
+    console.print(f"[bold green]✓ Installed Plugin {installed.plugin_id}.[/bold green]")
+
+
+@plugin_app.command(name="enable")
+def enable_plugin_command(
+    plugin_id: Annotated[str, typer.Argument(help="Plugin ID")],
+    agent_id: Annotated[str, typer.Option("--agent", help="Agent to enable the Plugin for")],
+) -> None:
+    """Enable an installed Plugin for one named Agent."""
+    try:
+        agent = PluginManager(agent_manager=AgentManager()).enable(agent_id, plugin_id)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="PLUGIN_ID") from exc
+    console.print(f"[bold green]✓ Enabled {plugin_id} for Agent {agent.agent_id}.[/bold green]")
+
+
+@plugin_app.command(name="configure")
+def configure_plugin_command(
+    plugin_id: Annotated[str, typer.Argument(help="Plugin ID")],
+    agent_id: Annotated[str, typer.Option("--agent", help="Agent to configure")],
+    notebook_name: Annotated[
+        str | None, typer.Option("--notebook-name", help="Notes notebook display name")
+    ] = None,
+) -> None:
+    """Configure an enabled Plugin for one named Agent."""
+    config = {} if notebook_name is None else {"notebook_name": notebook_name}
+    try:
+        agent = PluginManager(agent_manager=AgentManager()).configure(agent_id, plugin_id, config)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="PLUGIN_ID") from exc
+    console.print(f"[bold green]✓ Configured {plugin_id} for Agent {agent.agent_id}.[/bold green]")
+
+
+@plugin_app.command(name="disable")
+def disable_plugin_command(
+    plugin_id: Annotated[str, typer.Argument(help="Plugin ID")],
+    agent_id: Annotated[str, typer.Option("--agent", help="Agent to disable the Plugin for")],
+) -> None:
+    """Disable a Plugin for later Runs of one named Agent."""
+    try:
+        agent = PluginManager(agent_manager=AgentManager()).disable(agent_id, plugin_id)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="PLUGIN_ID") from exc
+    console.print(f"[bold green]✓ Disabled {plugin_id} for Agent {agent.agent_id}.[/bold green]")
 
 
 @profile_app.command(name="list")
