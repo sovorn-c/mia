@@ -11,7 +11,8 @@ from pydantic import ValidationError
 from mia_agent.agents import Agent, AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
-from mia_agent.orchestration import AgentRuntimeFactory, RuntimeIdentity
+from mia_agent.runtime_factory import AgentRuntimeFactory
+from mia_agent.runtime_models import RuntimeIdentity
 from mia_agent.profiles.model import AgentProfile
 from mia_ai.providers.mock import MockProvider
 
@@ -206,6 +207,20 @@ def test_full_access_requires_explicit_creation_confirmation(tmp_path: Path) -> 
         confirm_full_access=True,
     )
     assert autonomous.access_policy == "full-access"
+
+
+def test_canonical_agent_rejects_historical_fields_and_manager_options(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError):
+        Agent.model_validate({"agent_id": "reviewer", "name": "Reviewer"})
+    with pytest.raises(ValidationError):
+        Agent.model_validate({"agent_id": "reviewer", "system_prompt": "Review"})
+    with pytest.raises(ValidationError):
+        Agent.model_validate({"agent_id": "reviewer", "access": "read_only"})
+    with pytest.raises(ValidationError):
+        Agent.model_validate({"agent_id": "reviewer", "permission": "standard"})
+
+    with pytest.raises(TypeError):
+        AgentManager(profiles_dir=tmp_path / "profiles")  # type: ignore[call-arg]
 
 
 def test_native_agent_writes_are_atomic_and_do_not_copy_secret_values(tmp_path: Path) -> None:
