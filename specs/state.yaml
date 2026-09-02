@@ -5,10 +5,10 @@ session:
   active_story_id: e05s03
   target_version: 0.5.0
 handoff:
-  next_skill: audit-code
-  summary: 'verify-work passed for e05s03 on e05-notes-plugin: task gates, security review,
-    NFR probe, CLI UAT, full tests, coverage, build, and YAML validation completed.
-    Infrastructure scripts for blind spots and completeness remain unavailable.
+  next_skill: commit-message
+  summary: 'audit-code passed for e05 on e05-notes-plugin after splitting Plugin contracts,
+    removing duplicated integration logic, and adding boundary tests. Full quality
+    gate remains green; repository helper scripts remain unavailable.
 
     '
 git:
