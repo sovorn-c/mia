@@ -359,6 +359,30 @@ class PluginManager:
         available = ", ".join(template.template_id for template in self.list_templates())
         raise ValueError(f"Agent Template '{key}' is unavailable. Available Templates: {available}")
 
+    def instantiate(self, template_id: str, agent_id: str) -> Agent:
+        """Create a fresh Agent from a bundled Template after all preflight checks."""
+        template = self.get_template(template_id)
+        manifests = [self.get_manifest(plugin_id) for plugin_id in template.required_plugins]
+        for manifest in manifests:
+            self._installed_record(manifest)
+            if manifest.plugin_id == "notes":
+                self._validate_notes_config(template.plugin_config.get("notes", {}))
+        return self.agent_manager.create_agent(
+            agent_id,
+            display_name=template.display_name,
+            description=template.description,
+            instructions=template.instructions,
+            access_policy=template.access_policy,
+            tools=list(template.tools),
+            plugins=list(template.required_plugins),
+            plugin_config={key: dict(value) for key, value in template.plugin_config.items()},
+            full_access_confirmed=False,
+        )
+
+    def create_from_template(self, template_id: str, agent_id: str) -> Agent:
+        """Explicit spelling for Template instantiation callers."""
+        return self.instantiate(template_id, agent_id)
+
     def _installed_record(self, manifest: PluginManifest) -> InstalledPlugin:
         for record in self.list_installed():
             if record.plugin_id == manifest.plugin_id:
