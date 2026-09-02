@@ -107,3 +107,26 @@ async def test_agent_runner_emits_canonical_event_envelopes(tmp_path) -> None:
     assert all(isinstance(event, AgentEventEnvelope) for event in events)
     assert events[-1].agent_id == "mia"
     assert events[-1].event.type == "turn_complete"
+
+
+def test_run_error_event_is_sanitized_and_attributed() -> None:
+    from mia_agent.runtime_events import RunErrorEvent, error_envelope
+
+    identity = RuntimeIdentity(
+        run_id="run-1",
+        task_id="root",
+        agent_id="mia",
+        session_id="session-1",
+    )
+
+    envelope = error_envelope(
+        identity,
+        "provider",
+        "Authorization: Bearer secret-token",
+        cancelled=True,
+    )
+
+    assert isinstance(envelope.event, RunErrorEvent)
+    assert envelope.event.type == "run_error"
+    assert envelope.event.error == "Authorization: [REDACTED]"
+    assert envelope.event.cancelled is True
