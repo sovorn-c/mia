@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
-version: 0.5.0
-updated_at: '2026-09-02T03:16:22Z'
+version: 0.6.0
+updated_at: '2026-09-02T05:28:08Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-08-21T23:11:33Z'
@@ -158,3 +158,39 @@ epics:
         tasks_total: 5
         tasks_passing: 5
         tasks_failing: 0
+  e06:
+    title: Zero-Legacy Agent Core
+    status: failing
+    stories:
+      e06s01:
+        title: Canonical Agent Run Runtime
+        status: failing
+        bcps: 8
+        risk: P0
+        tasks_total: 5
+        tasks_passing: 0
+        tasks_failing: 5
+      e06s02:
+        title: Agent-Native Textual TUI Adapter
+        status: failing
+        bcps: 4
+        risk: P1
+        tasks_total: 4
+        tasks_passing: 0
+        tasks_failing: 4
+      e06s03:
+        title: Remove Legacy Identity, Orchestration, and CLI Surfaces
+        status: failing
+        bcps: 8
+        risk: P0
+        tasks_total: 6
+        tasks_passing: 0
+        tasks_failing: 6
+      e06s04:
+        title: Purge Legacy Project Surfaces and Verify the Clean Break
+        status: failing
+        bcps: 5
+        risk: P1
+        tasks_total: 4
+        tasks_passing: 0
+        tasks_failing: 4

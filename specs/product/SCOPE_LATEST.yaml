@@ -1,152 +1,106 @@
-# specs/product/SCOPE_LATEST.yaml — Bounded PRD for Mia Plugin and Agent Template Foundation
-initiative_id: "e05"
-initiative_name: "Plugin and Agent Template Foundation"
-status: "approved"
-supersedes: "specs/product/snapshots/SCOPE_e04-agent-centric-foundation.yaml"
+# specs/product/SCOPE_LATEST.yaml — bounded PRD for the zero-legacy Agent core
+initiative_id: e06
+initiative_name: Zero-Legacy Agent Core
+status: approved
+supersedes: specs/epics/archive/e05-plugin-agent-template-foundation
 
 core_value: >
-  Let users add one useful executable capability to an Agent and create a reusable Agent from a
-  safe template without exposing credentials, private state, or core integrity controls.
+  Give Mia one clear Agent identity and one trusted execution path so users and contributors do not
+  need to understand obsolete Profile, Mode, Workflow, or Herd architecture.
 
 summary: >
-  Mia now has durable named Agents, explicit access boundaries, and direct Delegation. The next
-  product gap is executable extension: Agents can record Plugin names, but no Plugin can be
-  installed, enabled, inspected, configured, or used. Agent definitions also cannot be shared
-  safely without copying private configuration and state.
+  Mia's released Agent, Plugin, Delegation, Session, access, and provider capabilities remain useful,
+  but the active project still exposes the historical Profile/Mode/Herd model through runtime code,
+  aliases, CLI commands, tests, and documentation. This initiative makes Agent the only public identity
+  and routes every supported frontend through the existing headless AgentRunner and AgentRuntimeFactory.
 
-  This initiative proves the smallest Plugin boundary with one concrete Notes Plugin and one Notes
-  Agent Template. The Notes Plugin contributes Agent-scoped note capabilities, is explicitly
-  installed into Mia and enabled per Agent, and remains subject to core Tool, access, audit,
-  attribution, and storage rules. The Notes Agent Template creates a new independent Agent with the
-  Plugin requirement and useful defaults while excluding credentials, Sessions, memory, notes, and
-  another user's identity. A broad SDK, remote registry, and arbitrary third-party dependency
-  installation remain deferred until this proof exposes real extension needs.
-
-actors:
-  - "Users adding local note assistance to a persisted named Agent"
-  - "Agent designers creating a reusable Notes Agent from a safe template"
-  - "Plugin developers validating Mia's first executable extension contract"
-  - "Mia Core maintainers protecting access, attribution, Sessions, and credentials"
+  The Textual TUI remains supported as a shallow frontend. It will receive only the changes required to
+  select persisted Agents and stream AgentRunner events; no visual redesign, new TUI feature set, or
+  second orchestration backend is introduced. Legacy user files are not deleted or migrated automatically.
 
 in_scope:
-  - id: "e05s01"
-    name: "Notes Plugin Vertical Slice"
+  - id: e06s01
+    name: Canonical Agent Run Runtime
     description: >
-      A user can install the bundled Notes Plugin, enable it for one Agent, and use that Agent to
-      create, list, and read Agent-scoped notes. Plugin-contributed actions are visible only when
-      enabled and execute through Mia Core under the Agent's capability and access policy.
+      Extract clean Agent/Run/Task/Session runtime contracts, make AgentRunner and AgentRuntimeFactory
+      the sole active execution path, and preserve provider, access, Plugin, Delegation, Session,
+      attribution, Research Agent, and truthful failure behavior.
 
-  - id: "e05s02"
-    name: "Per-Agent Plugin Lifecycle and Integrity Boundary"
+  - id: e06s02
+    name: Agent-Native Textual TUI Adapter
     description: >
-      Users can list and inspect installed Plugins, enable or disable one Plugin per Agent, and save
-      its validated Agent-specific configuration. Mia reports missing, malformed, incompatible, or
-      undeclared contributions without partially activating them. Plugin data, output, errors, and
-      events remain Agent-attributed and cannot bypass credential, access, or Session safeguards.
+      Keep mia tui and its existing visual behavior while replacing Herd-backed transient workers with
+      AgentManager and AgentRunner. The TUI lists and selects named Agents and streams their events.
 
-  - id: "e05s03"
-    name: "Portable Notes Agent Template"
+  - id: e06s03
+    name: Remove Legacy Identity, Orchestration, and CLI Surfaces
     description: >
-      Users can inspect and instantiate a bundled Notes Agent Template as a new independently owned
-      Agent. The template declares its Plugin requirement and useful defaults but carries no source
-      Agent identity, credentials, Sessions, memory, notes, or full-access consent. Missing Plugin
-      requirements and Agent ID collisions fail with actionable, non-destructive errors.
+      Remove Profile, Mode, Workflow, Herd, compatibility aliases, projections, re-export shims,
+      legacy storage fallback, old access labels, and deprecated CLI/REPL commands from active code and tests.
+
+  - id: e06s04
+    name: Purge Legacy Project Surfaces and Verify the Clean Break
+    description: >
+      Rewrite living guidance and specifications, delete legacy-only documentation and verification
+      artifacts, retain Textual packaging, and prove the built package and source tree expose only the
+      Agent-centric model.
 
 out_of_scope:
-  - id: "oos-01"
-    name: "Remote Plugin registry or marketplace"
+  - id: oos-01
+    name: TUI redesign or feature expansion
     rationale: >
-      Deferred until one bundled Plugin proves the install, enablement, contribution, and trust
-      contracts; discovery, publishing, reputation, and remote supply-chain policy are separate work.
+      The TUI is a frontend compatibility surface, not this initiative's product focus. Preserve its
+      current interaction shape and return later for deeper UX work.
 
-  - id: "oos-02"
-    name: "Arbitrary third-party Python loading and dependency installation"
+  - id: oos-02
+    name: Automatic migration or deletion of user legacy files
     rationale: >
-      Executing unknown local code or installing its dependencies requires package provenance,
-      compatibility, and isolation decisions that are not needed for the bundled proof.
+      Removing compatibility code does not authorize destructive filesystem changes. Existing Profile
+      and legacy Session files remain untouched and are simply no longer read by Mia.
 
-  - id: "oos-03"
-    name: "Broad Plugin SDK, hooks, or workflow framework"
+  - id: oos-03
+    name: New Skills, Plugins, providers, channels, or Agent collaboration features
     rationale: >
-      The initiative supports only the contracts exercised by Notes and its Agent Template; hooks,
-      private workflows, provider adapters, channels, and speculative extension points are deferred.
+      e05 established the current Plugin and Template proof. This initiative only removes identity and
+      orchestration confusion; new capabilities need their own bounded scope.
 
-  - id: "oos-04"
-    name: "Plugin sandboxing or claims that trusted code is isolated"
+  - id: oos-04
+    name: New multi-Agent orchestration framework
     rationale: >
-      Mia enforces Tool and integrity boundaries but does not yet provide process, filesystem,
-      network, or operating-system isolation for executable Plugin code.
+      Existing bounded Delegation and the private Research Agent sequence are sufficient. No public
+      Workflow graph, Herd replacement, scheduler, mailbox, or autonomous swarm is added.
 
-  - id: "oos-05"
-    name: "Plugin hot reload, upgrade, rollback, or dependency solving"
+  - id: oos-05
+    name: Changing core AgentHarness semantics or access safeguards
     rationale: >
-      Version transitions and live code replacement add recovery and compatibility semantics beyond
-      install-once local proof; restart-based activation is sufficient for this initiative.
-
-  - id: "oos-06"
-    name: "Plugin-contributed UI, background jobs, or external channels"
-    rationale: >
-      Terminal widgets, schedules, autonomous execution, browser control, messaging, email, and
-      calendar integrations each need separate lifecycle and permission contracts.
-
-  - id: "oos-07"
-    name: "Sharing live Agents or private Agent state"
-    rationale: >
-      Agent Templates distribute definitions only. Synchronizing credentials, Sessions, memory,
-      notes, defaults, or identity would violate Agent ownership and privacy boundaries.
-
-  - id: "oos-08"
-    name: "General note editor, search engine, or synchronization service"
-    rationale: >
-      Create, list, and read are enough to prove executable extension. Rich editing, deletion,
-      indexing, attachments, cloud sync, and collaborative notebooks are separate product features.
-
-  - id: "oos-09"
-    name: "Mutable Plugin overlays for immutable built-in Agents"
-    rationale: >
-      The first proof enables Plugins on persisted user-created Agents and the Notes Agent created
-      from its Template. Customizing built-ins such as Mia requires a separate override contract so
-      built-in immutability is not weakened implicitly.
+      The clean break changes composition and vocabulary, not the headless loop, middleware security,
+      redaction, approval, or full-access consent guarantees.
 
 constraints:
-  - "Use Plugin for installable executable extension and Agent Template for a distributable definition; neither becomes an Agent identity or owns core routing."
-  - "Prove only one bundled Notes Plugin and one bundled Notes Agent Template; add no general-purpose extension point without a demonstrated Notes requirement."
-  - "Plugin installation is explicit and local; Plugin enablement and configuration are explicit per persisted non-built-in Agent."
-  - "Disabled, missing, malformed, incompatible, or undeclared Plugin contributions fail closed and do not partially alter an Agent runtime."
-  - "Every Plugin-contributed Tool is capability-filtered and executes through access policy, approval, security, audit, cost, attribution, and error handling."
-  - "A Plugin cannot silently expand an Agent's Tools, access level, delegation targets, full-access consent, credentials, or storage boundary."
-  - "Notes are private Agent-owned Plugin data and are not copied into Agent Templates."
-  - "Agent Templates exclude credentials, account secrets, Sessions, memory, Plugin data, selected-default state, and full-access consent."
-  - "Existing Agents without Plugins, Profile/Mode compatibility, Delegation, Sessions, and current Tools remain functional."
-  - "Keep Agent execution headless and keep Plugin contracts independent from Rich, Textual, Typer, and terminal rendering."
-  - "Use Python 3.12+, strict Mypy, Ruff, deterministic offline tests, append-only Session behavior, and no new runtime dependency."
+  - Use Agent, Skill, Tool, Plugin, Task, Delegation, Run, and Session as the active domain vocabulary.
+  - AgentRunner and AgentRuntimeFactory remain the only active prompt composition path.
+  - Keep AgentHarness headless and keep mia_agent independent from Rich, Textual, Typer, and prompt_toolkit.
+  - Keep the Textual dependency and mia tui command; make only the minimum Agent identity/backend changes.
+  - Existing Plugin, Delegation, Session, access, provider, and filesystem boundaries remain enforced.
+  - Do not read, project, rewrite, or delete legacy Profile/Session files.
+  - Use Python 3.12+, Pydantic boundaries, strict Mypy, Ruff, offline pytest, and the release coverage gate.
+  - Do not add a runtime dependency or a generic migration/compatibility framework.
 
 success_criteria:
-  - "A user can install and inspect the bundled Notes Plugin without network access."
-  - "A user can enable Notes for one Agent without enabling it for another Agent."
-  - "An enabled Agent can create, list, and read its own notes, while another Agent cannot see those notes through the Plugin."
-  - "Disabling Notes removes its contributed capabilities from later Runs without deleting stored notes."
-  - "Note reads follow non-mutating policy and note creation follows side-effect approval policy; permanent security rules remain active."
-  - "Plugin-contributed Tool calls, results, errors, and durable data retain Agent, Run, Session, and Plugin attribution where those identities apply."
-  - "Malformed, incompatible, missing, or undeclared Plugin contributions produce actionable failures before execution and never fall back to unrestricted behavior."
-  - "A user can inspect and instantiate the bundled Notes Agent Template under a new Agent ID."
-  - "The instantiated Notes Agent is independent, requires the installed Notes Plugin, and contains no source identity, credentials, Sessions, memory, notes, or inherited full-access consent."
-  - "Agent ID collisions and missing Plugin requirements do not overwrite or partially create Agent data."
-  - "Existing Plugin-free Agents and all e04 Agent, Delegation, access, Session, CLI, and compatibility journeys remain green."
-  - "Focused Plugin and Agent Template tests, the release coverage gate, Ruff, strict Mypy, offline pytest, build, and specification checks pass."
+  - Every supported prompt frontend uses AgentRunner and AgentRuntimeFactory exactly once per execution path.
+  - Runtime identities and event envelopes contain Agent, Run, Task, and Session attribution without Mode/Profile fields.
+  - Research remains a private Research Agent sequence with truthful failure and cancellation behavior.
+  - AgentManager resolves only built-in and native persisted Agents, with Agent-owned Session paths.
+  - Profile, Mode, Workflow, Herd, projection, alias, and re-export modules are absent from active source and package output.
+  - Canonical CLI/REPL use Agent commands only; removed flags and slash commands fail as unknown interfaces.
+  - mia tui remains launchable and streams events for persisted or built-in Agents without importing Herd/Profile code.
+  - Existing Plugin, Delegation, access, Session, provider, filesystem, and Agent Template tests remain green after import updates.
+  - Living docs and instructions teach only the Agent-centric model; legacy-only docs/specs are removed.
+  - Ruff, strict Mypy, offline pytest, coverage, package build, YAML validation, and forbidden-symbol scans pass.
 
 references:
-  - "specs/product/VISION_LATEST.yaml"
-  - "specs/product/GLOSSARY_LATEST.yaml"
-  - "specs/product/snapshots/SCOPE_e04-agent-centric-foundation.yaml"
-  - "specs/tech-architecture/tech-stack.md"
-  - "specs/IMPACT_LATEST.md"
-  - "specs/adr/0001-prompt-scoped-orchestration-runs.md"
-
-resolved_decisions:
-  - id: "VISION-05"
-    decision: >
-      The first executable extension is the bundled Notes Plugin, and the first distributable Agent
-      is a Notes Agent Template contributed with it. Together they prove installation, per-Agent
-      enablement, core-mediated Tools, Agent-owned Plugin data, and secret-free template creation
-      without committing Mia to a broad SDK or remote marketplace.
+  - specs/product/VISION_LATEST.yaml
+  - specs/product/GLOSSARY_LATEST.yaml
+  - specs/tech-architecture/tech-stack.md
+  - specs/IMPACT_LATEST.md
+  - specs/planning-context.yaml

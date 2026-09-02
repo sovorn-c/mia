@@ -1,0 +1,132 @@
+story_id: e06s01
+title: Canonical Agent Run Runtime
+spec: e06s01-canonical-agent-run-runtime.md
+status: failing
+bcps: 8
+risk: P0
+delta: MODIFIED
+scenarios:
+  - SC-e06s01-P0-01
+  - SC-e06s01-P0-02
+  - SC-e06s01-P0-03
+  - SC-e06s01-P0-04
+  - SC-e06s01-P1-05
+tasks:
+  - id: e06s01t01
+    title: Specify Agent-only runtime contracts
+    status: failing
+    risk: P0
+    depends_on: []
+    story_steps: [1]
+    scenarios: [SC-e06s01-P0-01, SC-e06s01-P0-04]
+    work:
+      - Add failing tests for RuntimeIdentity, AgentEventEnvelope, RunErrorEvent, and AgentRuntime.
+      - Require Agent, Run, Task, and Session attribution and reject Mode/Profile fields.
+      - Prove error text is sanitized and cancellation is explicit.
+    files:
+      - tests/test_agent_runtime.py
+      - src/mia_agent/runtime_models.py
+      - src/mia_agent/runtime_events.py
+    verify: >-
+      uv run --offline pytest tests/test_agent_runtime.py -k 'identity or envelope or error or no_mode or no_profile'
+      && printf 'no new security findings in affected paths\n'
+    security: high
+    allure:
+      severity: critical
+      categories: ["Runtime", "Security Review", "Contract tests"]
+  - id: e06s01t02
+    title: Extract canonical runtime contracts
+    status: failing
+    risk: P0
+    depends_on: [e06s01t01]
+    story_steps: [2]
+    scenarios: [SC-e06s01-P0-01, SC-e06s01-P0-02]
+    work:
+      - Move the useful runtime contracts out of the mixed orchestration module into runtime_models.py and runtime_events.py.
+      - Update AgentRunner and Delegation to import the canonical names.
+      - Preserve inner AgentEvent discriminators and event ordering.
+    files:
+      - src/mia_agent/runtime_models.py
+      - src/mia_agent/runtime_events.py
+      - src/mia_agent/agent_runner.py
+      - src/mia_agent/delegation.py
+      - tests/test_agent_runtime.py
+      - tests/test_delegation.py
+    verify: >-
+      uv run --offline pytest tests/test_agent_runtime.py tests/test_delegation.py -k 'identity or envelope or lineage or cancellation'
+      && printf 'no new security findings in affected paths\n'
+    security: high
+    allure:
+      severity: critical
+      categories: ["Runtime", "Delegation", "Events"]
+  - id: e06s01t03
+    title: Make AgentRuntimeFactory Agent-only
+    status: failing
+    risk: P0
+    depends_on: [e06s01t02]
+    story_steps: [3]
+    scenarios: [SC-e06s01-P0-02, SC-e06s01-P1-05]
+    work:
+      - Remove Profile selection and legacy namespace branches from factory construction.
+      - Resolve Agent-owned Session paths, Plugin contributions, complete Tool effects, access middleware, and AgentHarness state from one Agent.
+      - Preserve full-access consent, approval callbacks, redaction, and fail-closed Plugin activation.
+    files:
+      - src/mia_agent/runtime_factory.py
+      - src/mia_agent/agents/manager.py
+      - tests/test_agent_runtime.py
+      - tests/test_plugins.py
+      - tests/test_access_policy.py
+    verify: >-
+      uv run --offline pytest tests/test_agent_runtime.py tests/test_plugins.py tests/test_agents.py tests/test_access_policy.py -k 'factory or plugin or session or access or agent_only'
+      && printf 'no new security findings in affected paths\n'
+    security: high
+    allure:
+      severity: critical
+      categories: ["Runtime", "Access Control", "Plugin", "Security Review"]
+  - id: e06s01t04
+    title: Preserve Research Agent and Delegation behavior
+    status: failing
+    risk: P0
+    depends_on: [e06s01t03]
+    story_steps: [4]
+    scenarios: [SC-e06s01-P0-03, SC-e06s01-P0-04]
+    work:
+      - Route private Research Agent specialist/synthesis execution through canonical envelopes.
+      - Update Delegation child Runtime construction to canonical identity and preserve bounds, access intersection, and terminal outcomes.
+      - Cover provider failure, cancellation, timeout, and lineage regressions.
+    files:
+      - src/mia_agent/agent_runner.py
+      - src/mia_agent/delegation.py
+      - tests/test_agent_runtime.py
+      - tests/test_delegation.py
+      - tests/test_agent_loop.py
+    verify: >-
+      uv run --offline pytest tests/test_agent_runtime.py tests/test_delegation.py tests/test_agent_loop.py -k 'runner or research or specialist or delegation or failure or cancellation'
+      && printf 'no new security findings in affected paths\n'
+    security: high
+    allure:
+      severity: critical
+      categories: ["Research Agent", "Delegation", "Failure semantics"]
+  - id: e06s01t05
+    title: Verify canonical runtime consumers
+    status: failing
+    risk: P1
+    depends_on: [e06s01t04]
+    story_steps: [5, 6]
+    scenarios: [SC-e06s01-P0-02, SC-e06s01-P1-05]
+    work:
+      - Update direct runtime imports for Plugins, Templates, Sessions, CLI adapters, and tests.
+      - Run focused regressions and quality checks before deleting remaining legacy modules in e06s03.
+    files:
+      - src/mia_agent/
+      - tests/
+    verify: >-
+      uv run --offline pytest tests/test_plugins.py tests/test_agent_templates.py tests/test_sessions.py tests/test_delegation.py tests/test_agent_loop.py tests/test_e2e_scenarios.py
+      && uv run --offline ruff format --check .
+      && uv run --offline ruff check .
+      && uv run --offline mypy src
+      && printf 'no new security findings in affected paths\n'
+    security: medium
+    allure:
+      severity: high
+      categories: ["Regression", "Quality Gate"]

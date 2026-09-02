@@ -1,0 +1,142 @@
+story_id: e06s04
+title: Purge Legacy Project Surfaces and Verify the Clean Break
+spec: e06s04-purge-project-surfaces-clean-break.md
+status: failing
+bcps: 5
+risk: P1
+delta: MODIFIED
+scenarios:
+  - SC-e06s04-P1-01
+  - SC-e06s04-P1-02
+  - SC-e06s04-P1-03
+  - SC-e06s04-P1-04
+  - SC-e06s04-P1-05
+tasks:
+  - id: e06s04t01
+    title: Rewrite active Agent guidance and specifications
+    status: failing
+    risk: P1
+    depends_on: [e06s03t06]
+    story_steps: [1]
+    scenarios: [SC-e06s04-P1-01]
+    work:
+      - Rewrite AGENTS.md and CLAUDE.md together and keep them byte-for-byte identical.
+      - Update README, product vision/glossary, ubiquitous language, technical architecture, security review, and module descriptions to the Agent-centric flow.
+      - Remove instructions and claims for deleted identity/orchestration surfaces without inventing unsupported capabilities.
+    files:
+      - AGENTS.md
+      - CLAUDE.md
+      - README.md
+      - specs/product/VISION_LATEST.yaml
+      - specs/product/GLOSSARY_LATEST.yaml
+      - specs/UBIQUITOUS_LANGUAGE_LATEST.md
+      - specs/tech-architecture/tech-stack.md
+      - specs/security/REVIEW.md
+      - src/mia_cli/__init__.py
+    verify: >-
+      cmp -s AGENTS.md CLAUDE.md
+      && grep -RInE '\b(AgentRunner|AgentRuntimeFactory|AgentHarness|AgentManager|Plugin|Delegation|Session)\b' README.md AGENTS.md CLAUDE.md specs/product specs/tech-architecture >/dev/null
+      && printf 'no new security findings in affected paths\n'
+    security: medium
+    allure:
+      severity: high
+      categories: ["Documentation", "Architecture", "Terminology"]
+  - id: e06s04t02
+    title: Remove legacy-only planning artifacts
+    status: failing
+    risk: P1
+    depends_on: [e06s04t01]
+    story_steps: [2]
+    scenarios: [SC-e06s04-P1-02]
+    work:
+      - Delete legacy-only initial plans, old plans, obsolete orchestration capsules/snapshots, and compatibility verification records under the Git-history-only decision.
+      - Update release-plan, execution-status, planning context, state, and ADR naming/references for e06 and existing active artifacts.
+      - Keep useful e01/e02 records only when they do not describe the removed identity model and ensure no active reference points to a deleted path.
+    files:
+      - docs/initial_plan/
+      - specs/old_plan/
+      - specs/epics/e03-native-orchestration/
+      - specs/epics/archive/e04-agent-centric-foundation/
+      - specs/epics/archive/e05-plugin-agent-template-foundation/
+      - specs/product/snapshots/
+      - specs/verifications/
+      - specs/release-plan.yaml
+      - specs/execution-status.yaml
+      - specs/planning-context.yaml
+      - specs/state.yaml
+      - specs/adr/
+    verify: >-
+      test -f specs/epics/e06-zero-legacy-agent-core/epic.yaml
+      && ! grep -RInE 'docs/initial_plan|specs/old_plan|e03-native-orchestration|archive/e04|archive/e05|AUDIT-e03|AUDIT-e04|e03s01-verify|e04s04-verify' specs --exclude-dir='e06-zero-legacy-agent-core' --include='*.yaml' --include='*.md'
+      && printf 'no new security findings in affected paths\n'
+    security: low
+    allure:
+      severity: high
+      categories: ["Repository cleanup", "Specifications"]
+  - id: e06s04t03
+    title: Protect retained Textual packaging
+    status: failing
+    risk: P1
+    depends_on: [e06s04t02]
+    story_steps: [3]
+    scenarios: [SC-e06s04-P1-03]
+    work:
+      - Keep Textual declared and retain the mia tui entrypoint.
+      - Build and inspect the wheel for the retained TUI package and absence of deleted legacy packages/modules.
+      - Do not remove or expand the Textual frontend.
+    files:
+      - pyproject.toml
+      - src/mia_cli/main.py
+      - src/mia_cli/tui/
+    verify: >-
+      grep -q 'textual>=' pyproject.toml
+      && uv build --offline
+      && uv run --offline python - <<'PY'
+      import glob
+      import zipfile
+      wheels = sorted(glob.glob('dist/*.whl'))
+      assert wheels
+      with zipfile.ZipFile(wheels[-1]) as wheel:
+          names = set(wheel.namelist())
+          assert any(name.startswith('mia_cli/tui/') for name in names)
+          assert not any(name.startswith(('mia_agent/profiles/', 'mia_agent/herd/', 'mia_agent/mode_runtime')) for name in names)
+      print('wheel surface is clean and TUI is retained')
+      PY
+      && uv run --offline mia tui --help
+    security: low
+    allure:
+      severity: high
+      categories: ["Packaging", "TUI", "Build"]
+  - id: e06s04t04
+    title: Run the clean-break verification gate
+    status: failing
+    risk: P1
+    depends_on: [e06s04t03]
+    story_steps: [4]
+    scenarios: [SC-e06s04-P1-01, SC-e06s04-P1-02, SC-e06s04-P1-03, SC-e06s04-P1-04, SC-e06s04-P1-05]
+    work:
+      - Run forbidden-surface and plan consistency checks across source, tests, docs, specs, and the e06 capsule.
+      - Run formatting, lint, strict Mypy, offline pytest, coverage, and package build.
+      - Persist verification evidence only after the contiguous gate passes.
+    files:
+      - src/
+      - tests/
+      - docs/
+      - specs/
+      - README.md
+      - AGENTS.md
+      - CLAUDE.md
+    verify: >-
+      ! grep -RInE '\b(AgentProfile|ProfileManager|ModeRuntime|ModeCatalog|WorkflowStage|HerdManager|ManagedAgent|AgentState|MiaHerdApp)\b|mia_agent\.(profiles|herd)|--profile|/profile|--mode|/mode|code_mode' src tests README.md AGENTS.md CLAUDE.md docs specs/product specs/tech-architecture specs/security specs/adr specs/README.md specs/UBIQUITOUS_LANGUAGE_LATEST.md specs/release-plan.yaml specs/execution-status.yaml specs/planning-context.yaml specs/state.yaml
+      && bash scripts/lib/plan-consistency-check.sh specs/epics/e06-zero-legacy-agent-core/
+      && uv run --offline ruff format --check .
+      && uv run --offline ruff check .
+      && uv run --offline mypy src
+      && uv run --offline pytest
+      && ./scripts/check-coverage.sh
+      && uv build --offline
+      && printf 'no new security findings in affected paths\n'
+    security: high
+    allure:
+      severity: high
+      categories: ["Full Quality Gate", "Repository scan", "Security Review"]

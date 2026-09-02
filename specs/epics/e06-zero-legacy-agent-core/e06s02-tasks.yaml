@@ -1,0 +1,103 @@
+story_id: e06s02
+title: Agent-Native Textual TUI Adapter
+spec: e06s02-agent-native-textual-tui-adapter.md
+status: failing
+bcps: 4
+risk: P1
+delta: MODIFIED
+scenarios:
+  - SC-e06s02-P1-01
+  - SC-e06s02-P1-02
+  - SC-e06s02-P1-03
+  - SC-e06s02-P1-04
+  - SC-e06s02-P2-05
+tasks:
+  - id: e06s02t01
+    title: Specify Agent-native TUI behavior
+    status: failing
+    risk: P1
+    depends_on: [e06s01t05]
+    story_steps: [1]
+    scenarios: [SC-e06s02-P1-01, SC-e06s02-P1-02, SC-e06s02-P1-03]
+    work:
+      - Rewrite TUI tests to inject AgentManager, AgentRunner, and MockProvider.
+      - Replace transient lead/coder expectations with built-in and persisted Agent expectations.
+      - Cover prompt routing, stream rendering, Agent switching, and persisted Ctrl+N creation.
+    files:
+      - tests/test_tui_app.py
+      - src/mia_cli/tui/app.py
+      - src/mia_cli/tui/sidebar.py
+    verify: >-
+      uv run --offline pytest tests/test_tui_app.py -k 'mount or prompt or switch or rendering or create'
+      && printf 'no new security findings in affected paths\n'
+    security: medium
+    allure:
+      severity: high
+      categories: ["TUI", "Agent identity", "Contract tests"]
+  - id: e06s02t02
+    title: Route TUI prompts through AgentRunner
+    status: failing
+    risk: P1
+    depends_on: [e06s02t01]
+    story_steps: [2]
+    scenarios: [SC-e06s02-P1-02, SC-e06s02-P1-04]
+    work:
+      - Replace HerdManager construction and event subscription with AgentManager/AgentRunner injection.
+      - Iterate canonical AgentEventEnvelope values in the Textual worker.
+      - Render sanitized RunErrorEvent values without false completion.
+    files:
+      - src/mia_cli/tui/app.py
+      - src/mia_cli/tui/panes.py
+      - tests/test_tui_app.py
+    verify: >-
+      uv run --offline pytest tests/test_tui_app.py tests/test_agent_runtime.py -k 'tui or runner or envelope or error'
+      && printf 'no new security findings in affected paths\n'
+    security: high
+    allure:
+      severity: high
+      categories: ["TUI", "Runtime", "Security Review"]
+  - id: e06s02t03
+    title: Render canonical Agents in the existing layout
+    status: failing
+    risk: P1
+    depends_on: [e06s02t02]
+    story_steps: [3]
+    scenarios: [SC-e06s02-P1-01, SC-e06s02-P1-03, SC-e06s02-P2-05]
+    work:
+      - Change sidebar data from ManagedAgent/AgentState to Agent values and retain recognizable layout.
+      - Keep model selection, target switching, transcript routing, and minimal persisted Agent creation.
+      - Do not add a replacement status machine or new UI capability.
+    files:
+      - src/mia_cli/tui/sidebar.py
+      - src/mia_cli/tui/app.py
+      - src/mia_cli/tui/panes.py
+      - src/mia_cli/tui/widgets/
+      - tests/test_tui_app.py
+    verify: >-
+      uv run --offline pytest tests/test_tui_app.py tests/test_cli_print_mode.py -k 'tui or agent or model'
+      && printf 'no new security findings in affected paths\n'
+    security: medium
+    allure:
+      severity: high
+      categories: ["TUI", "Regression"]
+  - id: e06s02t04
+    title: Remove Herd dependencies from the retained frontend
+    status: failing
+    risk: P1
+    depends_on: [e06s02t03]
+    story_steps: [4, 5]
+    scenarios: [SC-e06s02-P1-02, SC-e06s02-P2-05]
+    work:
+      - Remove dead TUI-only input code and the MiaHerdApp compatibility alias if unused.
+      - Prove retained TUI code has no Herd/Profile/Mode imports and still packages with Textual.
+      - Keep the mia tui command and Textual dependency.
+    files:
+      - src/mia_cli/tui/
+      - tests/test_tui_app.py
+      - src/mia_cli/main.py
+      - pyproject.toml
+    verify: >-
+      ! grep -RInE 'mia_agent\.(herd|profiles)|HerdManager|ManagedAgent|AgentState|MiaHerdApp' src/mia_cli/tui tests/test_tui_app.py
+      && uv run --offline pytest tests/test_tui_app.py
+      && uv run --offline mia tui --help
+      && uv build --offline

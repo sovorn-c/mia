@@ -1,50 +1,46 @@
-# specs/planning-context.yaml — active planning context for e05
-feature_name: "Plugin and Agent Template Foundation"
+# specs/planning-context.yaml — active planning context for e06
+feature_name: Zero-Legacy Agent Core
 problem_statement: >
-  Agents can persist Plugin names but Mia has no executable Plugin lifecycle, contribution loading,
-  per-Agent Plugin configuration, concrete Plugin, or safe way to distribute an Agent definition.
+  Mia's active source, tests, CLI, TUI backend, and living documentation still expose the historical
+  Profile/Mode/Workflow/Herd identity model beside the canonical Agent model. This creates duplicate
+  registries and execution roots and makes public contribution confusing.
 actors:
-  - "Users adding note assistance to a persisted non-built-in Agent"
-  - "Agent designers instantiating a reusable Notes Agent"
-  - "Plugin developers validating the first executable extension seam"
-  - "Core maintainers protecting access, attribution, credentials, and Sessions"
+  - Public Mia users selecting and running named Agents
+  - Contributors working on Agent, Skill, Tool, Plugin, Delegation, Run, and Session code
+  - Maintainers protecting access, attribution, persistence, and package boundaries
+  - Textual TUI users who need the existing frontend to keep working
 solution_summary: >
-  Prove the minimum extension boundary with one bundled Notes Plugin that contributes create, list,
-  and read note capabilities under per-Agent enablement and core policy, plus one bundled Notes Agent
-  Template that creates an independent secret-free Agent with the Plugin requirement.
+  Establish AgentRunner and AgentRuntimeFactory as the only active runtime path, keep the Textual TUI
+  as a shallow Agent-native frontend, remove Profile/Mode/Workflow/Herd implementation and compatibility
+  shims, and purge active docs/specs/tests of the old identity vocabulary.
 constraints:
-  - "Bundled local proof only; no registry, marketplace, arbitrary third-party loading, or dependency installation."
-  - "Plugin enablement and configuration are explicit per persisted non-built-in Agent and fail closed."
-  - "Plugin Tools remain behind capability filtering, access approval, security, audit, attribution, and truthful error handling."
-  - "Plugin state is Agent-owned and never copied into an Agent Template."
-  - "Templates exclude source identity, credentials, Sessions, memory, Plugin data, selected-default state, and full-access consent."
-  - "No new runtime dependency; Python 3.12+, strict Mypy, Ruff, offline tests, and the release coverage gate remain mandatory."
+  - Keep mia tui and Textual; do not redesign the UI or add new TUI features.
+  - Do not migrate, rewrite, or delete legacy user files; make them unreachable by code.
+  - Preserve Agent, Plugin, Delegation, Session, access, provider, filesystem, and redaction behavior.
+  - No new runtime dependency; use strict Mypy, Ruff, offline tests, and coverage gates.
+  - No public Mode or Workflow object; private sequencing may remain inside the Research Agent runner.
+  - No second orchestration root, generic compatibility layer, or re-export shim.
 out_of_scope:
-  - "Remote Plugin discovery, publishing, marketplace, signing, or reputation"
-  - "Arbitrary third-party code loading or dependency solving"
-  - "Broad SDK hooks, workflow APIs, provider adapters, channels, or UI contributions"
-  - "Plugin sandboxing, hot reload, upgrade, rollback, or background jobs"
-  - "Sharing credentials, Sessions, memory, notes, or live Agent identity"
-  - "Rich note editing, deletion, search, attachments, sync, or collaboration"
+  - TUI visual redesign, new widgets, and new interaction model
+  - New Skills, Plugins, providers, channels, scheduling, or collaboration semantics
+  - Automatic legacy data migration or deletion
+  - Public Workflow graphs, Herd replacement, autonomous swarms, or unrestricted worker messaging
 success_criteria:
-  - "Notes installs locally, enables per Agent, and contributes create/list/read only when enabled."
-  - "Notes data is isolated by Agent and disabling the Plugin preserves stored data."
-  - "Core access and integrity rules govern every Plugin Tool invocation."
-  - "Malformed, missing, incompatible, or undeclared Plugin contributions fail before execution."
-  - "The Notes Agent Template creates a new independent Agent with no private source data."
-  - "Plugin-free Agents and all e04 regressions remain green."
+  - Canonical Agent-only runtime and frontend paths pass focused and full quality gates.
+  - Forbidden legacy symbols and imports are absent from active source, tests, docs, and package output.
+  - Existing supported features remain green.
 key_decisions:
-  - decision: "Use a bundled Notes Plugin as the first executable extension."
-    rationale: "It proves useful local read/write behavior, Agent-owned data, and access policy without external services."
-  - decision: "Use a Notes Agent Template as the first distributable Agent."
-    rationale: "It proves portable Agent configuration and Plugin requirements without copying private state."
-  - decision: "Do not load arbitrary third-party Python in e05."
-    rationale: "A bundled proof resolves the core contract before supply-chain, dependency, and isolation design."
-  - decision: "Keep Plugin contribution types limited to Tools and one Agent Template."
-    rationale: "Skills, hooks, workflows, providers, UI, and channels are speculative until a real use case requires them."
+  - decision: Keep the Textual frontend and replace only its Herd/Profile backend dependencies.
+    rationale: The UI is not the identity model; preserving it avoids unnecessary product loss while deferring deeper TUI work.
+  - decision: Delete compatibility code instead of translating old files or commands.
+    rationale: The requested clean break targets public clarity, and Git history is sufficient preservation.
+  - decision: Retain private Research Agent sequencing without a public Workflow model.
+    rationale: It is useful existing behavior and fits the Agent-centric target as internal implementation logic.
+  - decision: Keep Textual installed.
+    rationale: mia tui remains a supported shallow frontend in this initiative.
 artifacts:
-  scope: "specs/product/SCOPE_LATEST.yaml"
-  epic: "specs/epics/e05-plugin-agent-template-foundation/epic.yaml"
-  impact: "specs/IMPACT_LATEST.md"
-  release_plan: "specs/release-plan.yaml"
-next_skill: "kickoff-branch"
+  scope: specs/product/SCOPE_LATEST.yaml
+  epic: specs/epics/e06-zero-legacy-agent-core/epic.yaml
+  impact: specs/IMPACT_LATEST.md
+  release_plan: specs/release-plan.yaml
+next_skill: kickoff-branch

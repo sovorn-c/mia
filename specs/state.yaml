@@ -1,25 +1,24 @@
 workflow_mode: solo-git
 session:
-  active_flow: verify
-  active_epic_id: e05
-  active_story_id: e05s03
-  target_version: 0.5.0
+  active_flow: plan
+  active_epic_id: e06
+  active_story_id: e06s01
+  target_version: 0.6.0
 handoff:
-  next_skill: commit-message
-  summary: 'audit-code passed for e05 on e05-notes-plugin after splitting Plugin contracts,
-    removing duplicated integration logic, and adding boundary tests. Full quality
-    gate remains green; repository helper scripts remain unavailable.
-
-    '
+  next_skill: kickoff-branch
+  summary: 'e05 Plugin and Agent Template Foundation is merged and archived. e06 Zero-Legacy
+    Agent Core is planned: keep the Textual TUI as a shallow Agent frontend, replace
+    its Herd backend, remove Profile/Mode/Workflow/Herd compatibility code, and purge
+    active legacy docs/specs. All e06 tasks start failing until verified.'
 git:
-  branch: e05-notes-plugin
+  branch: main
 metrics:
   story_start: '2026-09-01T08:57:36Z'
   skill_timings:
     plan-work:
-      calls: 4
-      total_seconds: 12197.0
-      avg_seconds: 3049.25
+      calls: 5
+      total_seconds: 13217.0
+      avg_seconds: 2643.4
     develop-tdd:
       calls: 5
       total_seconds: 10063.0

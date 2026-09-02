@@ -1,6 +1,6 @@
 # specs/release-plan.yaml — Release index & WSJF epic sequencing
-version: "0.5.0"
-target_release: "v0.5.0-plugin-agent-template-foundation"
+version: "0.6.0"
+target_release: "v0.6.0-zero-legacy-agent-core"
 
 epics:
   - id: "e01"
@@ -72,4 +72,18 @@ epics:
     bcps_total: 21
     stories_count: 3
     directory: "specs/epics/archive/e05-plugin-agent-template-foundation"
+
+  - id: e06
+    slug: "zero-legacy-agent-core"
+    title: "Zero-Legacy Agent Core"
+    wsjf:
+      business_value: 21
+      time_criticality: 13
+      risk_reduction: 21
+      job_size: 13
+      score: 4.2
+    status: "planned"
+    bcps_total: 25
+    stories_count: 4
+    directory: "specs/epics/e06-zero-legacy-agent-core"
 
