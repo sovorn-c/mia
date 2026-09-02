@@ -112,6 +112,9 @@ class AgentRuntimeFactory:
             BashTool(cwd=work_dir),
             *plugin_tools,
         ]
+        tool_names = [getattr(tool, "name", "") for tool in available_tools]
+        if len(tool_names) != len(set(tool_names)):
+            raise ValueError("Plugin activation failed: duplicate Tool names are not allowed")
         tools = self.agent_manager.filter_tools(agent, available_tools)
         active_delegation_service = delegation_service or self.delegation_service
         if (

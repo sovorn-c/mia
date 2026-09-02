@@ -12,8 +12,8 @@ from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.events import ToolResultEvent
 from mia_agent.orchestration import AgentRuntimeFactory, RuntimeIdentity
 from mia_agent.plugins import PluginManager
-from mia_tools.notes import NoteListTool
 from mia_ai.providers.mock import MockProvider
+from mia_tools.notes import NoteListTool
 
 
 def make_agent_manager(tmp_path: Path) -> AgentManager:
