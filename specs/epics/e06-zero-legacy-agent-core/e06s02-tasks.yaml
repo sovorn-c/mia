@@ -14,7 +14,7 @@ scenarios:
 tasks:
   - id: e06s02t01
     title: Specify Agent-native TUI behavior
-    status: failing
+    status: passing
     risk: P1
     depends_on: [e06s01t05]
     story_steps: [1]
@@ -36,7 +36,7 @@ tasks:
       categories: ["TUI", "Agent identity", "Contract tests"]
   - id: e06s02t02
     title: Route TUI prompts through AgentRunner
-    status: failing
+    status: passing
     risk: P1
     depends_on: [e06s02t01]
     story_steps: [2]
@@ -58,7 +58,7 @@ tasks:
       categories: ["TUI", "Runtime", "Security Review"]
   - id: e06s02t03
     title: Render canonical Agents in the existing layout
-    status: failing
+    status: passing
     risk: P1
     depends_on: [e06s02t02]
     story_steps: [3]
