@@ -58,6 +58,15 @@ def test_notes_agent_template_is_allowlisted_and_serializable(tmp_path: Path) ->
             instructions="Unsafe",
             plugin_config={"notes": {"notebook_name": "Personal"}},
         )
+    with pytest.raises(ValidationError, match="duplicate"):
+        AgentTemplate(
+            template_id="duplicate-tools",
+            version="1.0.0",
+            display_name="Unsafe",
+            description="Unsafe",
+            instructions="Unsafe",
+            tools=["read_file", "read_file"],
+        )
 
 
 def test_notes_template_instantiates_an_independent_agent(tmp_path: Path) -> None:
