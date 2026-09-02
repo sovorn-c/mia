@@ -201,6 +201,31 @@ class PluginManager:
         )
         return installed
 
+    def enable(self, agent_id: str, plugin_id: str) -> Any:
+        """Enable an installed Plugin for one persisted, non-built-in Agent."""
+        manifest = self.get_manifest(plugin_id)
+        installed = {record.plugin_id: record for record in self.list_installed()}
+        record = installed.get(manifest.plugin_id)
+        if record is None:
+            raise ValueError(f"Plugin '{manifest.plugin_id}' is not installed; install it first")
+        if record.version != manifest.version or record.api_version != manifest.api_version:
+            raise ValueError(f"Installed Plugin '{manifest.plugin_id}' is incompatible")
+
+        inspection = self.agent_manager.inspect_agent(agent_id)
+        if inspection["source"] == "builtin":
+            raise ValueError("Cannot enable Plugins for immutable built-in Agents")
+        agent = inspection["agent"]
+        if manifest.plugin_id in agent.plugins:
+            return agent
+        self.agent_manager.save_agent(
+            agent.model_copy(update={"plugins": [*agent.plugins, manifest.plugin_id]})
+        )
+        return self.agent_manager.get_agent(agent.agent_id)
+
+    def enable_for_agent(self, agent_id: str, plugin_id: str) -> Any:
+        """Explicit spelling for callers managing per-Agent Plugin state."""
+        return self.enable(agent_id, plugin_id)
+
     @staticmethod
     def _notes_manifest() -> PluginManifest:
         return PluginManifest(
