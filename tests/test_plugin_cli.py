@@ -38,3 +38,18 @@ def test_cli_installs_and_enables_bundled_plugin(tmp_path: Path) -> None:
     assert enabled.exit_code == 0
     assert "alpha" in enabled.stdout
     assert agents.get_agent("alpha").plugins == ["notes"]
+
+
+def test_agent_inspection_reports_enabled_plugins_without_config_values(tmp_path: Path) -> None:
+    agents, plugins = make_managers(tmp_path)
+    plugins.install("notes")
+    plugins.enable("alpha", "notes")
+    plugins.configure("alpha", "notes", {"notebook_name": "Private"})
+    with patch("mia_cli.main.AgentManager", return_value=agents), patch(
+        "mia_cli.main.PluginManager", return_value=plugins
+    ):
+        shown = runner.invoke(app, ["agent", "show", "alpha"])
+
+    assert shown.exit_code == 0
+    assert "Plugins: notes" in shown.stdout
+    assert "Private" not in shown.stdout
