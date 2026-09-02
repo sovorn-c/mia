@@ -11,7 +11,7 @@ from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.events import ToolResultEvent
 from mia_agent.orchestration import AgentRuntimeFactory, RuntimeIdentity
-from mia_agent.plugins import PluginManager
+from mia_agent.plugins import NotesPlugin, PluginManager
 from mia_ai.providers.mock import MockProvider
 from mia_tools.notes import NoteListTool
 
@@ -126,6 +126,24 @@ def test_enabled_plugin_tools_are_composed_into_agent_runtime(tmp_path: Path) ->
         "note_read",
     ]
     assert [tool.plugin_id for tool in runtime.harness.tools] == ["notes"] * 3
+
+
+def test_plugin_manager_rejects_undeclared_tool_contributions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    agents = make_agent_manager(tmp_path)
+    alpha = agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+    plugins.install("notes")
+    plugins.enable(alpha.agent_id, "notes")
+
+    monkeypatch.setattr(
+        NotesPlugin,
+        "build_tools",
+        lambda _self, **kwargs: [NoteListTool(kwargs["data_dir"])],
+    )
+    with pytest.raises(ValueError, match="declared"):
+        plugins.resolve_tools(agents.get_agent("alpha"))
 
 
 def test_runtime_rejects_duplicate_tool_names_before_provider_execution(tmp_path: Path) -> None:
