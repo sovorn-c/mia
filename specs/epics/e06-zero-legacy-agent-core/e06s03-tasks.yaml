@@ -1,7 +1,7 @@
 story_id: e06s03
 title: Remove Legacy Identity, Orchestration, and CLI Surfaces
 spec: e06s03-remove-legacy-identity-orchestration-cli.md
-status: failing
+status: passing
 bcps: 8
 risk: P0
 delta: REMOVED
@@ -15,7 +15,7 @@ scenarios:
 tasks:
   - id: e06s03t01
     title: Specify canonical-only Agent boundary
-    status: failing
+    status: passing
     risk: P0
     depends_on: [e06s02t04]
     story_steps: [1]
@@ -39,7 +39,7 @@ tasks:
       categories: ["Agent identity", "Persistence", "Security Review"]
   - id: e06s03t02
     title: Simplify Agent model and native registry
-    status: failing
+    status: passing
     risk: P0
     depends_on: [e06s03t01]
     story_steps: [2]
@@ -66,7 +66,7 @@ tasks:
       categories: ["Agent", "Plugin", "Security Review"]
   - id: e06s03t03
     title: Remove legacy modules and access/session vocabulary
-    status: failing
+    status: passing
     risk: P0
     depends_on: [e06s03t02]
     story_steps: [3]
@@ -97,7 +97,7 @@ tasks:
       categories: ["Deletion", "Runtime", "Access Control", "Security Review"]
   - id: e06s03t04
     title: Make CLI and REPL Agent-only
-    status: failing
+    status: passing
     risk: P0
     depends_on: [e06s03t03]
     story_steps: [4]
@@ -121,7 +121,7 @@ tasks:
       categories: ["CLI", "REPL", "Security Review"]
   - id: e06s03t05
     title: Replace legacy tests and prove forbidden surfaces are absent
-    status: failing
+    status: passing
     risk: P0
     depends_on: [e06s03t04]
     story_steps: [5]
@@ -149,7 +149,7 @@ tasks:
       categories: ["Negative coverage", "Regression", "Security Review"]
   - id: e06s03t06
     title: Run the identity removal quality gate
-    status: failing
+    status: passing
     risk: P0
     depends_on: [e06s03t05]
     story_steps: [6]

@@ -164,7 +164,7 @@ epics:
     stories:
       e06s01:
         title: Canonical Agent Run Runtime
-        status: failing
+        status: passing
         bcps: 8
         risk: P0
         tasks_total: 5
@@ -172,7 +172,7 @@ epics:
         tasks_failing: 0
       e06s02:
         title: Agent-Native Textual TUI Adapter
-        status: failing
+        status: passing
         bcps: 4
         risk: P1
         tasks_total: 4
@@ -180,12 +180,12 @@ epics:
         tasks_failing: 0
       e06s03:
         title: Remove Legacy Identity, Orchestration, and CLI Surfaces
-        status: failing
+        status: passing
         bcps: 8
         risk: P0
         tasks_total: 6
-        tasks_passing: 0
-        tasks_failing: 6
+        tasks_passing: 6
+        tasks_failing: 0
       e06s04:
         title: Purge Legacy Project Surfaces and Verify the Clean Break
         status: failing

@@ -54,7 +54,7 @@ stories:
 
   - id: e06s03
     title: Remove Legacy Identity, Orchestration, and CLI Surfaces
-    status: failing
+    status: passing
     bcps: 8
     risk: P0
     delta: REMOVED
