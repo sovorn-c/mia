@@ -5,12 +5,14 @@ session:
   active_story_id: e05s01
   target_version: 0.5.0
 handoff:
-  next_skill: kickoff-branch
-  summary: >
-    e05 Plugin and Agent Template Foundation is scoped, sliced, and planned as three failing
-    vertical stories (21 BCPs). Start e05s01 Notes Plugin contracts on an isolated feature branch.
+  next_skill: develop-tdd
+  summary: 'e05 Plugin and Agent Template Foundation is scoped, sliced, and planned
+    as three failing vertical stories (21 BCPs). Branch e05-notes-plugin is ready
+    for e05s01 TDD.
+
+    '
 git:
-  branch: main
+  branch: e05-notes-plugin
 metrics:
   story_start: '2026-09-01T08:57:36Z'
   skill_timings:
@@ -22,6 +24,7 @@ metrics:
       calls: 4
       total_seconds: 7558.0
       avg_seconds: 1889.5
+      _start: '2026-09-02T02:34:37Z'
     verify-work:
       calls: 3
       total_seconds: 1103.0
