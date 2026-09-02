@@ -23,6 +23,16 @@ def make_agent_manager(tmp_path: Path) -> AgentManager:
     )
 
 
+def test_agent_plugin_configuration_is_normalized_and_secret_free() -> None:
+    agent = Agent(
+        agent_id="alpha",
+        plugin_config={"Notes": {"notebook_name": "Personal"}},
+    )
+    assert agent.plugin_config == {"notes": {"notebook_name": "Personal"}}
+    with pytest.raises(ValueError, match="credential-like"):
+        Agent(agent_id="alpha", plugin_config={"notes": {"api_key": "secret"}})
+
+
 def test_agent_plugin_ids_are_normalized_and_unique() -> None:
     assert Agent(agent_id="alpha", plugins=["Notes"]).plugins == ["notes"]
     with pytest.raises(ValueError, match="duplicate"):
