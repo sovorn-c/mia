@@ -171,13 +171,25 @@ class AgentHarness:
     async def _execute_tool(self, call_id: str, tool_name: str, args: dict[str, Any]) -> Any:
         """Dispatch a single tool call through pipeline (if present) to the matching tool handler."""
         if self.pipeline:
+            plugin_id = next(
+                (
+                    getattr(tool, "plugin_id", None)
+                    for tool in self.tools
+                    if getattr(tool, "name", None) == tool_name
+                ),
+                None,
+            )
+            metadata = dict(self.tool_context_metadata)
+            if plugin_id:
+                metadata["plugin_id"] = plugin_id
             ctx = ToolCallContext(
                 session_id=self.session_id,
                 step_index=self._current_step,
                 call_id=call_id,
                 tool_name=tool_name,
+                plugin_id=plugin_id,
                 arguments=args,
-                metadata=dict(self.tool_context_metadata),
+                metadata=metadata,
             )
             return await self.pipeline.execute(
                 ctx,
@@ -266,10 +278,19 @@ class AgentHarness:
             # If tool calls were made, execute them
             if tool_calls:
                 for tc in tool_calls:
+                    plugin_id = next(
+                        (
+                            getattr(tool, "plugin_id", None)
+                            for tool in self.tools
+                            if getattr(tool, "name", None) == tc.name
+                        ),
+                        None,
+                    )
                     yield ToolCallEvent(
                         call_id=tc.id,
                         tool_name=tc.name,
                         arguments=sanitize_arguments(tc.arguments),
+                        plugin_id=plugin_id,
                     )
 
                     start_time = time.perf_counter()
@@ -288,6 +309,7 @@ class AgentHarness:
                         output=safe_result,
                         is_error=is_error,
                         duration_ms=duration_ms,
+                        plugin_id=plugin_id,
                     )
 
                     # Append tool result to messages & session store

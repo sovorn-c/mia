@@ -48,6 +48,7 @@ class ToolCallEvent(BaseAgentEvent):
     call_id: str
     tool_name: str
     arguments: dict[str, Any] = Field(default_factory=dict)
+    plugin_id: str | None = None
 
 
 class ToolResultEvent(BaseAgentEvent):
@@ -59,6 +60,7 @@ class ToolResultEvent(BaseAgentEvent):
     output: Any
     is_error: bool = False
     duration_ms: float = 0.0
+    plugin_id: str | None = None
 
 
 class StepEndEvent(BaseAgentEvent):
