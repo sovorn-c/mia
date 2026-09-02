@@ -140,3 +140,39 @@ async def test_plugin_tool_uses_existing_access_policy_pipeline(tmp_path: Path) 
     assert approvals[0].tool_name == "note_create"
     assert approvals[0].effect == "side-effecting"
     assert list((tmp_path / "agents" / "alpha" / "plugins" / "notes").glob("*.json"))
+
+
+@pytest.mark.asyncio
+async def test_read_only_agent_only_receives_non_mutating_notes_tools(tmp_path: Path) -> None:
+    agents = make_agent_manager(tmp_path)
+    agents.create_agent("observer", access_policy="read-only", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+    plugins.install("notes")
+    plugins.enable("observer", "notes")
+    provider = MockProvider()
+    provider.queue_text_response("notes are readable")
+
+    runtime = AgentRuntimeFactory(
+        agent_manager=agents,
+        plugin_manager=plugins,
+        config_manager=ConfigManager(
+            config_path=tmp_path / "config.json",
+            credential_store=FileCredentialStore(path=tmp_path / "credentials.json"),
+        ),
+    ).build(
+        identity=RuntimeIdentity(
+            agent_id="observer",
+            run_id="run-1",
+            task_id="root",
+            session_id="session-1",
+        ),
+        provider=provider,
+        cwd=tmp_path,
+    )
+
+    [event async for event in runtime.harness.prompt("list notes")]
+    assert runtime.agent.tools == ["note_list", "note_read"]
+    assert [tool["name"] for tool in provider.recorded_calls[0]["tools"]] == [
+        "note_list",
+        "note_read",
+    ]
