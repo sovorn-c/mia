@@ -1,4 +1,4 @@
-"""Contract tests for bundled Plugin installation and Agent enablement."""
+"""Contract tests for bundled Plugin installation, enablement, and runtime composition."""
 
 from __future__ import annotations
 
@@ -7,7 +7,11 @@ from pathlib import Path
 import pytest
 
 from mia_agent.agents import AgentManager
+from mia_agent.auth.config import ConfigManager
+from mia_agent.auth.credentials import FileCredentialStore
+from mia_agent.orchestration import AgentRuntimeFactory, RuntimeIdentity
 from mia_agent.plugins import PluginManager
+from mia_ai.providers.mock import MockProvider
 
 
 def make_agent_manager(tmp_path: Path) -> AgentManager:
@@ -50,3 +54,37 @@ def test_installed_plugin_can_be_enabled_for_one_named_agent(tmp_path: Path) -> 
     assert agents.get_agent("alpha").tools == []
     with pytest.raises(ValueError, match="built-in"):
         plugins.enable("mia", "notes")
+
+
+def test_enabled_plugin_tools_are_composed_into_agent_runtime(tmp_path: Path) -> None:
+    agents = make_agent_manager(tmp_path)
+    agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+    plugins.install("notes")
+    plugins.enable("alpha", "notes")
+    factory = AgentRuntimeFactory(
+        agent_manager=agents,
+        plugin_manager=plugins,
+        config_manager=ConfigManager(
+            config_path=tmp_path / "config.json",
+            credential_store=FileCredentialStore(path=tmp_path / "credentials.json"),
+        ),
+    )
+
+    runtime = factory.build(
+        identity=RuntimeIdentity(
+            agent_id="alpha",
+            run_id="run-1",
+            task_id="root",
+            session_id="session-1",
+        ),
+        provider=MockProvider(),
+        cwd=tmp_path,
+    )
+
+    assert [tool.name for tool in runtime.harness.tools] == [
+        "note_create",
+        "note_list",
+        "note_read",
+    ]
+    assert [tool.plugin_id for tool in runtime.harness.tools] == ["notes"] * 3
