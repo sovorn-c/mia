@@ -26,8 +26,9 @@ def make_managers(tmp_path: Path) -> tuple[AgentManager, PluginManager]:
 
 def test_cli_installs_and_enables_bundled_plugin(tmp_path: Path) -> None:
     agents, plugins = make_managers(tmp_path)
-    with patch("mia_cli.main.AgentManager", return_value=agents), patch(
-        "mia_cli.main.PluginManager", return_value=plugins
+    with (
+        patch("mia_cli.main.AgentManager", return_value=agents),
+        patch("mia_cli.main.PluginManager", return_value=plugins),
     ):
         installed = runner.invoke(app, ["plugin", "install", "notes"])
         enabled = runner.invoke(app, ["plugin", "enable", "notes", "--agent", "alpha"])

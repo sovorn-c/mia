@@ -26,8 +26,9 @@ def make_managers(tmp_path: Path) -> tuple[AgentManager, PluginManager]:
 def test_cli_lists_and_creates_notes_agent_template(tmp_path: Path) -> None:
     agents, plugins = make_managers(tmp_path)
     plugins.install("notes")
-    with patch("mia_cli.main.AgentManager", return_value=agents), patch(
-        "mia_cli.main.PluginManager", return_value=plugins
+    with (
+        patch("mia_cli.main.AgentManager", return_value=agents),
+        patch("mia_cli.main.PluginManager", return_value=plugins),
     ):
         listed = runner.invoke(app, ["template", "list"])
         created = runner.invoke(app, ["template", "create", "notes-agent", "my-notes"])

@@ -1,14 +1,14 @@
 story_id: e05s01
 story_title: "Notes Plugin Vertical Slice"
 spec: "e05s01-notes-plugin-vertical-slice.md"
-status: failing
+status: passing
 requirement_delta: ADDED
 bcps: 8
 tasks:
   - id: e05s01t01
     title: "Lock the Notes Plugin contracts with failing tests"
     description: "Specify bundled installation, per-Agent enablement, Notes Tool visibility, Agent-owned storage, policy mediation, and Plugin-free regression behavior before implementation."
-    status: failing
+    status: passing
     risk: P0
     security: high
     depends_on: []
@@ -23,7 +23,7 @@ tasks:
   - id: e05s01t02
     title: "Add the bundled Plugin contract and Notes capabilities"
     description: "Create the minimum validated Plugin manifest/registry and bundled Notes create, list, and read capabilities using confined Agent-owned storage and no external package."
-    status: failing
+    status: passing
     risk: P0
     security: high
     depends_on: [e05s01t01]
@@ -38,7 +38,7 @@ tasks:
   - id: e05s01t03
     title: "Compose enabled Plugin Tools into the canonical runtime"
     description: "Resolve enabled Notes Tools before existing capability/effect filtering, reject duplicate names, and keep every Plugin Tool behind access, security, audit, cost, and error middleware."
-    status: failing
+    status: passing
     risk: P0
     security: high
     depends_on: [e05s01t02]
@@ -53,7 +53,7 @@ tasks:
   - id: e05s01t04
     title: "Expose the minimum install and enable journey"
     description: "Add canonical local commands to install Notes and enable it for one Agent, with deterministic inspection and actionable errors and without duplicating runtime logic in the CLI."
-    status: failing
+    status: passing
     risk: P0
     security: medium
     depends_on: [e05s01t02, e05s01t03]
@@ -68,7 +68,7 @@ tasks:
   - id: e05s01t05
     title: "Close the Notes vertical-slice quality gate"
     description: "Run Plugin, Agent, runtime, Tool, access, Delegation, CLI, and full project gates before marking any e05s01 task passing."
-    status: failing
+    status: passing
     risk: P0
     security: high
     depends_on: [e05s01t03, e05s01t04]
