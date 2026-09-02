@@ -1,19 +1,16 @@
 workflow_mode: solo-git
 session:
-  active_flow: plan
+  active_flow: release
   active_epic_id: e04
-  active_story_id: e04s01
+  active_story_id: e04s04
   target_version: 0.4.0
 handoff:
-  next_skill: kickoff-branch
+  next_skill: release-branch
   summary: >
-    Agent-centric vision and e04 scope are approved. The complete e04 planning capsule contains
-    four ordered failing stories, 24 implementation tasks, 32 acceptance scenarios, explicit
-    Agent/access/Delegation/compatibility contracts, and a high-risk impact assessment. Begin with
-    e04s01 contract tests on an isolated feature branch; do not destructively migrate legacy
-    Profile or Session data.
+    e04 Agent-Centric Foundation and audit remediation are complete. The full quality gate passes,
+    the audit verdict is PASS, and the branch is ready for solo-local integration into main.
 git:
-  branch: main
+  branch: e04-agent-centric-foundation
 metrics:
   story_start: '2026-09-01T08:57:36Z'
   skill_timings:
@@ -22,13 +19,13 @@ metrics:
       total_seconds: 10599.0
       avg_seconds: 3533.0
     develop-tdd:
-      calls: 3
-      total_seconds: 3577.0
-      avg_seconds: 1192.3333333333333
+      calls: 4
+      total_seconds: 7558.0
+      avg_seconds: 1889.5
     verify-work:
-      calls: 2
-      total_seconds: 815.0
-      avg_seconds: 407.5
+      calls: 3
+      total_seconds: 1103.0
+      avg_seconds: 367.6666666666667
     audit-code:
       calls: 1
       total_seconds: 342.0

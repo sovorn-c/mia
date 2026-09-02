@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
-version: 0.3.0
-updated_at: '2026-08-21T23:49:43Z'
+version: 0.4.0
+updated_at: '2026-09-01T16:53:17Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-08-21T23:11:33Z'
@@ -93,4 +93,40 @@ epics:
         risk: P1
         tasks_total: 7
         tasks_passing: 7
+        tasks_failing: 0
+  e04:
+    title: Agent-Centric Foundation
+    status: passing
+    stories:
+      e04s01:
+        title: Named Agent Vertical Slice
+        status: passing
+        bcps: 8
+        risk: P0
+        tasks_total: 6
+        tasks_passing: 6
+        tasks_failing: 0
+      e04s02:
+        title: Agent-Owned State and Access Boundary
+        status: passing
+        bcps: 8
+        risk: P0
+        tasks_total: 6
+        tasks_passing: 6
+        tasks_failing: 0
+      e04s03:
+        title: Direct Agent-to-Agent Delegation
+        status: passing
+        bcps: 8
+        risk: P0
+        tasks_total: 6
+        tasks_passing: 6
+        tasks_failing: 0
+      e04s04:
+        title: Agent-First Compatibility Migration
+        status: passing
+        bcps: 5
+        risk: P0
+        tasks_total: 6
+        tasks_passing: 6
         tasks_failing: 0

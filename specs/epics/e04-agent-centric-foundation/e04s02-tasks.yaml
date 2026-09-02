@@ -1,12 +1,12 @@
 story_id: e04s02
 story_title: "Agent-Owned State and Access Boundary"
-status: failing
+status: passing
 requirement_delta: MODIFIED
 bcps: 8
 tasks:
   - id: e04s02t01
     title: "Specify the complete access and ownership matrix"
-    status: failing
+    status: passing
     agent_type: "security-test-engineer"
     risk: high
     depends_on: [e04s01t06]
@@ -45,7 +45,7 @@ tasks:
 
   - id: e04s02t02
     title: "Classify Tool effects and enforce three access levels"
-    status: failing
+    status: passing
     agent_type: "middleware-security-engineer"
     risk: high
     depends_on: [e04s02t01]
@@ -89,7 +89,7 @@ tasks:
 
   - id: e04s02t03
     title: "Add safe approval and full-access frontend adapters"
-    status: failing
+    status: passing
     agent_type: "cli-security-engineer"
     risk: high
     depends_on: [e04s02t02]
@@ -129,7 +129,7 @@ tasks:
 
   - id: e04s02t04
     title: "Complete Agent state ownership and global credential references"
-    status: failing
+    status: passing
     agent_type: "persistence-auth-engineer"
     risk: high
     depends_on: [e04s01t06, e04s02t01]
@@ -168,7 +168,7 @@ tasks:
 
   - id: e04s02t05
     title: "Implement monotonic effective-access composition"
-    status: failing
+    status: passing
     agent_type: "security-domain-engineer"
     risk: high
     depends_on: [e04s02t02, e04s02t04]
@@ -201,7 +201,7 @@ tasks:
 
   - id: e04s02t06
     title: "Close access, ownership, and security gates"
-    status: failing
+    status: passing
     agent_type: "security-verification-engineer"
     risk: high
     depends_on: [e04s02t03, e04s02t05]

@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
+from mia_agent.agents import AgentManager
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.events import (
     AssistantChunkEvent,
@@ -54,6 +55,28 @@ def test_cli_run_exposes_mode_selection() -> None:
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
     assert "--mode" in result.stdout
+
+
+def test_cli_agent_lifecycle(tmp_path: Path) -> None:
+    manager = AgentManager(
+        agents_dir=tmp_path / "agents",
+        profiles_dir=tmp_path / "profiles",
+        sessions_base_dir=tmp_path / "legacy-sessions",
+    )
+    with patch("mia_cli.main.AgentManager", return_value=manager):
+        created = runner.invoke(
+            app,
+            ["agent", "create", "researcher", "--name", "Researcher", "--tools", "read_file"],
+        )
+        listed = runner.invoke(app, ["agent", "list"])
+        shown = runner.invoke(app, ["agent", "show", "researcher"])
+        selected = runner.invoke(app, ["agent", "use", "researcher"])
+
+    assert created.exit_code == 0
+    assert "researcher" in listed.stdout
+    assert "Researcher" in shown.stdout
+    assert selected.exit_code == 0
+    assert manager.default_agent().agent_id == "researcher"
 
 
 def test_cli_profile_list() -> None:

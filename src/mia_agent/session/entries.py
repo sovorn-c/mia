@@ -52,6 +52,10 @@ class SessionInfoEntry(BaseSessionEntry):
     cwd: str | None = None
     title: str | None = None
     profile: str = "coding"
+    agent_id: str | None = None
+    run_id: str | None = None
+    task_id: str | None = None
+    parent_session_id: str | None = None
 
 
 class LeafEntry(BaseSessionEntry):

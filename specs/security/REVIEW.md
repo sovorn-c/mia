@@ -34,3 +34,18 @@
 - **Verdict:** PASS — no security impact identified.
 - The selector accepts model IDs from provider discovery and persists them as ordinary JSON strings; no selected model ID is executed as a command or used as a filesystem path.
 - Escape/cancel preserves the previous scope, and config updates use Pydantic-validated `MiaConfig` data.
+
+## e04 Agent-Centric Foundation Addendum
+
+- **Branch:** `e04-agent-centric-foundation`
+- **Diff scope:** `main...HEAD`, limited to changed Agent, access, Delegation, runtime, Session, Tool, CLI, and compatibility paths.
+- **Reviewed:** Agent ID/path normalization and atomic writes; legacy Profile projection; capability/effect filtering; approval callback data; full-access confirmation; one-hop Delegation; provider/tool error propagation; session attribution; CLI aliases.
+- **Verdict:** PASS — no concrete HIGH or MEDIUM vulnerability at confidence >= 8 was identified.
+
+### Boundary checks
+
+- Agent and Session filesystem paths are derived from normalized IDs; native Agent definitions use atomic same-directory replacement. Legacy files are read without rewrite. Filesystem Tools reject absolute, traversal, and symlink-resolved paths outside their configured working directory.
+- Access policy is fail-closed for unknown or side-effecting Tools, read-only Agents filter mutating Tools, approval requests redact credential-shaped keys and values, and full access requires explicit confirmation. Legacy Mode/Profile adapters now pass the same policy and approval callback.
+- Delegation validates recipient eligibility before provider/session access, rejects self/recursive requests, bounds prompt/timeout/depth, intersects caller and recipient capabilities, and requires both sides' full-access consent for a delegated full-access child.
+- Provider, Tool, orchestration, audit, and Delegation error payloads are sanitized before user-visible event/session/telemetry boundaries. No credential literal was introduced in changed source.
+- No new shell interpolation, unsafe deserialization, SQL/HTTP sink, authentication endpoint, or dependency was introduced. `BashTool` still runs with the configured working directory and remains approval-gated for side effects; the filesystem Tools now reject paths outside that directory.

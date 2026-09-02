@@ -7,6 +7,7 @@ import contextlib
 import getpass
 import os
 import subprocess
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
+from mia_agent.agents import AgentManager
 from mia_agent.auth.config import (
     ENV_API_KEY_MAP,
     ConfigManager,
@@ -29,6 +31,7 @@ from mia_agent.auth.openai_auth import OpenAIOAuthManager
 from mia_agent.events import StepEndEvent, TurnCompleteEvent
 from mia_agent.harness import AgentHarness
 from mia_agent.orchestration import (
+    AgentRunner,
     AgentRuntime,
     AgentRuntimeFactory,
     ModeRuntime,
@@ -47,6 +50,7 @@ from mia_cli.interactive_input import (
     interactive_select,
 )
 from mia_cli.renderers.rich_stream import RichStreamRenderer
+from mia_middleware.access import ApprovalRequest
 
 SLASH_COMMANDS = [command for command, _ in COMMAND_HINTS]
 COMMAND_DESCRIPTIONS: dict[str, str] = dict(COMMAND_HINTS)
@@ -131,6 +135,8 @@ class MiaREPL:
         *,
         model: str | None = None,
         profile: str = "coding",
+        agent: str | None = None,
+        agent_manager: AgentManager | None = None,
         cwd: Path | None = None,
         custom_provider: LLMProvider | None = None,
         session_id: str | None = None,
@@ -140,16 +146,24 @@ class MiaREPL:
         self.config_mgr = ConfigManager()
         self.cred_store = FileCredentialStore()
         self.profile_mgr = ProfileManager()
+        self.agent_mgr = agent_manager or AgentManager(profile_manager=self.profile_mgr)
         self.profile_name = profile
+        self.agent_id = agent or profile
+        self._canonical_agent = agent is not None
         self.custom_provider = custom_provider
         self.mode_name = "single"
         self.runtime_factory = AgentRuntimeFactory(
+            agent_manager=self.agent_mgr,
             profile_manager=self.profile_mgr,
             config_manager=self.config_mgr,
         )
         self.mode_runtime = ModeRuntime(
             factory=self.runtime_factory,
             profile_manager=self.profile_mgr,
+        )
+        self.agent_runner = AgentRunner(
+            factory=self.runtime_factory,
+            agent_manager=self.agent_mgr,
         )
 
         # Never assume a model unless explicitly authenticated or provided
@@ -175,6 +189,7 @@ class MiaREPL:
         self.total_cost_usd = 0.0
         self.total_tokens = 0
         self.show_thinking_trace = False
+        self._approval_callback = self._request_tool_approval
 
         self.stream_renderer = RichStreamRenderer(
             console=self.console, show_thinking_trace=self.show_thinking_trace
@@ -188,32 +203,57 @@ class MiaREPL:
         self._init_harness()
 
     def _init_harness(self) -> None:
-        """Instantiate the active profile through the shared runtime factory."""
+        """Instantiate the active Agent or legacy Profile through one factory."""
         self.agent_runtime = None
         if not self.custom_provider and not self.model_name:
             self.harness = None
             return
 
-        profile = self.profile_mgr.get_profile(self.profile_name)
-        if not self.model_name and not profile.model and not self.custom_provider:
-            self.harness = None
-            return
+        if self._canonical_agent:
+            agent = self.agent_mgr.get_agent(self.agent_id)
+            configured_model = agent.model
+            if not self.model_name and not configured_model and not self.custom_provider:
+                self.harness = None
+                return
+            identity = RuntimeIdentity(
+                run_id=f"run_{uuid.uuid4().hex}",
+                task_id="root",
+                agent_id=agent.agent_id,
+                session_id=self.session_id,
+            )
+        else:
+            profile = self.profile_mgr.get_profile(self.profile_name)
+            if not self.model_name and not profile.model and not self.custom_provider:
+                self.harness = None
+                return
+            identity = RuntimeIdentity(
+                mode=self.mode_name,
+                run_id=f"run_{self.session_id}",
+                task_id="root",
+                agent_id="coordinator",
+                profile=profile.name,
+                session_id=self.session_id,
+            )
 
-        identity = RuntimeIdentity(
-            mode=self.mode_name,
-            run_id=f"run_{self.session_id}",
-            task_id="root",
-            agent_id="coordinator",
-            profile=profile.name,
-            session_id=self.session_id,
-        )
         self.agent_runtime = self.runtime_factory.build(
             identity=identity,
             provider=self.custom_provider,
             model_override=self.model_name,
             cwd=self.cwd,
+            approval_callback=self._approval_callback,
         )
         self.harness = self.agent_runtime.harness
+
+    def _request_tool_approval(self, request: ApprovalRequest) -> bool:
+        """Ask the interactive frontend for one sanitized side-effect decision."""
+        self.console.print(
+            f"[yellow]Approve {request.effect} Tool [bold]{request.tool_name}[/bold] "
+            f"for Agent {request.agent_id or self.agent_id}?[/yellow]"
+        )
+        try:
+            return input("Approve? [y/N] ").strip().lower() in {"y", "yes"}
+        except (EOFError, KeyboardInterrupt):
+            return False
 
     def interactive_login(self, provider_hint: str | None = None) -> None:
         """Step 1: Choose Authentication Method (API Key or OpenAI Auth)."""
@@ -558,11 +598,12 @@ class MiaREPL:
         self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
 
     def _session_file(self, session_id: str | None = None) -> Path:
-        """Return the JSONL path for the active profile and session."""
+        """Return the JSONL path for the active Agent and Session."""
+        active_id = session_id or self.session_id
+        if self._canonical_agent:
+            return self.agent_mgr.get_session_path(self.agent_id, active_id)
         prof = self.profile_mgr.get_profile(self.profile_name)
-        return (
-            self.profile_mgr.get_session_dir(prof.name) / f"{session_id or self.session_id}.jsonl"
-        )
+        return self.profile_mgr.get_session_dir(prof.name) / f"{active_id}.jsonl"
 
     @staticmethod
     def _message_preview(entry: MessageEntry) -> str:
@@ -835,28 +876,57 @@ class MiaREPL:
 
         try:
             self.stream_renderer.show_thinking_trace = self.show_thinking_trace
-            async for envelope in self.mode_runtime.prompt(
-                prompt,
-                mode_name=self.mode_name,
-                profile_name=self.profile_name,
-                provider=self.custom_provider,
-                model_override=self.model_name,
-                session_id=self.session_id,
-                cwd=self.cwd,
-                runtime=self.agent_runtime if self.mode_name == "single" else None,
-            ):
-                event = envelope.event
-                if isinstance(event, OrchestrationErrorEvent):
-                    self.stream_renderer._stop_status()
-                    self.console.print(
-                        f"[bold red]Orchestration error ({event.stage}): {event.error}[/bold red]"
-                    )
-                    continue
-                self.stream_renderer.on_event(event)
-                if isinstance(event, StepEndEvent):
-                    self.total_tokens += event.input_tokens + event.output_tokens
-                elif isinstance(event, TurnCompleteEvent):
-                    self.total_cost_usd += event.total_cost_usd
+            if self._canonical_agent:
+                async for envelope in self.agent_runner.prompt(
+                    prompt,
+                    agent_id=self.agent_id,
+                    provider=self.custom_provider,
+                    model_override=self.model_name,
+                    session_id=self.session_id,
+                    cwd=self.cwd,
+                    approval_callback=self._approval_callback,
+                ):
+                    event = envelope.event
+                    if isinstance(event, OrchestrationErrorEvent):
+                        self.stream_renderer._stop_status()
+                        self.console.print(
+                            f"[bold red]Orchestration error ({event.stage}): "
+                            f"{event.error}[/bold red]"
+                        )
+                        continue
+                    self.stream_renderer.on_event(event)
+                    if isinstance(event, StepEndEvent):
+                        self.total_tokens += event.input_tokens + event.output_tokens
+                    elif isinstance(event, TurnCompleteEvent):
+                        self.total_cost_usd += event.total_cost_usd
+                if self.agent_runner.last_runtime is not None:
+                    self.agent_runtime = self.agent_runner.last_runtime
+                    self.harness = self.agent_runtime.harness
+            else:
+                async for envelope in self.mode_runtime.prompt(
+                    prompt,
+                    mode_name=self.mode_name,
+                    profile_name=self.profile_name,
+                    provider=self.custom_provider,
+                    model_override=self.model_name,
+                    session_id=self.session_id,
+                    cwd=self.cwd,
+                    runtime=self.agent_runtime if self.mode_name == "single" else None,
+                    approval_callback=self._approval_callback,
+                ):
+                    legacy_event = envelope.event
+                    if isinstance(legacy_event, OrchestrationErrorEvent):
+                        self.stream_renderer._stop_status()
+                        self.console.print(
+                            f"[bold red]Orchestration error ({legacy_event.stage}): "
+                            f"{legacy_event.error}[/bold red]"
+                        )
+                        continue
+                    self.stream_renderer.on_event(legacy_event)
+                    if isinstance(legacy_event, StepEndEvent):
+                        self.total_tokens += legacy_event.input_tokens + legacy_event.output_tokens
+                    elif isinstance(legacy_event, TurnCompleteEvent):
+                        self.total_cost_usd += legacy_event.total_cost_usd
 
         except asyncio.CancelledError:
             self.stream_renderer._stop_status()
@@ -895,7 +965,50 @@ class MiaREPL:
             self.console.clear()
             self.print_banner()
 
+        elif cmd in ("/agent", "/profile"):
+            legacy = cmd == "/profile"
+            if legacy:
+                self.console.print(
+                    "[yellow]Warning: /profile is deprecated; use /agent instead.[/yellow]\n"
+                )
+            if not args:
+                active = self.agent_mgr.get_agent(self.agent_id)
+                available = ", ".join(agent.agent_id for agent in self.agent_mgr.list_agents())
+                label = "profile" if legacy else "Agent"
+                self.console.print(
+                    f"[bold #FF7A00]Current {label}:[/bold #FF7A00] "
+                    f"[bold cyan]{active.display_name} ({active.agent_id})[/bold cyan]"
+                )
+                self.console.print(f"[dim]Available Agents: {available}[/dim]\n")
+            else:
+                try:
+                    selected_agent = self.agent_mgr.get_agent(args)
+                except ValueError as exc:
+                    if legacy:
+                        available = ", ".join(
+                            profile.name for profile in self.profile_mgr.list_profiles()
+                        )
+                        self.console.print(
+                            f"[yellow]Profile '{args}' not found. "
+                            f"Available profiles: {available}[/yellow]\n"
+                        )
+                    else:
+                        self.console.print(f"[yellow]{exc}[/yellow]\n")
+                else:
+                    self.agent_id = selected_agent.agent_id
+                    self.profile_name = selected_agent.agent_id
+                    self._canonical_agent = not legacy
+                    self._approval_callback = self._request_tool_approval
+                    self._init_harness()
+                    noun = "Agent" if self._canonical_agent else "profile"
+                    self.console.print(
+                        f"[bold green]✓ Switched {noun} to {selected_agent.agent_id}[/bold green]\n"
+                    )
+
         elif cmd == "/mode":
+            self.console.print(
+                "[yellow]Warning: /mode is deprecated; select an Agent instead.[/yellow]\n"
+            )
             if not args:
                 available = ", ".join(self.mode_runtime.catalog.available_modes())
                 self.console.print(
@@ -967,28 +1080,6 @@ class MiaREPL:
                     f"[bold green]✓ Saved {len(selected)} scoped models.[/bold green]\n"
                 )
 
-        elif cmd in ("/profile", "/role", "/persona"):
-            if not args:
-                profiles = [p.name for p in self.profile_mgr.list_profiles()]
-                self.console.print(
-                    f"[bold #FF7A00]Current profile:[/bold #FF7A00] [bold cyan]{self.profile_name}[/bold cyan]"
-                )
-                self.console.print(f"[dim]Available profiles: {', '.join(profiles)}[/dim]")
-                self.console.print(
-                    "[dim]To switch: /profile <name> (e.g. /profile architect)[/dim]\n"
-                )
-            else:
-                try:
-                    profile = self.profile_mgr.get_profile(args)
-                except ValueError as exc:
-                    self.console.print(f"[yellow]{exc}[/yellow]\n")
-                else:
-                    self.profile_name = profile.name
-                    self._init_harness()
-                    self.console.print(
-                        f"[bold green]✓ Switched profile to {self.profile_name}[/bold green]\n"
-                    )
-
         elif cmd in ("/diff", "/changes"):
             try:
                 res = subprocess.run(
@@ -1039,7 +1130,11 @@ class MiaREPL:
                     )
 
         elif cmd in ("/sessions", "/history"):
-            session_dir = self.profile_mgr.get_session_dir(self.profile_name)
+            session_dir = (
+                self.agent_mgr.get_session_dir(self.agent_id)
+                if self._canonical_agent
+                else self.profile_mgr.get_session_dir(self.profile_name)
+            )
             files = list(session_dir.glob("*.jsonl"))
             self.console.print(f"[bold]Saved sessions ({len(files)}):[/bold]")
             for f in files[:10]:

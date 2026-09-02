@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from mia_agent.events import (
+    AgentErrorEvent,
     AgentEvent,
     AssistantChunkEvent,
     StepEndEvent,
@@ -26,6 +27,7 @@ from mia_agent.session.jsonl import JsonlSessionStore
 from mia_agent.session.tree import SessionTree
 from mia_ai.providers.base import LLMProvider
 from mia_ai.types import ChatMessage, TokenUsage, ToolCall, ToolDefinition
+from mia_middleware.access import sanitize_arguments
 from mia_middleware.pipeline import ToolCallContext, ToolPipeline
 
 
@@ -56,6 +58,7 @@ class AgentHarness:
         session_store: JsonlSessionStore | None = None,
         compactor: ContextCompactor | None = None,
         last_entry_id: str | None = None,
+        tool_context_metadata: dict[str, Any] | None = None,
     ) -> None:
         self.provider = provider
         self.model = model
@@ -69,6 +72,7 @@ class AgentHarness:
         self.session_store = session_store
         self.compactor = compactor
         self._last_entry_id = last_entry_id
+        self.tool_context_metadata = dict(tool_context_metadata or {})
         self._turn_counter = 0
         self._current_step = 0
 
@@ -173,6 +177,7 @@ class AgentHarness:
                 call_id=call_id,
                 tool_name=tool_name,
                 arguments=args,
+                metadata=dict(self.tool_context_metadata),
             )
             return await self.pipeline.execute(
                 ctx,
@@ -215,6 +220,7 @@ class AgentHarness:
             tool_calls: list[ToolCall] = []
             step_usage = TokenUsage()
             finish_reason: str | None = None
+            provider_error: str | None = None
 
             # Stream from LLM
             async for chunk in self.provider.stream(
@@ -231,7 +237,8 @@ class AgentHarness:
                 elif chunk.type == "tool_call_end" and chunk.tool_call:
                     tool_calls.append(chunk.tool_call)
                 elif chunk.type == "error":
-                    error_msg = chunk.error or "Unknown provider error"
+                    error_msg = str(sanitize_arguments(chunk.error or "Unknown provider error"))
+                    provider_error = error_msg
                     accumulated_text.append(f"\n[Error: {error_msg}]\n")
                     yield AssistantChunkEvent(delta_text=f"\n[Error: {error_msg}]\n")
                 elif chunk.type == "finish":
@@ -241,6 +248,8 @@ class AgentHarness:
                         total_cost += chunk.usage.cost_usd
 
             assistant_text = "".join(accumulated_text)
+            if provider_error is not None:
+                yield AgentErrorEvent(error=provider_error, step_index=step_index)
 
             # Record assistant response in message history & session store
             asst_msg = ChatMessage(
@@ -260,7 +269,7 @@ class AgentHarness:
                     yield ToolCallEvent(
                         call_id=tc.id,
                         tool_name=tc.name,
-                        arguments=tc.arguments,
+                        arguments=sanitize_arguments(tc.arguments),
                     )
 
                     start_time = time.perf_counter()
@@ -268,14 +277,15 @@ class AgentHarness:
                     try:
                         result = await self._execute_tool(tc.id, tc.name, tc.arguments)
                     except Exception as exc:
-                        result = f"Error executing {tc.name}: {exc}"
+                        result = f"Error executing {tc.name}: {sanitize_arguments(str(exc))}"
                         is_error = True
+                    safe_result = sanitize_arguments(result)
                     duration_ms = (time.perf_counter() - start_time) * 1000.0
 
                     yield ToolResultEvent(
                         call_id=tc.id,
                         tool_name=tc.name,
-                        output=result,
+                        output=safe_result,
                         is_error=is_error,
                         duration_ms=duration_ms,
                     )
@@ -285,7 +295,9 @@ class AgentHarness:
                         role="tool",
                         tool_call_id=tc.id,
                         tool_name=tc.name,
-                        content=str(result) if not isinstance(result, str) else result,
+                        content=str(safe_result)
+                        if not isinstance(safe_result, str)
+                        else safe_result,
                     )
                     self._messages.append(tool_msg)
                     if self.session_store:

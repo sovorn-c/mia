@@ -5,57 +5,42 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
+from mia_agent.agents.model import BUILTIN_AGENTS
 from mia_agent.profiles.model import AgentProfile
 
+
+def _profile_from_agent(agent_id: str, *, legacy_name: str | None = None) -> AgentProfile:
+    agent = BUILTIN_AGENTS[agent_id]
+    execution_mode: Literal["native", "code"] = (
+        "code" if agent.metadata.get("execution_mode") == "code" else "native"
+    )
+    if execution_mode not in {"native", "code"}:
+        execution_mode = "native"
+    return AgentProfile(
+        name=legacy_name or agent.agent_id,
+        description=agent.description,
+        system_prompt=agent.instructions,
+        model=agent.model,
+        temperature=agent.temperature,
+        max_steps_per_turn=agent.max_steps_per_turn,
+        tools=agent.tools,
+        execution_mode=execution_mode,
+        permission=agent.permission,
+        compaction_threshold_ratio=agent.compaction_threshold_ratio,
+        context_window_tokens=agent.context_window_tokens,
+        middlewares=list(agent.middlewares),
+        metadata=dict(agent.metadata),
+    )
+
+
+# Compatibility projections. Agent definitions are the source of truth.
 BUILTIN_PROFILES: dict[str, AgentProfile] = {
-    "coding": AgentProfile(
-        name="coding",
-        description="Full-stack AI software engineer with file editing, diffs, and shell execution.",
-        system_prompt=(
-            "You are Mia, an expert AI software engineer. You write clean, robust code, "
-            "follow test-driven development, inspect files before editing, and explain changes clearly."
-        ),
-        temperature=0.2,
-        tools=["read_file", "write_file", "edit_file", "bash"],
-        execution_mode="native",
-        permission="standard",
-    ),
-    "architect": AgentProfile(
-        name="architect",
-        description="Read-only system architect for codebase exploration, ADR drafting, and design reviews.",
-        system_prompt=(
-            "You are Mia Architect, a Principal Software Architect. You analyze complex system designs, "
-            "evaluate architectural trade-offs, draft ADRs, and review codebases with deep modularity in mind. "
-            "You operate in read-only mode and do not modify files directly."
-        ),
-        temperature=0.4,
-        tools=["read_file"],
-        execution_mode="native",
-        permission="read_only",
-    ),
-    "code_mode": AgentProfile(
-        name="code_mode",
-        description="DeepSeek Harness Programmatic Code Mode where the agent writes Python scripts to batch tool calls.",
-        system_prompt=(
-            "You are Mia in Code Mode. You can batch multiple tool calls programmatically "
-            "in a single turn using the run_code environment to minimize token round-trips."
-        ),
-        temperature=0.0,
-        tools=["run_code", "read_file", "write_file", "edit_file", "bash"],
-        execution_mode="code",
-        permission="standard",
-    ),
-    "minimal": AgentProfile(
-        name="minimal",
-        description="Fast direct conversation, brainstorming, and reasoning with zero tool overhead.",
-        system_prompt="You are Mia, a helpful and concise AI assistant.",
-        temperature=0.7,
-        tools=[],
-        execution_mode="native",
-        permission="no_tools",
-    ),
+    "coding": _profile_from_agent("coding"),
+    "architect": _profile_from_agent("architect"),
+    "code_mode": _profile_from_agent("code-mode", legacy_name="code_mode"),
+    "minimal": _profile_from_agent("minimal"),
 }
 
 
