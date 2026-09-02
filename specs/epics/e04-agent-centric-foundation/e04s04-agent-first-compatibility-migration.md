@@ -190,7 +190,14 @@ print('agent terminology present')
 PY`
 6. Run all compatibility, runtime, Delegation, access, Session, CLI, and quality gates; document the v0.4 alias/removal boundary → verify: `uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest && printf 'no new security findings in affected paths\n'`
 
-## 17. Acceptance Criteria
+## 17. Decision References
+
+- `specs/adr/0001-prompt-scoped-orchestration-runs.md`
+- `00f8b3c` — canonical AgentRunner
+- `6b6d3e1` — CLI canonical prompt routing
+- `0f21509` — Delegation Tool integration
+
+## 18. Acceptance Criteria
 
 ### Scenario SC-e04s04-P0-01: Canonical single-Agent execution
 

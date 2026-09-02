@@ -1,17 +1,14 @@
 workflow_mode: solo-git
 session:
-  active_flow: verify
+  active_flow: release
   active_epic_id: e04
   active_story_id: e04s04
   target_version: 0.4.0
 handoff:
-  next_skill: audit-code
-  summary: 'e04 Agent-centric foundation is implemented on the isolated feature branch.
-    Canonical Agent identity, additive homes, access policies, direct Delegation,
-    AgentRunner, Research, CLI aliases, and secret-free attribution are covered by
-    the focused and full test suites.
-
-    '
+  next_skill: release-branch
+  summary: >
+    e04 Agent-Centric Foundation and audit remediation are complete. The full quality gate passes,
+    the audit verdict is PASS, and the branch is ready for solo-local integration into main.
 git:
   branch: e04-agent-centric-foundation
 metrics:

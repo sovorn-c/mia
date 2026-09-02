@@ -219,6 +219,37 @@ async def test_agent_runner_research_is_a_private_agent_journey(tmp_path) -> Non
 
 
 @pytest.mark.asyncio
+async def test_agent_runner_honors_persisted_full_access_consent(tmp_path) -> None:
+    from mia_agent.agents import AgentManager
+
+    manager = AgentManager(
+        agents_dir=tmp_path / "agents",
+        profiles_dir=tmp_path / "profiles",
+        sessions_base_dir=tmp_path / "legacy-sessions",
+    )
+    manager.create_agent(
+        "autonomous",
+        tools=["write_file"],
+        access_policy="full-access",
+        confirm_full_access=True,
+    )
+    provider = MockProvider()
+    provider.queue_tool_call_response("write_file", {"path": "consented.txt", "content": "allowed"})
+    provider.queue_text_response("done")
+
+    events = [
+        event
+        async for event in AgentRunner(
+            factory=AgentRuntimeFactory(agent_manager=manager),
+            agent_manager=manager,
+        ).prompt("write a file", agent_id="autonomous", provider=provider, cwd=tmp_path)
+    ]
+
+    assert events[-1].event.type == "turn_complete"
+    assert (tmp_path / "consented.txt").read_text() == "allowed"
+
+
+@pytest.mark.asyncio
 async def test_single_mode_runtime_preserves_one_agent_event_stream(tmp_path) -> None:
     provider = MockProvider()
     provider.queue_text_response("one coordinator answer")
@@ -252,6 +283,36 @@ async def test_single_mode_runtime_preserves_one_agent_event_stream(tmp_path) ->
     ]
     assert all(event.mode == "single" for event in events)
     assert {event.profile for event in events} == {"coding"}
+
+
+@pytest.mark.asyncio
+async def test_legacy_mode_applies_agent_access_policy_and_approval_callback(tmp_path) -> None:
+    provider = MockProvider()
+    provider.queue_tool_call_response(
+        "write_file", {"path": "blocked.txt", "content": "must not write"}
+    )
+    provider.queue_text_response("done")
+    profiles = ProfileManager(sessions_base_dir=tmp_path / "sessions")
+    runtime = ModeRuntime(
+        factory=AgentRuntimeFactory(profile_manager=profiles),
+        profile_manager=profiles,
+    )
+    approvals = []
+
+    events = [
+        event
+        async for event in runtime.prompt(
+            "write a file",
+            provider=provider,
+            cwd=tmp_path,
+            approval_callback=lambda request: approvals.append(request) or False,
+        )
+    ]
+
+    assert events[-1].event.type == "turn_complete"
+    assert len(approvals) == 1
+    assert approvals[0].tool_name == "write_file"
+    assert not (tmp_path / "blocked.txt").exists()
 
 
 @pytest.mark.asyncio

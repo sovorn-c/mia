@@ -50,7 +50,7 @@ def _validate_metadata(value: dict[str, Any]) -> dict[str, Any]:
                 if any(part in key_text for part in _SECRET_KEY_PARTS):
                     raise ValueError(f"{path} contains credential-like field '{key}'")
                 visit(nested, f"{path}.{key}")
-        elif isinstance(item, list):
+        elif isinstance(item, (list, tuple, set, frozenset)):
             for index, nested in enumerate(item):
                 visit(nested, f"{path}[{index}]")
 

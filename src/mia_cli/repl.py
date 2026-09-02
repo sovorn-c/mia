@@ -189,7 +189,7 @@ class MiaREPL:
         self.total_cost_usd = 0.0
         self.total_tokens = 0
         self.show_thinking_trace = False
-        self._approval_callback = self._request_tool_approval if self._canonical_agent else None
+        self._approval_callback = self._request_tool_approval
 
         self.stream_renderer = RichStreamRenderer(
             console=self.console, show_thinking_trace=self.show_thinking_trace
@@ -912,6 +912,7 @@ class MiaREPL:
                     session_id=self.session_id,
                     cwd=self.cwd,
                     runtime=self.agent_runtime if self.mode_name == "single" else None,
+                    approval_callback=self._approval_callback,
                 ):
                     legacy_event = envelope.event
                     if isinstance(legacy_event, OrchestrationErrorEvent):
@@ -997,9 +998,7 @@ class MiaREPL:
                     self.agent_id = selected_agent.agent_id
                     self.profile_name = selected_agent.agent_id
                     self._canonical_agent = not legacy
-                    self._approval_callback = (
-                        self._request_tool_approval if self._canonical_agent else None
-                    )
+                    self._approval_callback = self._request_tool_approval
                     self._init_harness()
                     noun = "Agent" if self._canonical_agent else "profile"
                     self.console.print(

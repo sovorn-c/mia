@@ -3,6 +3,11 @@ story_title: "Agent-First Compatibility Migration"
 status: passing
 requirement_delta: MODIFIED
 bcps: 5
+decision_refs:
+  - "specs/adr/0001-prompt-scoped-orchestration-runs.md"
+  - "commit:00f8b3c (canonical AgentRunner)"
+  - "commit:6b6d3e1 (CLI canonical prompt routing)"
+  - "commit:0f21509 (Delegation Tool integration)"
 tasks:
   - id: e04s04t01
     title: "Specify AgentRunner and compatibility behavior"

@@ -29,6 +29,24 @@ async def test_read_and_write_file_tools(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_filesystem_tools_reject_paths_outside_cwd(tmp_path: Path) -> None:
+    outside = tmp_path.parent / "outside.txt"
+    read_tool = ReadFileTool(cwd=tmp_path)
+    write_tool = WriteFileTool(cwd=tmp_path)
+    edit_tool = EditFileTool(cwd=tmp_path)
+
+    with pytest.raises(ValueError, match="inside"):
+        await read_tool.execute(path=str(outside))
+    with pytest.raises(ValueError, match="inside"):
+        await write_tool.execute(path="../outside.txt", content="blocked")
+    with pytest.raises(ValueError, match="inside"):
+        await edit_tool.execute(
+            path=str(outside),
+            edits=[{"oldText": "old", "newText": "new"}],
+        )
+
+
+@pytest.mark.asyncio
 async def test_read_file_binary_and_missing(tmp_path: Path) -> None:
     read_tool = ReadFileTool(cwd=tmp_path)
 

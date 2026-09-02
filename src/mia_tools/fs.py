@@ -16,6 +16,15 @@ UTF8_BOM = "\ufeff"
 _file_locks: dict[Path, asyncio.Lock] = {}
 
 
+def _confined_path(cwd: Path, path: str) -> Path:
+    target = (cwd / path).resolve()
+    try:
+        target.relative_to(cwd)
+    except ValueError as exc:
+        raise ValueError("Path must stay inside the configured working directory") from exc
+    return target
+
+
 def _get_lock(path: Path) -> asyncio.Lock:
     resolved = path.resolve()
     if resolved not in _file_locks:
@@ -74,7 +83,7 @@ class ReadFileTool(BaseTool):
     parameters = {
         "type": "object",
         "properties": {
-            "path": {"type": "string", "description": "Relative or absolute file path to read."},
+            "path": {"type": "string", "description": "Relative file path to read."},
             "offset": {
                 "type": "integer",
                 "description": "Line number to start reading from (1-indexed). Default is 1.",
@@ -95,7 +104,7 @@ class ReadFileTool(BaseTool):
     async def execute(
         self, path: str, offset: int = 1, limit: int = DEFAULT_MAX_LINES, **kwargs: Any
     ) -> str:
-        target = (self.cwd / path).resolve() if not Path(path).is_absolute() else Path(path)
+        target = _confined_path(self.cwd, path)
 
         if not target.exists():
             raise FileNotFoundError(f"File not found: {path}")
@@ -156,7 +165,7 @@ class WriteFileTool(BaseTool):
         self.cwd = Path(cwd).resolve() if cwd else Path.cwd()
 
     async def execute(self, path: str, content: str, **kwargs: Any) -> str:
-        target = (self.cwd / path).resolve() if not Path(path).is_absolute() else Path(path)
+        target = _confined_path(self.cwd, path)
 
         lock = _get_lock(target)
         async with lock:
@@ -211,7 +220,7 @@ class EditFileTool(BaseTool):
         newText: str | None = None,
         **kwargs: Any,
     ) -> str:
-        target = (self.cwd / path).resolve() if not Path(path).is_absolute() else Path(path)
+        target = _confined_path(self.cwd, path)
 
         if not target.exists():
             raise FileNotFoundError(f"File not found: {path}")

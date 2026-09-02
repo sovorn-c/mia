@@ -97,6 +97,7 @@ async def _run_agent_loop(
         cwd=cwd,
         compaction_threshold=compaction_threshold,
         context_window=context_window,
+        approval_callback=approval_callback,
     ):
         if isinstance(envelope.event, OrchestrationErrorEvent):
             renderer._stop_status()

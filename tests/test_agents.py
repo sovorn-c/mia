@@ -49,6 +49,12 @@ def test_agent_model_normalizes_identity_and_keeps_serialization_secret_free() -
         Agent(agent_id="", display_name="Blank")
     with pytest.raises(ValidationError):
         Agent(agent_id="safe", display_name="Unsafe", metadata={"api_key": "secret"})
+    with pytest.raises(ValidationError):
+        Agent(
+            agent_id="safe",
+            display_name="Unsafe",
+            metadata={"nested": ({"access_token": "secret"},)},
+        )
 
 
 def test_default_mia_is_useful_without_saved_configuration(tmp_path: Path) -> None:

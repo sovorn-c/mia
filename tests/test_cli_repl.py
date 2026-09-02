@@ -604,8 +604,9 @@ async def test_repl_execute_turn_with_tools(tmp_path: Path) -> None:
 
     repl = MiaREPL(cwd=tmp_path, custom_provider=mock)
 
-    # Run turn
-    await repl.execute_turn("Create hello.py")
+    # Run turn with explicit approval for the side-effecting Tool.
+    with patch("builtins.input", return_value="y"):
+        await repl.execute_turn("Create hello.py")
 
     assert (tmp_path / "hello.py").exists()
     assert (tmp_path / "hello.py").read_text() == "print('hello world')\n"
