@@ -26,11 +26,11 @@ mia run --agent researcher -p "Review the repository"
 
 Running `mia` without an Agent selection starts the built-in `mia` Agent. Its four local coding Tools are available under `approval-required`: reads run automatically, while writes, edits, shell commands, and Delegation require approval. Permanent security guards always remain active.
 
-## Compatibility
+## Public interface
 
-The canonical surfaces are `--agent`, `/agent`, and `mia agent create|list|show|use|delete`. Existing `--profile`, `/profile`, `mia profile`, and `--mode` inputs remain compatibility aliases during v0.4 and report migration guidance. Existing Profile JSON and Session JSONL are read without destructive migration.
+The public interface uses `--agent`, `/agent`, and `mia agent create|list|show|use|delete`. Agents own their configuration and Sessions; no alternate identity or execution vocabulary is supported.
 
-The historical architecture material in `docs/initial_plan/` remains historical. Current implementation packages are under `src/`, with deterministic offline tests in `tests/`.
+Current implementation packages are under `src/`, with deterministic offline tests in `tests/`. Project history is preserved in Git.
 
 ## Quality gate
 
