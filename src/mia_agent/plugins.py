@@ -16,7 +16,23 @@ if TYPE_CHECKING:
 
 PluginEffect = Literal["non-mutating", "side-effecting"]
 _VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
+_SECRET_KEY_PARTS = ("api_key", "apikey", "token", "secret", "authorization", "password")
+_SECRET_VALUE_RE = re.compile(r"(?i)(?:bearer\\s+|sk-|ghp_|xoxb-)[^\\s,;]+")
 CORE_PLUGIN_API_VERSION = 1
+
+
+def _validate_secret_free(value: Any, path: str) -> None:
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            key_text = str(key).lower().replace("-", "_")
+            if any(part in key_text for part in _SECRET_KEY_PARTS):
+                raise ValueError(f"{path} contains credential-like field '{key}'")
+            _validate_secret_free(nested, f"{path}.{key}")
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        for index, nested in enumerate(value):
+            _validate_secret_free(nested, f"{path}[{index}]")
+    elif isinstance(value, str) and _SECRET_VALUE_RE.search(value):
+        raise ValueError(f"{path} contains a secret-like value")
 
 
 class PluginToolSpec(BaseModel):
@@ -83,6 +99,18 @@ class AgentTemplate(BaseModel):
         if not value:
             raise ValueError("Template text fields must not be blank")
         return value
+
+    @field_validator("plugin_config")
+    @classmethod
+    def validate_plugin_config(cls, value: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        normalized: dict[str, dict[str, Any]] = {}
+        for plugin_id, config in value.items():
+            key = normalize_plugin_id(plugin_id)
+            if key in normalized:
+                raise ValueError(f"Template Plugin configuration contains duplicate '{key}'")
+            _validate_secret_free(config, f"plugin_config.{key}")
+            normalized[key] = config
+        return normalized
 
     @field_validator("required_plugins")
     @classmethod
@@ -402,6 +430,7 @@ class PluginManager:
             raise ValueError("notebook_name must be non-blank text")
         if len(name.strip()) > 100 or "/" in name or "\\" in name:
             raise ValueError("notebook_name must be a short display name, not a path")
+        _validate_secret_free(name, "notebook_name")
 
     def resolve_tools(self, agent: Any) -> list[Any]:
         """Build every enabled Plugin Tool against the resolved Agent boundary."""
