@@ -168,17 +168,20 @@ class AgentHarness:
 
         raise ValueError(f"Tool '{tool_name}' not found in registered tools.")
 
+    def _plugin_id_for(self, tool_name: str) -> str | None:
+        return next(
+            (
+                getattr(tool, "plugin_id", None)
+                for tool in self.tools
+                if getattr(tool, "name", None) == tool_name
+            ),
+            None,
+        )
+
     async def _execute_tool(self, call_id: str, tool_name: str, args: dict[str, Any]) -> Any:
         """Dispatch a single tool call through pipeline (if present) to the matching tool handler."""
         if self.pipeline:
-            plugin_id = next(
-                (
-                    getattr(tool, "plugin_id", None)
-                    for tool in self.tools
-                    if getattr(tool, "name", None) == tool_name
-                ),
-                None,
-            )
+            plugin_id = self._plugin_id_for(tool_name)
             metadata = dict(self.tool_context_metadata)
             if plugin_id:
                 metadata["plugin_id"] = plugin_id
@@ -278,14 +281,7 @@ class AgentHarness:
             # If tool calls were made, execute them
             if tool_calls:
                 for tc in tool_calls:
-                    plugin_id = next(
-                        (
-                            getattr(tool, "plugin_id", None)
-                            for tool in self.tools
-                            if getattr(tool, "name", None) == tc.name
-                        ),
-                        None,
-                    )
+                    plugin_id = self._plugin_id_for(tc.name)
                     yield ToolCallEvent(
                         call_id=tc.id,
                         tool_name=tc.name,

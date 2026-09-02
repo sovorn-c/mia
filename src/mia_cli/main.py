@@ -44,6 +44,10 @@ app.add_typer(template_app, name="template")
 console = Console()
 
 
+def _plugin_manager() -> PluginManager:
+    return PluginManager(agent_manager=AgentManager())
+
+
 def _confirm_tool(request: ApprovalRequest) -> bool:
     """Render a sanitized approval prompt for print-mode side effects."""
     console.print(
@@ -281,7 +285,7 @@ def delete_agent_command(
 @plugin_app.command(name="list")
 def list_plugins_command() -> None:
     """List bundled and explicitly installed Plugins."""
-    manager = PluginManager(agent_manager=AgentManager())
+    manager = _plugin_manager()
     installed = {item.plugin_id for item in manager.list_installed()}
     table = Table(title="Mia Plugins")
     table.add_column("Plugin", style="bold cyan")
@@ -302,7 +306,7 @@ def show_plugin_command(
 ) -> None:
     """Inspect one bundled Plugin manifest."""
     try:
-        manifest = PluginManager(agent_manager=AgentManager()).get_manifest(plugin_id)
+        manifest = _plugin_manager().get_manifest(plugin_id)
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="PLUGIN_ID") from exc
     console.print(f"[bold cyan]{manifest.display_name}[/bold cyan] ({manifest.plugin_id})")
@@ -317,7 +321,7 @@ def install_plugin_command(
 ) -> None:
     """Install one bundled Plugin locally."""
     try:
-        installed = PluginManager(agent_manager=AgentManager()).install(plugin_id)
+        installed = _plugin_manager().install(plugin_id)
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="PLUGIN_ID") from exc
     console.print(f"[bold green]✓ Installed Plugin {installed.plugin_id}.[/bold green]")
@@ -330,7 +334,7 @@ def enable_plugin_command(
 ) -> None:
     """Enable an installed Plugin for one named Agent."""
     try:
-        agent = PluginManager(agent_manager=AgentManager()).enable(agent_id, plugin_id)
+        agent = _plugin_manager().enable(agent_id, plugin_id)
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="PLUGIN_ID") from exc
     console.print(f"[bold green]✓ Enabled {plugin_id} for Agent {agent.agent_id}.[/bold green]")
@@ -347,7 +351,7 @@ def configure_plugin_command(
     """Configure an enabled Plugin for one named Agent."""
     config = {} if notebook_name is None else {"notebook_name": notebook_name}
     try:
-        agent = PluginManager(agent_manager=AgentManager()).configure(agent_id, plugin_id, config)
+        agent = _plugin_manager().configure(agent_id, plugin_id, config)
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="PLUGIN_ID") from exc
     console.print(f"[bold green]✓ Configured {plugin_id} for Agent {agent.agent_id}.[/bold green]")
@@ -360,7 +364,7 @@ def disable_plugin_command(
 ) -> None:
     """Disable a Plugin for later Runs of one named Agent."""
     try:
-        agent = PluginManager(agent_manager=AgentManager()).disable(agent_id, plugin_id)
+        agent = _plugin_manager().disable(agent_id, plugin_id)
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="PLUGIN_ID") from exc
     console.print(f"[bold green]✓ Disabled {plugin_id} for Agent {agent.agent_id}.[/bold green]")
@@ -369,7 +373,7 @@ def disable_plugin_command(
 @template_app.command(name="list")
 def list_templates_command() -> None:
     """List bundled Agent Templates."""
-    templates = PluginManager(agent_manager=AgentManager()).list_templates()
+    templates = _plugin_manager().list_templates()
     table = Table(title="Mia Agent Templates")
     table.add_column("Template", style="bold cyan")
     table.add_column("Version", style="magenta")
@@ -389,7 +393,7 @@ def show_template_command(
 ) -> None:
     """Inspect one bundled Agent Template."""
     try:
-        template = PluginManager(agent_manager=AgentManager()).get_template(template_id)
+        template = _plugin_manager().get_template(template_id)
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="TEMPLATE_ID") from exc
     console.print(f"[bold cyan]{template.display_name}[/bold cyan] ({template.template_id})")
@@ -406,7 +410,7 @@ def create_template_agent_command(
 ) -> None:
     """Create a new Agent from one bundled Template."""
     try:
-        agent = PluginManager(agent_manager=AgentManager()).instantiate(template_id, agent_id)
+        agent = _plugin_manager().instantiate(template_id, agent_id)
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="AGENT_ID") from exc
     console.print(

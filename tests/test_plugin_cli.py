@@ -40,6 +40,34 @@ def test_cli_installs_and_enables_bundled_plugin(tmp_path: Path) -> None:
     assert agents.get_agent("alpha").plugins == ["notes"]
 
 
+def test_cli_lists_shows_configures_and_disables_plugin(tmp_path: Path) -> None:
+    agents, plugins = make_managers(tmp_path)
+    plugins.install("notes")
+    plugins.enable("alpha", "notes")
+    with (
+        patch("mia_cli.main.AgentManager", return_value=agents),
+        patch("mia_cli.main.PluginManager", return_value=plugins),
+    ):
+        listed = runner.invoke(app, ["plugin", "list"])
+        shown = runner.invoke(app, ["plugin", "show", "notes"])
+        configured = runner.invoke(
+            app,
+            ["plugin", "configure", "notes", "--agent", "alpha", "--notebook-name", "Work"],
+        )
+        disabled = runner.invoke(app, ["plugin", "disable", "notes", "--agent", "alpha"])
+
+    assert listed.exit_code == 0
+    assert "installed" in listed.stdout
+    assert shown.exit_code == 0
+    assert "note_create" in shown.stdout
+    assert configured.exit_code == 0
+    assert "alpha" in configured.stdout
+    assert disabled.exit_code == 0
+    assert "alpha" in disabled.stdout
+    assert agents.get_agent("alpha").plugins == []
+    assert agents.get_agent("alpha").plugin_config == {"notes": {"notebook_name": "Work"}}
+
+
 def test_agent_inspection_reports_enabled_plugins_without_config_values(tmp_path: Path) -> None:
     agents, plugins = make_managers(tmp_path)
     plugins.install("notes")

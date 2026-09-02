@@ -31,9 +31,13 @@ def test_cli_lists_and_creates_notes_agent_template(tmp_path: Path) -> None:
         patch("mia_cli.main.PluginManager", return_value=plugins),
     ):
         listed = runner.invoke(app, ["template", "list"])
+        shown = runner.invoke(app, ["template", "show", "notes-agent"])
         created = runner.invoke(app, ["template", "create", "notes-agent", "my-notes"])
 
     assert listed.exit_code == 0
+    assert shown.exit_code == 0
+    assert "Notes Agent" in shown.stdout
+    assert "approval-required" in shown.stdout
     assert "notes-agent" in listed.stdout
     assert created.exit_code == 0
     assert "my-notes" in created.stdout

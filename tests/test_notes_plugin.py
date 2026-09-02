@@ -33,6 +33,25 @@ async def test_notes_tools_create_list_and_read_inside_agent_data_root(tmp_path:
 
 
 @pytest.mark.asyncio
+async def test_notes_tools_reject_invalid_note_input(tmp_path: Path) -> None:
+    tools = NotesPlugin().build_tools(
+        agent_id="alpha",
+        data_dir=tmp_path / "alpha-notes",
+        config={},
+    )
+    create = tools[0]
+
+    with pytest.raises(ValueError, match="title"):
+        await create.execute(title=" ", content="body")
+    with pytest.raises(ValueError, match="too long"):
+        await create.execute(title="x" * 201, content="body")
+    with pytest.raises(ValueError, match="text"):
+        await create.execute(title="Title", content=123)
+    with pytest.raises(ValueError, match="too long"):
+        await create.execute(title="Title", content="x" * 1_000_001)
+
+
+@pytest.mark.asyncio
 async def test_notes_data_roots_are_isolated_between_agents(tmp_path: Path) -> None:
     alpha = NotesPlugin().build_tools(agent_id="alpha", data_dir=tmp_path / "alpha", config={})
     beta = NotesPlugin().build_tools(agent_id="beta", data_dir=tmp_path / "beta", config={})
