@@ -9,10 +9,10 @@ from pathlib import Path
 
 from mia_agent.agents import AgentManager
 from mia_agent.events import AgentErrorEvent, AssistantChunkEvent
-from mia_agent.orchestration_events import envelope as _envelope
-from mia_agent.orchestration_events import error_envelope as _error_envelope
-from mia_agent.orchestration_models import AgentRuntime, OrchestrationEventEnvelope, RuntimeIdentity
+from mia_agent.runtime_events import AgentEventEnvelope, envelope as _envelope
+from mia_agent.runtime_events import error_envelope as _error_envelope
 from mia_agent.runtime_factory import AgentRuntimeFactory
+from mia_agent.runtime_models import AgentRuntime, RuntimeIdentity
 from mia_ai.providers.base import LLMProvider
 from mia_middleware.access import ApprovalCallback
 
@@ -45,7 +45,7 @@ class AgentRunner:
         context_window: int | None = None,
         approval_callback: ApprovalCallback | None = None,
         full_access_confirmed: bool | None = None,
-    ) -> AsyncIterator[OrchestrationEventEnvelope]:
+    ) -> AsyncIterator[AgentEventEnvelope]:
         agent = self.agent_manager.get_agent(agent_id)
         resolved_run_id = run_id or f"run_{uuid.uuid4().hex}"
         root_session_id = session_id or f"session_{uuid.uuid4().hex[:12]}"
@@ -103,7 +103,7 @@ class AgentRunner:
         context_window: int | None,
         approval_callback: ApprovalCallback | None,
         full_access_confirmed: bool | None,
-    ) -> AsyncIterator[OrchestrationEventEnvelope]:
+    ) -> AsyncIterator[AgentEventEnvelope]:
         specialist_identity = RuntimeIdentity(
             run_id=f"run_{uuid.uuid4().hex}",
             task_id="specialist",

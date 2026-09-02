@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from pydantic import BaseModel, ConfigDict, field_validator
+
+from mia_agent.agents import Agent
+from mia_agent.harness import AgentHarness
+from mia_agent.session.jsonl import JsonlSessionStore
 
 
 class RuntimeIdentity(BaseModel):
@@ -25,3 +31,13 @@ class RuntimeIdentity(BaseModel):
         if not value:
             raise ValueError("runtime identity fields must not be blank")
         return value
+
+
+@dataclass(frozen=True, slots=True)
+class AgentRuntime:
+    """Constructed executor and persistence handles for one Agent Run."""
+
+    harness: AgentHarness
+    identity: RuntimeIdentity
+    session_store: JsonlSessionStore
+    agent: Agent

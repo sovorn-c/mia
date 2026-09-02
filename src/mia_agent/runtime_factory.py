@@ -9,8 +9,9 @@ from typing import Any
 from mia_agent.agents import Agent, AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.harness import AgentHarness
-from mia_agent.orchestration_models import AgentRuntime, RuntimeIdentity, _profile_from_agent
+from mia_agent.orchestration_models import _profile_from_agent
 from mia_agent.plugins import PluginManager
+from mia_agent.runtime_models import AgentRuntime, RuntimeIdentity
 from mia_agent.profiles.manager import ProfileManager
 from mia_agent.session.compactor import ContextCompactor
 from mia_agent.session.entries import CustomEntry
@@ -62,9 +63,10 @@ class AgentRuntimeFactory:
         delegation_depth: int = 0,
     ) -> AgentRuntime:
         """Construct an Agent-scoped harness, restoring and annotating its Session."""
-        if identity.profile is not None:
+        profile_name = getattr(identity, "profile", None)
+        if profile_name is not None:
             # Compatibility callers still provide Profile and retain their old Session path.
-            profile = self.profile_manager.get_profile(identity.profile)
+            profile = self.profile_manager.get_profile(profile_name)
             try:
                 agent = self.agent_manager.get_agent(identity.agent_id)
             except ValueError:
@@ -199,7 +201,6 @@ class AgentRuntimeFactory:
         return AgentRuntime(
             harness=harness,
             identity=identity,
-            profile=profile,
             session_store=session_store,
             agent=agent,
         )
