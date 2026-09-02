@@ -34,7 +34,7 @@ requirement_deltas:
 stories:
   - id: e06s01
     title: Canonical Agent Run Runtime
-    status: failing
+    status: passing
     bcps: 8
     risk: P0
     delta: MODIFIED

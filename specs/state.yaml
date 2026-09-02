@@ -2,14 +2,13 @@ workflow_mode: solo-git
 session:
   active_flow: build
   active_epic_id: e06
-  active_story_id: e06s01
+  active_story_id: e06s02
   target_version: 0.6.0
 handoff:
   next_skill: develop-tdd
-  summary: e06 Zero-Legacy Agent Core branch is isolated from a green main baseline.
-    Execute e06s01 first with vertical red/green/refactor cycles, then advance through
-    the dependent TUI, core removal, and project-surface stories. Keep all unverified
-    tasks failing.
+  summary: e06s01 canonical Agent Run contracts and factory are passing on the isolated branch.
+    Continue develop-tdd with e06s02: keep the Textual frontend, replace Herd with AgentManager
+    and AgentRunner, and keep every unverified task failing.
 git:
   branch: e06-zero-legacy-agent-core
 metrics:

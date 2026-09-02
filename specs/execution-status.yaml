@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.6.0
-updated_at: '2026-09-02T05:28:08Z'
+updated_at: '2026-09-02T05:53:38Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-08-21T23:11:33Z'
@@ -168,8 +168,8 @@ epics:
         bcps: 8
         risk: P0
         tasks_total: 5
-        tasks_passing: 0
-        tasks_failing: 5
+        tasks_passing: 5
+        tasks_failing: 0
       e06s02:
         title: Agent-Native Textual TUI Adapter
         status: failing
