@@ -1,23 +1,23 @@
 workflow_mode: solo-git
 session:
   active_flow: plan
-  active_epic_id: null
-  active_story_id: null
-  target_version: 0.4.0
+  active_epic_id: e05
+  active_story_id: e05s01
+  target_version: 0.5.0
 handoff:
-  next_skill: scope-work
+  next_skill: kickoff-branch
   summary: >
-    e04 Agent-Centric Foundation is merged into main and its completed capsule is archived. The next
-    initiative can now be bounded as e05 from the approved Agent-centric vision.
+    e05 Plugin and Agent Template Foundation is scoped, sliced, and planned as three failing
+    vertical stories (21 BCPs). Start e05s01 Notes Plugin contracts on an isolated feature branch.
 git:
   branch: main
 metrics:
   story_start: '2026-09-01T08:57:36Z'
   skill_timings:
     plan-work:
-      calls: 3
-      total_seconds: 10599.0
-      avg_seconds: 3533.0
+      calls: 4
+      total_seconds: 12197.0
+      avg_seconds: 3049.25
     develop-tdd:
       calls: 4
       total_seconds: 7558.0
@@ -38,3 +38,7 @@ metrics:
       calls: 1
       total_seconds: 98.0
       avg_seconds: 98.0
+    scope-work:
+      calls: 1
+      total_seconds: 389.0
+      avg_seconds: 389.0

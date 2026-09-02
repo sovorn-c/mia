@@ -6,8 +6,9 @@ type: "feat"
 context: "domain, security, persistence, runtime, and CLI"
 status: "passing"
 bcps_total: 29
-scope: "specs/product/SCOPE_LATEST.yaml"
-impact: "specs/IMPACT_LATEST.md"
+scope: "specs/product/snapshots/SCOPE_e04-agent-centric-foundation.yaml"
+impact: "specs/epics/archive/e04-agent-centric-foundation/IMPACT-e04.md"
+planning_context: "specs/epics/archive/e04-agent-centric-foundation/planning-context-e04.yaml"
 target_version: "0.4.0"
 
 requirement_deltas:

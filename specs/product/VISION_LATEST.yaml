@@ -238,21 +238,19 @@ initial_product_boundary:
 
 current_reality:
   status: >
-    The implementation remains coding-oriented and Mode-centered. It has coding, architect,
-    code_mode, and minimal Profile objects; single and research Modes; a fixed sequential Workflow;
-    filesystem and shell Tools; middleware; and durable Sessions.
+    The implementation now has canonical named Agents, default Mia, Agent-owned Sessions, enforced
+    access policy, direct one-hop Delegation, and Agent-first CLI/runtime entry points. Profile,
+    ModeRuntime, and research composition remain working compatibility adapters. Filesystem and
+    shell Tools, middleware, durable Sessions, and deterministic provider tests remain bundled.
   gaps_against_vision:
-    - "Agent is not yet the single canonical identity in configuration, commands, or code."
-    - "The default personal Agent is not implemented."
-    - "Agent-to-Agent messaging and Delegation are not general core contracts."
-    - "Mode remains the top-level execution selector."
-    - "Workflow remains a first-class fixed runtime definition rather than private logic."
-    - "There is no Plugin loader or per-Agent Plugin configuration contract."
-    - "The permission labels do not yet form a complete user-facing approval system."
+    - "There is no executable Plugin lifecycle, contribution loader, or per-Agent Plugin configuration contract."
+    - "There is no distributable Agent Template contract."
+    - "ModeRuntime and Profile remain compatibility implementation terms pending later removal."
+    - "Web research is not a supported bundled or Plugin-provided capability."
   migration_rule: >
-    Preserve working ModeRuntime and Profile behavior through the approved e04 compatibility
-    migration. Do not rename code outside that capsule or rewrite historical e03 artifacts merely
-    to resemble the target model.
+    Preserve the released e04 Agent-first behavior and its Profile/Mode compatibility adapters while
+    e05 adds the first bounded Plugin and Agent Template seam. Do not rewrite historical e03 or e04
+    artifacts merely to resemble later target architecture.
   documentation_rule: "Keep current capability claims honest until implementation catches up."
 
 settled_decisions:
@@ -270,19 +268,23 @@ settled_decisions:
     decision: >
       Use read-only, approval-required, and full-access. Having no Tools is capability configuration,
       not an access level. Full-access never disables permanent credential or integrity safeguards.
+  - id: "VISION-05"
+    decision: >
+      Prove executable extension with one bundled Notes Plugin and one bundled Notes Agent Template.
+      The proof covers local installation, enablement for persisted user-created Agents, core-mediated note Tools,
+      Agent-owned Plugin data, and secret-free Agent creation without a broad SDK or marketplace.
 
 open_decisions:
   - id: "VISION-03"
     question: "What request/result protocol should govern Agent-to-Agent Delegation beyond the bounded e04 contract?"
-  - id: "VISION-05"
-    question: "What first executable Plugin and distributable Agent are sufficient to prove extension?"
   - id: "VISION-06"
     question: "Should web research be bundled, optional, or Plugin-provided in the first release?"
 
 next_step: >
-  Implement the approved Agent-Centric Foundation from
-  `specs/epics/e04-agent-centric-foundation/`, beginning with e04s01 contract tests on an isolated
-  branch. Keep Plugin SDK, automation, channels, and advanced orchestration deferred.
+  Implement the approved Plugin and Agent Template Foundation from
+  `specs/epics/e05-plugin-agent-template-foundation/`, beginning with the Notes Plugin vertical
+  slice on an isolated branch. Keep broad SDK, remote registry, automation, channels, arbitrary
+  third-party loading, and advanced orchestration deferred.
 
 verification:
   command: >

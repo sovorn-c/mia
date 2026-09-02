@@ -1,138 +1,88 @@
-# Impact Assessment — e04 Agent-Centric Foundation
+# e05 Impact Assessment — Plugin and Agent Template Foundation
 
 ## Target
 
-The initiative changes shared identity, runtime, persistence, trust, and CLI seams:
+Add one bundled Notes Plugin lifecycle and one bundled Notes Agent Template while extending these shared seams:
 
-- `src/mia_agent/profiles/model.py`: `AgentProfile`
-- `src/mia_agent/profiles/manager.py`: `ProfileManager`, built-ins, Tool filtering, Session directory selection
-- `src/mia_agent/orchestration.py`: `ModeRuntime`, `ModeCatalog`, `RuntimeIdentity`, `OrchestrationEventEnvelope`, `AgentRuntimeFactory`
-- `src/mia_agent/harness.py`: terminal event classification and Tool execution outcomes used by Delegation
-- `src/mia_middleware/pipeline.py` and `src/mia_middleware/security.py`: Tool policy boundary
-- `src/mia_tools/base.py` and built-in Tools: side-effect metadata
-- `src/mia_cli/main.py` and `src/mia_cli/repl.py`: Profile/Mode selection, runtime construction, Session resume, and help
-- `src/mia_agent/session/`: Agent-owned Session lookup and additive metadata
-- `src/mia_agent/auth/`: machine-global credential resolution by Agent reference
+- `Agent` / `AgentManager` — persist per-Agent Plugin enablement/configuration and instantiate a safe template.
+- `AgentRuntimeFactory` — resolve enabled Plugin Tools before capability and access filtering.
+- `AgentHarness`, `ToolCallContext`, and audit events — preserve optional Plugin attribution through execution.
+- `BaseTool` — identify Plugin-contributed Tools without changing existing Tool behavior.
+- `mia_cli.main` — expose local Plugin lifecycle and Agent Template commands.
 
-The intended target is one canonical Agent model/registry, one Agent runner, one access-policy enforcement path, and one synchronous one-hop Delegation service. Existing Profile/Mode inputs become compatibility adapters rather than parallel runtimes.
+Net-new Notes storage and Plugin registry modules have no existing dependents.
 
-## Dependents (shared fan-in)
+## Zoom-Out: Purpose, Callers, and Contracts
 
-### Profile and identity
+### Agent and AgentManager
 
-- `src/mia_agent/orchestration.py`: resolves Profiles for runtime construction and Mode validation.
-- `src/mia_cli/main.py`: lists and selects Profiles in commands and print mode.
-- `src/mia_cli/repl.py`: stores active Profile, builds runtime identity, switches Profile, lists Sessions by Profile.
-- `src/mia_agent/herd/manager.py`: legacy Herd imports ProfileManager.
-- `tests/test_profiles.py`: built-ins, JSON loading, filtering, persistence.
-- `tests/test_orchestration.py`: Profile-backed Mode/Runtime contracts.
-- `tests/test_cli_repl.py`: interactive Profile switching and Session behavior.
-- `tests/test_cli_print_mode.py`: print-mode Profile/Mode selection.
-- `tests/test_e2e_scenarios.py`: read-only/minimal Tool filtering.
-- Additional Session/config tests instantiate ProfileManager through runtime factories.
+- **Purpose:** validate, resolve, persist, inspect, and select durable Agents while preserving legacy Profile compatibility.
+- **Callers:** `AgentRunner`, `DelegationService`, `AgentRuntimeFactory`, CLI, REPL, and Agent/Delegation/orchestration tests.
+- **Contracts to preserve:** path-safe IDs, atomic writes, built-in immutability, native-first legacy fallback, secret-free serialization, explicit full-access consent, Agent-owned Session lookup, and stable built-in behavior.
 
-Cymbal found 18 `ProfileManager` references across eight usage groups and five direct `AgentProfile` references.
+### AgentRuntimeFactory
 
-### Runtime and orchestration
+- **Purpose:** construct every Agent runtime with one provider, Tool set, access policy, middleware pipeline, Session store, compactor, and attributed identity.
+- **Callers:** `AgentRunner`, `ModeRuntime`, `DelegationService`, CLI, REPL, and orchestration/delegation tests (17 indexed references).
+- **Contracts to preserve:** one-Agent headless harness, all visible Tools capability-filtered, read-only effect filtering, approval and permanent security middleware, delegation depth rules, append-only Session restoration, and deterministic provider injection.
 
-- `src/mia_cli/main.py`: `_run_agent_loop()` constructs ModeRuntime and consumes attributed envelopes.
-- `src/mia_cli/repl.py`: `_init_harness()` constructs RuntimeIdentity and uses ModeRuntime for research.
-- `tests/test_orchestration.py`: validates Mode models, single/research event attribution, failure, cancellation, and child Session metadata.
-- `tests/test_cli_print_mode.py`: invokes print execution with Mode selection.
-- `tests/test_cli_repl.py`: interactive mode and prompt behavior.
+### AgentHarness and Tool middleware
 
-Cymbal found six `ModeRuntime`, eight `AgentRuntimeFactory`, and six `RuntimeIdentity` references. `orchestration.py` is imported by both CLI frontends and its dedicated test module.
+- **Purpose:** execute one Agent turn and route every Tool through the shared middleware pipeline with truthful, redacted results.
+- **Callers:** runtime factory, direct harness tests, provider tests, CLI renderers, and orchestration envelopes.
+- **Contracts to preserve:** async `AgentEvent` ordering, stable existing event fields, secret redaction at every output boundary, one result per call, middleware execution before Tool code, and append-only message persistence.
 
-### Tool and middleware policy
+### CLI
 
-- `src/mia_agent/orchestration.py`: builds the Tool list and middleware pipeline.
-- `src/mia_agent/harness.py`: invokes ToolPipeline and converts all exceptions to `ToolResultEvent.is_error`.
-- `tests/test_middleware_pipeline.py`: middleware order, guard, audit, and cost behavior.
-- `tests/test_e2e_scenarios.py`: capability filtering through built-in Profiles.
-- `tests/test_tools.py`: built-in Tool execution.
+- **Purpose:** provide the canonical Agent lifecycle and prompt entry point while retaining compatibility aliases.
+- **Callers:** users, `uv run mia`, CLI tests, and REPL startup.
+- **Contracts to preserve:** existing command names/options, actionable `BadParameter` errors, no secret rendering, no network requirement for local management, and no remote Git or package side effects.
 
-`SecurityGuardMiddleware` currently evaluates blocked shell patterns and filesystem paths only. It never reads the declared Profile permission. Adding access enforcement changes a shared security boundary and requires explicit deny/approval/full-access matrix coverage.
+## Dependents
 
-### Session and credential boundaries
-
-- `AgentRuntimeFactory` derives Session paths from ProfileManager and resolves credential values through ConfigManager.
-- `MiaREPL` lists/resumes/forks Session files under Profile directories.
-- `tests/test_sessions.py`, `tests/test_session_tree.py`, `tests/test_session_pagination.py`, `tests/test_e2e_scenarios.py`, and `tests/test_orchestration.py` exercise append-only history and active paths.
-- `tests/test_credentials.py` and `tests/test_auth_config.py` cover machine-global credential storage/resolution.
-
-New Agent homes must preserve legacy path lookup without moving JSONL or copying resolved secrets.
+1. `src/mia_agent/agent_runner.py` — builds canonical direct and research Runs.
+2. `src/mia_agent/delegation.py` — builds constrained child runtimes through the same factory.
+3. `src/mia_agent/mode_runtime.py` — compatibility execution path using the shared factory.
+4. `src/mia_cli/main.py` — Agent management and one-shot execution.
+5. `src/mia_cli/repl.py` — long-lived Agent selection and runtime initialization.
+6. `src/mia_agent/profiles/manager.py` — compatibility projection from Agent fields.
+7. `src/mia_middleware/access.py` — fail-closed capability/effect enforcement for every visible Tool.
+8. `src/mia_middleware/telemetry.py` — attributed, redacted Tool audit records.
+9. `src/mia_agent/session/*` — durable runtime history that must not become Plugin-owned.
+10. Existing filesystem, shell, and Delegation Tools — must remain unchanged when no Plugin is enabled.
 
 ## Affected Stories
 
-- **e01s01 Minimal Streaming REPL:** default startup identity and runtime construction change from coding Profile to Mia Agent.
-- **e01s02 Provider and Tool Execution:** Tool visibility and middleware execution gain access-policy enforcement.
-- **e01s03 Durable Sessions:** Session directory ownership changes additively and must preserve replay.
-- **e02 REPL polish stories:** help, banners, slash commands, Profile/model/session inspection, and aliases change.
-- **e03s01 Native Orchestration Mode Vertical Slice:** ModeRuntime becomes compatibility/private strategy; single/research behavior and event attribution remain regression requirements.
-- **e03s02 Slash Command Contract Alignment:** `/profile`, `/mode`, aliases, command hints, and Session inspection need Agent-first replacements.
-- **e04s01 Named Agent Vertical Slice:** owns canonical Agent model, registry, default Mia, additive persistence, and canonical commands.
-- **e04s02 Agent-Owned State and Access Boundary:** owns access levels, Tool effects, approval, global-secret references, and effective policy.
-- **e04s03 Direct Agent-to-Agent Delegation:** owns Task contracts, one-hop runtime, terminal outcomes, and child Session attribution.
-- **e04s04 Agent-First Compatibility Migration:** owns AgentRunner, prompt-scoped Run identity, private Research behavior, legacy adapters, and docs.
+- **e01/e02 CLI and REPL stories:** command registration and rendering regressions are possible.
+- **e03s01 Native Orchestration:** factory and harness event contracts are shared.
+- **e04s01 Named Agent Vertical Slice:** Agent persistence and CLI lifecycle gain Plugin/template behavior.
+- **e04s02 Agent State and Access Boundary:** Plugin capability, state, credentials, and access must remain monotonic and Agent-owned.
+- **e04s03 Direct Agent Delegation:** delegated runtimes must receive the same enabled Plugin set without escalating caller/recipient access.
+- **e04s04 Agent-First Compatibility Migration:** Profile/Mode adapters and canonical Agent execution must continue to use one runtime path.
 
 ## Test Coverage
 
-### Existing coverage to preserve
+- `tests/test_agents.py` — Agent schema, persistence, path safety, full-access confirmation, and secret-free serialization.
+- `tests/test_orchestration.py` — factory Tool construction, Session restoration, canonical/legacy paths, and persisted consent.
+- `tests/test_access_policy.py` — unknown Tool fail-closed behavior, effect classification, approval, and attributed telemetry.
+- `tests/test_agent_loop.py` — Tool event ordering, execution, errors, and session persistence.
+- `tests/test_delegation.py` — effective delegated access and child runtime behavior.
+- `tests/test_cli_print_mode.py` / `tests/test_cli_repl.py` — command lifecycle and Agent selection.
+- `tests/test_tools.py` — confined filesystem behavior and Tool effects.
 
-- `tests/test_profiles.py`: built-in/custom Profile loading, filtering, and persistence.
-- `tests/test_orchestration.py`: Mode validation, single/research sequence, envelope attribution, failure/cancellation, child Session metadata.
-- `tests/test_agent_loop.py`: provider streaming, multi-step Tool loop, max steps, and event ordering.
-- `tests/test_middleware_pipeline.py`: onion execution, SecurityGuard, audit, and cost controls.
-- `tests/test_cli_repl.py`: runtime initialization, Profile switching, Session resume/tree commands, interactive behavior.
-- `tests/test_cli_print_mode.py`: non-interactive prompt execution and Mode selection.
-- `tests/test_sessions.py`, `tests/test_session_tree.py`, `tests/test_session_pagination.py`: JSONL persistence, branches, active paths, pagination.
-- `tests/test_credentials.py`, `tests/test_auth_config.py`: credential storage and provider resolution.
-- `tests/test_e2e_scenarios.py`: full harness flow and read-only/minimal Tool filtering.
+### Gaps to close in e05
 
-### Required new coverage
-
-- `tests/test_agents.py`: Agent validation, default Mia, CRUD/default selection, native/legacy precedence, reserved IDs, additive Agent homes, Session fallback, secret-free persistence.
-- `tests/test_access_policy.py`: three-level matrix, legacy mappings, Tool effects, approval callback, missing/denied approval, full-access permanent guards, effective-access intersection.
-- `tests/test_delegation.py`: Task contracts, eligibility, one-hop execution, policy non-escalation, data minimization, unique attribution, timeout/cancellation, provider/max-step failure.
-- Expanded CLI tests for canonical Agent commands and legacy warning aliases.
-- Expanded orchestration tests for AgentRunner, prompt-scoped unique Run IDs, stable Session IDs, canonical envelopes, and Research Agent compatibility.
-
-### Gaps in current tests
-
-- No test enforces `AgentProfile.permission` below Tool filtering.
-- No approval callback or per-invocation deny path exists.
-- No test distinguishes policy rejection from Tool execution failure.
-- No Agent CRUD/default selection or Agent-home persistence exists.
-- No test proves credential values are absent from Agent, approval, Session, Delegation, and audit artifacts together.
-- No public Task request/result or direct Delegation tests exist.
-- No test rejects recursive/self/ineligible Delegation.
-- No test treats provider error chunks and max_steps as failed delegated Tasks.
-- No test requires a fresh Run ID for each interactive prompt in one Session.
-- No test proves native-first legacy Session lookup without source rewrite.
-
-## Churn and Sensitivity
-
-Git history shows disproportionate churn in the frontends:
-
-- `src/mia_cli/repl.py`: 47 commits
-- `src/mia_cli/main.py`: 11 commits
-- `src/mia_agent/auth/config.py`: 9 commits
-- `src/mia_agent/orchestration.py`: 4 commits
-- profile, Session entry, middleware pipeline, and security modules: 1 commit each
-
-High REPL churn plus its direct ownership of runtime construction, Profile switching, Session inspection, and aliases makes it the most sensitive migration seam. The low commit count in profile/middleware modules does not lower risk because their APIs are shared and security-relevant.
+- No Plugin manifest, install, enable/disable, configuration, or compatibility tests.
+- No Agent-scoped Plugin data isolation tests.
+- No Plugin Tool attribution in events/audit tests.
+- No duplicate Tool-name rejection or Plugin Tool effect-declaration tests.
+- No Agent Template validation, secret exclusion, missing-requirement, or collision tests.
+- No regression proving Plugin-free Agents receive an identical Tool set.
 
 ## Risk: High
 
-The change replaces a shared public identity/API, alters the central runtime factory and both CLI frontends, adds enforcement at the Tool security boundary, changes Session path resolution, and introduces multi-Agent execution. Fan-in exceeds ten callers, several contracts are security-sensitive, and the required Agent/access/Delegation tests do not yet exist.
+`AgentRuntimeFactory` and the Tool execution boundary are shared security APIs with more than ten callers, and Agent persistence carries private-data and full-access invariants. Optional, backward-compatible fields and contract-first tests are required before implementation.
 
-## Recommended action
+## Recommended Action
 
-Proceed only in the ordered e04 stories with failing contract tests first:
-
-1. Establish canonical Agent/AgentManager and additive legacy compatibility.
-2. Enforce three access levels, approval, Tool effects, Agent ownership, and global-secret references.
-3. Add one synchronous one-hop Delegation service and Tool with truthful terminal outcomes.
-4. Route canonical/legacy frontends through one AgentRunner and finish Agent-first terminology.
-
-Do not edit all Profile/Mode references in one rename. Keep changes additive until native Agent paths and compatibility fixtures pass. Before each story completes, run its targeted security/compatibility suite; before e04 completes, run Ruff format/check, strict Mypy, full pytest, package build, YAML/spec consistency, and active-document terminology checks.
+Proceed with three vertical stories and TDD. Keep Plugin code bundled and locally trusted, add no dependency, preserve existing Tool/event behavior when `plugin_id` is absent, reject duplicate Tool names and undeclared effects before runtime construction, resolve Plugin contributions before the existing capability/access pipeline, include Plugin Tools in effect classification, store Notes only under the owning Agent home, and instantiate templates only through existing AgentManager validation and atomic persistence.

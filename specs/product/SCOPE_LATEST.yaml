@@ -1,180 +1,152 @@
-# specs/product/SCOPE_LATEST.yaml — Bounded PRD for Mia Agent-Centric Foundation
-initiative_id: "e04"
-initiative_name: "Agent-Centric Foundation"
+# specs/product/SCOPE_LATEST.yaml — Bounded PRD for Mia Plugin and Agent Template Foundation
+initiative_id: "e05"
+initiative_name: "Plugin and Agent Template Foundation"
 status: "approved"
-supersedes: "specs/product/snapshots/SCOPE_e04-native-orchestration-run-lifecycle.yaml"
+supersedes: "specs/product/snapshots/SCOPE_e04-agent-centric-foundation.yaml"
 
 core_value: >
-  Let users create and work with durable named Agents, including the default Mia Agent, and let one
-  Agent safely delegate a bounded Task to another without exposing Mode or Workflow concepts.
+  Let users add one useful executable capability to an Agent and create a reusable Agent from a
+  safe template without exposing credentials, private state, or core integrity controls.
 
 summary: >
-  Mia's approved product identity now centers one canonical object: the Agent. An Agent combines a
-  durable identity with configuration, state, capabilities, access policy, and an address for
-  receiving Tasks. Mia is the default personal Agent; coding, research, review, and other roles are
-  named specialist Agents. Agent-to-Agent Delegation is the primary coordination primitive, while
-  Workflow remains private implementation logic and Mode is absent from the target product model.
+  Mia now has durable named Agents, explicit access boundaries, and direct Delegation. The next
+  product gap is executable extension: Agents can record Plugin names, but no Plugin can be
+  installed, enabled, inspected, configured, or used. Agent definitions also cannot be shared
+  safely without copying private configuration and state.
 
-  The current product still exposes Profile and Mode concepts and supports only a fixed research
-  sequence. This initiative establishes the smallest meaningful Agent-centered foundation: named
-  Agent lifecycle, a default Mia Agent, compatibility for existing Profiles, explicit Agent-owned
-  state and access boundaries, and one synchronous attributable Delegation path. It preserves
-  current working capabilities while creating a stable seam for later Plugins and richer teams.
+  This initiative proves the smallest Plugin boundary with one concrete Notes Plugin and one Notes
+  Agent Template. The Notes Plugin contributes Agent-scoped note capabilities, is explicitly
+  installed into Mia and enabled per Agent, and remains subject to core Tool, access, audit,
+  attribution, and storage rules. The Notes Agent Template creates a new independent Agent with the
+  Plugin requirement and useful defaults while excluding credentials, Sessions, memory, notes, and
+  another user's identity. A broad SDK, remote registry, and arbitrary third-party dependency
+  installation remain deferred until this proof exposes real extension needs.
 
 actors:
-  - "Everyday users working with the default Mia Agent"
-  - "Users creating specialist Agents for coding, research, review, or domain work"
-  - "Agent designers configuring identity, capabilities, state, and access"
-  - "Future Plugin developers extending Agents through a stable core boundary"
+  - "Users adding local note assistance to a persisted named Agent"
+  - "Agent designers creating a reusable Notes Agent from a safe template"
+  - "Plugin developers validating Mia's first executable extension contract"
+  - "Mia Core maintainers protecting access, attribution, Sessions, and credentials"
 
 in_scope:
-  - id: "e04s01"
-    name: "Named Agent Vertical Slice"
+  - id: "e05s01"
+    name: "Notes Plugin Vertical Slice"
     description: >
-      Agent becomes the canonical configurable and addressable product object. Users can create,
-      list, inspect, select, and persist named Agents, and a default personal Agent named Mia works
-      without prior configuration. Existing built-in Profiles remain usable through a documented,
-      non-destructive compatibility path.
+      A user can install the bundled Notes Plugin, enable it for one Agent, and use that Agent to
+      create, list, and read Agent-scoped notes. Plugin-contributed actions are visible only when
+      enabled and execute through Mia Core under the Agent's capability and access policy.
 
-  - id: "e04s02"
-    name: "Agent-Owned State and Access Boundary"
+  - id: "e05s02"
+    name: "Per-Agent Plugin Lifecycle and Integrity Boundary"
     description: >
-      Each Agent has an explicit ownership boundary for identity, instructions, model defaults,
-      capabilities, Plugin references, access level, Sessions, memory, credential references, and
-      channel identity where supported. The contract distinguishes logical Agent ownership from
-      filesystem or process sandboxing, keeps provider secrets machine-global by reference, and
-      supports read-only, approval-required, and full-access without silent escalation.
+      Users can list and inspect installed Plugins, enable or disable one Plugin per Agent, and save
+      its validated Agent-specific configuration. Mia reports missing, malformed, incompatible, or
+      undeclared contributions without partially activating them. Plugin data, output, errors, and
+      events remain Agent-attributed and cannot bypass credential, access, or Session safeguards.
 
-  - id: "e04s03"
-    name: "Direct Agent-to-Agent Delegation"
+  - id: "e05s03"
+    name: "Portable Notes Agent Template"
     description: >
-      One Agent can synchronously assign one bounded Task to one eligible recipient Agent and
-      receive one attributable terminal result. Caller, recipient, Task, Run, Session, access
-      context, rejection, failure, cancellation, and timeout remain distinguishable. Delegation
-      does not require users to define a Mode or public Workflow.
-
-  - id: "e04s04"
-    name: "Agent-First Compatibility Migration"
-    description: >
-      Existing coding, architecture, minimal, single, and research behavior remains available
-      through Agents during migration. Mode and Workflow stop being target product choices and are
-      treated as compatibility or private execution behavior without breaking current Sessions,
-      Tools, middleware protections, CLI use, or headless execution.
+      Users can inspect and instantiate a bundled Notes Agent Template as a new independently owned
+      Agent. The template declares its Plugin requirement and useful defaults but carries no source
+      Agent identity, credentials, Sessions, memory, notes, or full-access consent. Missing Plugin
+      requirements and Agent ID collisions fail with actionable, non-destructive errors.
 
 out_of_scope:
   - id: "oos-01"
-    name: "General Plugin SDK and marketplace"
+    name: "Remote Plugin registry or marketplace"
     rationale: >
-      Deferred until the Agent boundary and one concrete extension use case prove what the Plugin
-      contract must expose; speculative extension points would lock in unnecessary complexity.
+      Deferred until one bundled Plugin proves the install, enablement, contribution, and trust
+      contracts; discovery, publishing, reputation, and remote supply-chain policy are separate work.
 
   - id: "oos-02"
-    name: "Persistent Agent mailboxes and ongoing conversations between Agents"
+    name: "Arbitrary third-party Python loading and dependency installation"
     rationale: >
-      This initiative proves one synchronous bounded Delegation first; durable inboxes, delayed
-      delivery, and resumable peer conversations require separate lifecycle and storage design.
+      Executing unknown local code or installing its dependencies requires package provenance,
+      compatibility, and isolation decisions that are not needed for the bundled proof.
 
   - id: "oos-03"
-    name: "Parallel teams, group coordination, and Task DAGs"
+    name: "Broad Plugin SDK, hooks, or workflow framework"
     rationale: >
-      Concurrency, fan-out, merge semantics, scheduling, and partial failure are deferred until the
-      direct Delegation contract is trustworthy.
+      The initiative supports only the contracts exercised by Notes and its Agent Template; hooks,
+      private workflows, provider adapters, channels, and speculative extension points are deferred.
 
   - id: "oos-04"
-    name: "Background schedules and autonomous jobs"
+    name: "Plugin sandboxing or claims that trusted code is isolated"
     rationale: >
-      Cron, routines, unattended execution, wake-up behavior, and notification delivery introduce
-      operational and approval concerns beyond the interactive Agent foundation.
+      Mia enforces Tool and integrity boundaries but does not yet provide process, filesystem,
+      network, or operating-system isolation for executable Plugin code.
 
   - id: "oos-05"
-    name: "External messaging channels and broad personal integrations"
+    name: "Plugin hot reload, upgrade, rollback, or dependency solving"
     rationale: >
-      Telegram, Slack, Discord, email, calendar, and browser control depend on channel-specific
-      identity, credentials, permissions, and delivery contracts not needed to prove local Agents.
+      Version transitions and live code replacement add recovery and compatibility semantics beyond
+      install-once local proof; restart-based activation is sufficient for this initiative.
 
   - id: "oos-06"
-    name: "Filesystem or process sandbox implementation"
+    name: "Plugin-contributed UI, background jobs, or external channels"
     rationale: >
-      Agent ownership and capability scope are defined here, but Docker, VM, OS-user, and per-Agent
-      process isolation require a separate security and execution initiative.
+      Terminal widgets, schedules, autonomous execution, browser control, messaging, email, and
+      calendar integrations each need separate lifecycle and permission contracts.
 
   - id: "oos-07"
-    name: "Arbitrary workflow authoring"
+    name: "Sharing live Agents or private Agent state"
     rationale: >
-      Users coordinate Agents through Delegation. Multi-step workflow engines, visual builders,
-      branching graphs, and user-authored orchestration languages are not required for this model.
+      Agent Templates distribute definitions only. Synchronizing credentials, Sessions, memory,
+      notes, defaults, or identity would violate Agent ownership and privacy boundaries.
 
   - id: "oos-08"
-    name: "Comprehensive provider retry and recovery policy"
+    name: "General note editor, search engine, or synchronization service"
     rationale: >
-      Delegation must report provider failure truthfully, but automatic retries, fallback routing,
-      circuit breakers, and restart recovery need separate product decisions.
+      Create, list, and read are enough to prove executable extension. Rich editing, deletion,
+      indexing, attachments, cloud sync, and collaborative notebooks are separate product features.
+
+  - id: "oos-09"
+    name: "Mutable Plugin overlays for immutable built-in Agents"
+    rationale: >
+      The first proof enables Plugins on persisted user-created Agents and the Notes Agent created
+      from its Template. Customizing built-ins such as Mia requires a separate override contract so
+      built-in immutability is not weakened implicitly.
 
 constraints:
-  - "Use Agent as the only new canonical identity term; do not introduce Assistant, Profile, Bot, Agent Instance, or Mode as target entities."
-  - "Preserve current Profile data, ModeRuntime internals, Workflow behavior, Sessions, Tools, and CLI journeys through explicit compatibility until separately removed."
-  - "Make Agent the preferred command and configuration surface; retain Profile and Mode commands only as documented temporary aliases during e04 migration."
-  - "Use only read-only, approval-required, and full-access as access levels; having no Tools remains capability configuration."
-  - "Default Mia enables read_file, write_file, edit_file, and bash under approval-required access; reads run automatically and writes or shell side effects require confirmation."
-  - "Keep provider secrets in the machine-global credential store and store only provider/account references in Agent state or delegated Tasks."
-  - "Keep Workflow private to an Agent, Skill, or Plugin; do not require users to author orchestration graphs."
-  - "Limit Delegation to one synchronous bounded Task and one recipient per call in this initiative."
-  - "Never let Delegation or Plugin configuration silently expand caller or recipient access."
-  - "Keep Agent logical ownership distinct from claims of filesystem, process, network, or credential isolation."
-  - "Keep Agent execution headless and independent from Rich, Textual, Typer, or another UI framework."
-  - "Keep Session history append-only and preserve existing durable data without destructive migration."
-  - "Keep every visible Tool behind capability filtering, approval policy, middleware, audit, and error handling."
-  - "Use Python 3.12+, strict Mypy, Ruff, deterministic offline tests, and no new runtime dependency unless separately approved."
+  - "Use Plugin for installable executable extension and Agent Template for a distributable definition; neither becomes an Agent identity or owns core routing."
+  - "Prove only one bundled Notes Plugin and one bundled Notes Agent Template; add no general-purpose extension point without a demonstrated Notes requirement."
+  - "Plugin installation is explicit and local; Plugin enablement and configuration are explicit per persisted non-built-in Agent."
+  - "Disabled, missing, malformed, incompatible, or undeclared Plugin contributions fail closed and do not partially alter an Agent runtime."
+  - "Every Plugin-contributed Tool is capability-filtered and executes through access policy, approval, security, audit, cost, attribution, and error handling."
+  - "A Plugin cannot silently expand an Agent's Tools, access level, delegation targets, full-access consent, credentials, or storage boundary."
+  - "Notes are private Agent-owned Plugin data and are not copied into Agent Templates."
+  - "Agent Templates exclude credentials, account secrets, Sessions, memory, Plugin data, selected-default state, and full-access consent."
+  - "Existing Agents without Plugins, Profile/Mode compatibility, Delegation, Sessions, and current Tools remain functional."
+  - "Keep Agent execution headless and keep Plugin contracts independent from Rich, Textual, Typer, and terminal rendering."
+  - "Use Python 3.12+, strict Mypy, Ruff, deterministic offline tests, append-only Session behavior, and no new runtime dependency."
 
 success_criteria:
-  - "Running `mia` without Agent configuration starts the default personal Agent named Mia."
-  - "A user can create, list, inspect, select, and reopen at least two named Agents with stable unique identities."
-  - "Existing coding, architect, code_mode, and minimal configurations remain available through a documented compatibility path without data loss."
-  - "The system defines and enforces which configuration and durable state belongs to each Agent, while clearly stating that logical ownership is not automatic sandboxing."
-  - "Each Agent selects read-only, approval-required, or full-access; no-Tools behavior is configured through capabilities rather than another access level."
-  - "Provider secrets remain machine-global and neither Agent files nor delegated Tasks contain copied secret values."
-  - "An Agent can delegate one bounded Task to another eligible Agent and receive one attributable result."
-  - "Direct and delegated execution have unique Run and Task identities and retain caller, recipient, Agent, Session, and access-policy attribution."
-  - "Successful, failed, rejected, cancelled, and timed-out delegated Tasks remain distinguishable and cannot be reported as success."
-  - "Delegation applies the effective caller and recipient access constraints without silent privilege escalation."
-  - "Users can perform the supported single-Agent and research journeys without selecting a Mode or defining a Workflow."
-  - "Current Sessions, Tools, middleware protections, headless execution, CLI behavior, and deterministic provider tests remain compatible."
-  - "Focused Agent and Delegation tests, Ruff, strict Mypy, offline pytest, build, and specification checks pass."
+  - "A user can install and inspect the bundled Notes Plugin without network access."
+  - "A user can enable Notes for one Agent without enabling it for another Agent."
+  - "An enabled Agent can create, list, and read its own notes, while another Agent cannot see those notes through the Plugin."
+  - "Disabling Notes removes its contributed capabilities from later Runs without deleting stored notes."
+  - "Note reads follow non-mutating policy and note creation follows side-effect approval policy; permanent security rules remain active."
+  - "Plugin-contributed Tool calls, results, errors, and durable data retain Agent, Run, Session, and Plugin attribution where those identities apply."
+  - "Malformed, incompatible, missing, or undeclared Plugin contributions produce actionable failures before execution and never fall back to unrestricted behavior."
+  - "A user can inspect and instantiate the bundled Notes Agent Template under a new Agent ID."
+  - "The instantiated Notes Agent is independent, requires the installed Notes Plugin, and contains no source identity, credentials, Sessions, memory, notes, or inherited full-access consent."
+  - "Agent ID collisions and missing Plugin requirements do not overwrite or partially create Agent data."
+  - "Existing Plugin-free Agents and all e04 Agent, Delegation, access, Session, CLI, and compatibility journeys remain green."
+  - "Focused Plugin and Agent Template tests, the release coverage gate, Ruff, strict Mypy, offline pytest, build, and specification checks pass."
 
 references:
   - "specs/product/VISION_LATEST.yaml"
   - "specs/product/GLOSSARY_LATEST.yaml"
-  - "specs/UBIQUITOUS_LANGUAGE_LATEST.md"
-  - "specs/product/snapshots/SCOPE_e03-native-orchestration.yaml"
-  - "specs/product/snapshots/SCOPE_e04-native-orchestration-run-lifecycle.yaml"
+  - "specs/product/snapshots/SCOPE_e04-agent-centric-foundation.yaml"
   - "specs/tech-architecture/tech-stack.md"
+  - "specs/IMPACT_LATEST.md"
   - "specs/adr/0001-prompt-scoped-orchestration-runs.md"
 
-prior_art:
-  - candidate: "Mia current AgentProfile and AgentRuntimeFactory seams"
-    source: "src/mia_agent/profiles/ and src/mia_agent/orchestration.py"
-    verdict: "extend and migrate"
-    notes: >
-      Preserve working configuration, runtime construction, Tool filtering, middleware, and Session
-      behavior while moving the canonical product boundary to Agent.
-
-  - candidate: "Hermes independent agent profiles and Bot Mode"
-    source: "https://hermes-agent.nousresearch.com/docs/user-guide/profiles"
-    verdict: "adapt"
-    notes: >
-      Adopt durable named identity, separate state, and specialist collaboration principles without
-      adopting Profile/Bot as Mia's canonical terminology or importing Hermes's full surface.
-
-  - candidate: "Grok Bot named digital coworkers and approval choices"
-    source: "https://x.ai/news/introducing-grok-bot"
-    verdict: "adapt"
-    notes: >
-      Adopt the simple model of assigning work to named specialists and separating approvals from
-      identity without requiring cloud computers or opaque orchestration.
-
-  - candidate: "Tau and Pi one-agent execution seams"
-    source: "/Users/sovorn/dev/pi/pi-architecture/tau/src/tau_agent/harness.py and /Users/sovorn/dev/pi/pi-architecture/pi/packages/agent/src/agent.ts"
-    verdict: "adopt"
-    notes: >
-      Keep one Agent execution loop small and deterministic; add coordination through an explicit
-      Task boundary rather than merging multiple Agents into one harness.
+resolved_decisions:
+  - id: "VISION-05"
+    decision: >
+      The first executable extension is the bundled Notes Plugin, and the first distributable Agent
+      is a Notes Agent Template contributed with it. Together they prove installation, per-Agent
+      enablement, core-mediated Tools, Agent-owned Plugin data, and secret-free template creation
+      without committing Mia to a broad SDK or remote marketplace.
