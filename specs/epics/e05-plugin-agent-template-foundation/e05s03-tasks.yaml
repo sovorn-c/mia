@@ -1,20 +1,19 @@
 story_id: e05s03
 story_title: "Portable Notes Agent Template"
 spec: "e05s03-portable-notes-agent-template.md"
-status: failing
+status: passing
 requirement_delta: ADDED
 bcps: 5
 tasks:
   - id: e05s03t01
     title: "Lock Agent Template privacy and ownership contracts"
     description: "Specify allowlisted template fields, Notes Plugin requirements, fresh identity, collision/missing-requirement failure, and exclusion of credentials, Sessions, memory, notes, defaults, and full-access consent."
-    status: failing
+    status: passing
     risk: P0
     security: high
     depends_on: []
     verify: >-
-      uv run --offline pytest tests/test_agent_templates.py -k
-      'validate or privacy or secret or identity or collision or missing or full_access'
+      uv run --offline pytest tests/test_agent_templates.py tests/test_agent_template_cli.py
       && printf 'no new security findings in affected paths\n'
     allure:
       severity: critical
@@ -23,7 +22,7 @@ tasks:
   - id: e05s03t02
     title: "Add the Agent Template contract and bundled Notes definition"
     description: "Create a validated, serializable Agent Template boundary and one bundled Notes Agent Template containing only reusable Agent defaults and declared Plugin requirements."
-    status: failing
+    status: passing
     risk: P0
     security: high
     depends_on: [e05s03t01]
@@ -38,7 +37,7 @@ tasks:
   - id: e05s03t03
     title: "Instantiate templates through existing Agent persistence"
     description: "Validate installed Plugin requirements and target ID before creating a fresh Agent through AgentManager atomic persistence, leaving no partial files on failure."
-    status: failing
+    status: passing
     risk: P0
     security: high
     depends_on: [e05s03t02]
@@ -53,7 +52,7 @@ tasks:
   - id: e05s03t04
     title: "Expose template inspection and creation commands"
     description: "Add thin CLI commands to list/show bundled Agent Templates and create a named Agent from Notes with actionable non-destructive errors."
-    status: failing
+    status: passing
     risk: P0
     security: medium
     depends_on: [e05s03t03]
@@ -68,7 +67,7 @@ tasks:
   - id: e05s03t05
     title: "Close template privacy and release quality gates"
     description: "Run template, Plugin, Agent, runtime, access, Delegation, Session, CLI, coverage, build, and specification gates before completion."
-    status: failing
+    status: passing
     risk: P0
     security: high
     depends_on: [e05s03t03, e05s03t04]

@@ -4,7 +4,7 @@ slug: "plugin-agent-template-foundation"
 title: "Plugin and Agent Template Foundation"
 type: "feat"
 context: "domain, security, persistence, runtime, tools, and CLI"
-status: "failing"
+status: "passing"
 bcps_total: 21
 scope: "specs/product/SCOPE_LATEST.yaml"
 impact: "specs/IMPACT_LATEST.md"
@@ -28,7 +28,7 @@ requirement_deltas:
 stories:
   - id: e05s01
     title: "Notes Plugin Vertical Slice"
-    status: "failing"
+    status: "passing"
     bcps: 8
     risk: "P0"
     delta: "ADDED"
@@ -38,7 +38,7 @@ stories:
 
   - id: e05s02
     title: "Per-Agent Plugin Lifecycle and Integrity Boundary"
-    status: "failing"
+    status: "passing"
     bcps: 8
     risk: "P0"
     delta: "MODIFIED"
@@ -48,7 +48,7 @@ stories:
 
   - id: e05s03
     title: "Portable Notes Agent Template"
-    status: "failing"
+    status: "passing"
     bcps: 5
     risk: "P0"
     delta: "ADDED"

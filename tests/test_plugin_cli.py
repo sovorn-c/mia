@@ -45,8 +45,9 @@ def test_agent_inspection_reports_enabled_plugins_without_config_values(tmp_path
     plugins.install("notes")
     plugins.enable("alpha", "notes")
     plugins.configure("alpha", "notes", {"notebook_name": "Private"})
-    with patch("mia_cli.main.AgentManager", return_value=agents), patch(
-        "mia_cli.main.PluginManager", return_value=plugins
+    with (
+        patch("mia_cli.main.AgentManager", return_value=agents),
+        patch("mia_cli.main.PluginManager", return_value=plugins),
     ):
         shown = runner.invoke(app, ["agent", "show", "alpha"])
 
