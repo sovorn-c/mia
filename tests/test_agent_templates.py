@@ -49,6 +49,16 @@ def test_notes_agent_template_is_allowlisted_and_serializable(tmp_path: Path) ->
             instructions="Unsafe",
             plugin_config={"notes": {"api_key": "secret"}},
         )
+    with pytest.raises(ValidationError, match="secret-like"):
+        AgentTemplate(
+            template_id="unsafe-value",
+            version="1.0.0",
+            display_name="Unsafe",
+            description="Unsafe",
+            instructions="Unsafe",
+            required_plugins=["notes"],
+            plugin_config={"notes": {"notebook_name": "Bearer secret"}},
+        )
     with pytest.raises(ValidationError, match="required"):
         AgentTemplate(
             template_id="unrequired-config",
