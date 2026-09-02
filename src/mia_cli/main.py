@@ -33,11 +33,13 @@ profile_app = typer.Typer(help="Manage legacy profile aliases.")
 agent_app = typer.Typer(help="Create, inspect, and select named Agents.")
 sessions_app = typer.Typer(help="Inspect and manage saved session trees.")
 plugin_app = typer.Typer(help="Install and manage bundled Plugins.")
+template_app = typer.Typer(help="Inspect and instantiate Agent Templates.")
 
 app.add_typer(agent_app, name="agent")
 app.add_typer(profile_app, name="profile")
 app.add_typer(sessions_app, name="sessions")
 app.add_typer(plugin_app, name="plugin")
+app.add_typer(template_app, name="template")
 
 console = Console()
 
@@ -361,6 +363,54 @@ def disable_plugin_command(
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="PLUGIN_ID") from exc
     console.print(f"[bold green]✓ Disabled {plugin_id} for Agent {agent.agent_id}.[/bold green]")
+
+
+@template_app.command(name="list")
+def list_templates_command() -> None:
+    """List bundled Agent Templates."""
+    templates = PluginManager(agent_manager=AgentManager()).list_templates()
+    table = Table(title="Mia Agent Templates")
+    table.add_column("Template", style="bold cyan")
+    table.add_column("Version", style="magenta")
+    table.add_column("Plugins", style="green")
+    for template in templates:
+        table.add_row(
+            template.template_id,
+            template.version,
+            ", ".join(template.required_plugins) if template.required_plugins else "(none)",
+        )
+    console.print(table)
+
+
+@template_app.command(name="show")
+def show_template_command(
+    template_id: Annotated[str, typer.Argument(help="Template ID")],
+) -> None:
+    """Inspect one bundled Agent Template."""
+    try:
+        template = PluginManager(agent_manager=AgentManager()).get_template(template_id)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="TEMPLATE_ID") from exc
+    console.print(f"[bold cyan]{template.display_name}[/bold cyan] ({template.template_id})")
+    console.print(f"Version: {template.version}")
+    console.print(f"Description: {template.description}")
+    console.print(f"Access: {template.access_policy}")
+    console.print(f"Plugins: {', '.join(template.required_plugins) or '(none)'}")
+
+
+@template_app.command(name="create")
+def create_template_agent_command(
+    template_id: Annotated[str, typer.Argument(help="Template ID")],
+    agent_id: Annotated[str, typer.Argument(help="New Agent ID")],
+) -> None:
+    """Create a new Agent from one bundled Template."""
+    try:
+        agent = PluginManager(agent_manager=AgentManager()).instantiate(template_id, agent_id)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="AGENT_ID") from exc
+    console.print(
+        f"[bold green]✓ Created Agent {agent.agent_id} from Template {template_id}.[/bold green]"
+    )
 
 
 @profile_app.command(name="list")
