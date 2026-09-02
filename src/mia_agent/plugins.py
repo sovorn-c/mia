@@ -259,6 +259,33 @@ class PluginManager:
         """Explicit spelling for callers managing per-Agent Plugin state."""
         return self.enable(agent_id, plugin_id)
 
+    def resolve_tools(self, agent: Any) -> list[Any]:
+        """Build every enabled Plugin Tool against the resolved Agent boundary."""
+        installed = {record.plugin_id: record for record in self.list_installed()}
+        tools: list[Any] = []
+        for plugin_id in agent.plugins:
+            manifest = self.get_manifest(plugin_id)
+            record = installed.get(manifest.plugin_id)
+            if record is None:
+                raise ValueError(
+                    f"Plugin '{manifest.plugin_id}' is not installed; install it first"
+                )
+            if record.version != manifest.version or record.api_version != manifest.api_version:
+                raise ValueError(f"Installed Plugin '{manifest.plugin_id}' is incompatible")
+            plugin = NotesPlugin() if manifest.plugin_id == "notes" else None
+            if plugin is None:
+                raise ValueError(f"Plugin '{manifest.plugin_id}' has no bundled implementation")
+            tools.extend(
+                plugin.build_tools(
+                    agent_id=agent.agent_id,
+                    data_dir=self.agent_manager.agent_home(agent.agent_id)
+                    / "plugins"
+                    / manifest.plugin_id,
+                    config=getattr(agent, "plugin_config", {}).get(manifest.plugin_id, {}),
+                )
+            )
+        return tools
+
     @staticmethod
     def _notes_manifest() -> PluginManifest:
         return PluginManifest(
