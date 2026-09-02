@@ -46,7 +46,9 @@ class PluginToolSpec(BaseModel):
     def validate_name(cls, value: str) -> str:
         value = value.strip()
         if not re.fullmatch(r"[a-z][a-z0-9_]*", value):
-            raise ValueError("Plugin Tool names must use lowercase letters, numbers, and underscores")
+            raise ValueError(
+                "Plugin Tool names must use lowercase letters, numbers, and underscores"
+            )
         return value
 
     @field_validator("description")
@@ -126,6 +128,33 @@ class InstalledPlugin(BaseModel):
         return normalize_plugin_id(value)
 
 
+class NotesPlugin:
+    """Bundled Notes contribution used by the initial Plugin vertical slice."""
+
+    plugin_id = "notes"
+
+    @property
+    def manifest(self) -> PluginManifest:
+        return PluginManager._notes_manifest()
+
+    def build_tools(
+        self,
+        *,
+        agent_id: str,
+        data_dir: Path,
+        config: dict[str, Any],
+    ) -> list[Any]:
+        """Build Notes Tools against the one data root selected by Mia Core."""
+        del agent_id, config
+        from mia_tools.notes import NoteCreateTool, NoteListTool, NoteReadTool
+
+        return [
+            NoteCreateTool(data_dir),
+            NoteListTool(data_dir),
+            NoteReadTool(data_dir),
+        ]
+
+
 class PluginManager:
     """Manage the small bundled catalog and explicit local installation state."""
 
@@ -143,7 +172,7 @@ class PluginManager:
         default_dir = self.agent_manager.agents_dir.parent / "plugins"
         self.plugins_dir = (plugins_dir or default_dir).expanduser().resolve()
         self.state_path = self.plugins_dir / "installed.json"
-        self._catalog = {"notes": self._notes_manifest()}
+        self._catalog = {"notes": NotesPlugin().manifest}
 
     def list_available(self) -> list[PluginManifest]:
         """List bundled Plugin manifests in stable ID order."""
@@ -174,13 +203,17 @@ class PluginManager:
             return self._catalog[key]
         except KeyError as exc:
             available = ", ".join(sorted(self._catalog))
-            raise ValueError(f"Plugin '{key}' is unavailable. Available Plugins: {available}") from exc
+            raise ValueError(
+                f"Plugin '{key}' is unavailable. Available Plugins: {available}"
+            ) from exc
 
     def install(self, plugin_id: str) -> InstalledPlugin:
         """Install one bundled Plugin idempotently without network or code loading."""
         manifest = self.get_manifest(plugin_id)
         records = self.list_installed()
-        existing = next((record for record in records if record.plugin_id == manifest.plugin_id), None)
+        existing = next(
+            (record for record in records if record.plugin_id == manifest.plugin_id), None
+        )
         if existing is not None:
             if existing != InstalledPlugin(
                 plugin_id=manifest.plugin_id,
@@ -257,6 +290,7 @@ __all__ = [
     "CORE_PLUGIN_API_VERSION",
     "InstalledPlugin",
     "PluginEffect",
+    "NotesPlugin",
     "PluginManager",
     "PluginManifest",
     "PluginToolSpec",

@@ -15,6 +15,7 @@ class BaseTool(ABC):
     description: str
     parameters: dict[str, Any]
     effect: str = "side-effecting"
+    plugin_id: str | None = None
 
     def to_tool_definition(self) -> ToolDefinition:
         """Convert this tool into an AI-ready ToolDefinition schema."""
