@@ -36,7 +36,7 @@ tasks:
       categories: ["Runtime", "Security Review", "Contract tests"]
   - id: e06s01t02
     title: Extract canonical runtime contracts
-    status: failing
+    status: passing
     risk: P0
     depends_on: [e06s01t01]
     story_steps: [2]
@@ -61,7 +61,7 @@ tasks:
       categories: ["Runtime", "Delegation", "Events"]
   - id: e06s01t03
     title: Make AgentRuntimeFactory Agent-only
-    status: failing
+    status: passing
     risk: P0
     depends_on: [e06s01t02]
     story_steps: [3]
