@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from mia_middleware.access import (
+    AccessPolicy,
     AccessPolicyMiddleware,
     ApprovalRequest,
     PolicyRejectedError,
@@ -26,11 +27,24 @@ def test_access_levels_map_legacy_values_and_unknown_tools_fail_closed() -> None
     assert normalize_access_level("no_tools") == "approval-required"
     assert tool_effect("read_file") == "non-mutating"
     assert tool_effect("unknown_plugin_tool") == "side-effecting"
+    assert AccessPolicy.from_legacy("standard", ["read_file"]).access_level == "approval-required"
     assert ReadFileTool.effect == "non-mutating"
     assert WriteFileTool.effect == "side-effecting"
     assert BashTool.effect == "side-effecting"
     with pytest.raises(ValueError, match="Unknown access policy"):
         normalize_access_level("auto")
+
+
+def test_effective_access_alias_handles_policy_objects_and_one_sided_capabilities() -> None:
+    from mia_middleware.access import effective_access
+
+    result = effective_access(
+        AccessPolicy(access_level="read-only"),
+        "full-access",
+        recipient_capabilities=["read_file"],
+    )
+    assert result.access_level == "read-only"
+    assert result.capabilities == {"read_file"}
 
 
 def test_effective_access_is_restrictive_and_intersects_capabilities() -> None:
@@ -102,7 +116,7 @@ async def test_missing_or_denied_approval_never_reaches_executor() -> None:
 
 @pytest.mark.asyncio
 async def test_read_only_and_unknown_tools_are_rejected_before_execution() -> None:
-    policy = AccessPolicyMiddleware(access_policy="read-only", capabilities=None)
+    policy = AccessPolicyMiddleware(access_policy="read-only", capabilities={"read_file"})
     for tool_name in ("write_file", "unknown_tool"):
         with pytest.raises(PolicyRejectedError):
             await ToolPipeline([policy]).execute(
@@ -155,6 +169,34 @@ async def test_audit_records_are_attributed_and_redacted() -> None:
     assert record.task_id == "task-1"
     assert record.arguments["api_key"] == "[REDACTED]"
     assert "sk-never-log" not in str(record.model_dump())
+
+
+@pytest.mark.asyncio
+async def test_full_access_without_consent_is_rejected() -> None:
+    policy = AccessPolicyMiddleware(access_policy="full-access", capabilities={"bash"})
+    with pytest.raises(PolicyRejectedError, match="explicit user confirmation"):
+        await ToolPipeline([policy]).execute(
+            ToolCallContext(tool_name="bash", arguments={}),
+            lambda: "must not run",
+        )
+
+
+@pytest.mark.asyncio
+async def test_async_approval_callback_is_supported() -> None:
+    async def approve(_request: ApprovalRequest) -> bool:
+        return True
+
+    policy = AccessPolicyMiddleware(
+        access_policy="approval-required",
+        capabilities={"bash"},
+        approval_callback=approve,
+    )
+    assert (
+        await ToolPipeline([policy]).execute(
+            ToolCallContext(tool_name="bash", arguments={}), lambda: "approved"
+        )
+        == "approved"
+    )
 
 
 @pytest.mark.asyncio

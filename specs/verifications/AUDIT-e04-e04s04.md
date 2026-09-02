@@ -53,7 +53,7 @@ The audit found and fixed three concrete boundary issues: legacy Mode/Profile ex
 
 - ✓ New and corrected behavior is covered through public AgentRunner, ModeRuntime, AgentManager, and Tool interfaces.
 - ✓ Regression tests cover nested secret metadata, persisted full-access consent, legacy approval enforcement, and filesystem boundary rejection.
-- ✓ Full suite passes: **141 tests**.
+- ✓ Full suite passes: **146 tests**.
 - ⚠ The repository-local `skills/enforce-first` verifier is absent; FIRST properties were checked from the focused tests and existing suite behavior.
 
 ### SOLID and Heuristics
@@ -70,6 +70,7 @@ The audit found and fixed three concrete boundary issues: legacy Mode/Profile ex
 ### Code Style
 
 - ✓ Formatting, lint, types, and diff whitespace checks pass.
+- ✓ Coverage gate passes: 89% scoped first-party core and 97% execution/access/filesystem business boundary.
 - ✓ **Structural size:** e04 core modules are now focused and below 300 lines (`manager.py` 298, `delegation.py` 263, `runtime_factory.py` 265, `mode_runtime.py` 226, `agent_runner.py` 170). The existing CLI shells (`main.py` 367 and `repl.py` 1,227) received only thin routing/approval changes and remain separately scoped UI-maintenance work; moving methods without reducing responsibility was intentionally skipped.
 - ✓ Names and conditionals are clear in the remediation; no new magic values or commented-out code were added.
 
@@ -79,7 +80,8 @@ The audit found and fixed three concrete boundary issues: legacy Mode/Profile ex
 uv run --offline ruff format --check .   PASS
 uv run --offline ruff check .            PASS
 uv run --offline mypy src                 PASS (58 files)
-uv run --offline pytest                   PASS (141 tests)
+uv run --offline pytest                   PASS (146 tests)
+./scripts/check-coverage.sh                PASS (89% / 97%)
 uv build --offline                       PASS
 spec YAML validation                     PASS
 git diff --check                         PASS

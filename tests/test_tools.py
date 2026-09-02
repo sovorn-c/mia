@@ -47,6 +47,25 @@ async def test_filesystem_tools_reject_paths_outside_cwd(tmp_path: Path) -> None
 
 
 @pytest.mark.asyncio
+async def test_read_file_directory_offset_bom_and_truncation(tmp_path: Path) -> None:
+    read_tool = ReadFileTool(cwd=tmp_path)
+    (tmp_path / "directory").mkdir()
+    with pytest.raises(IsADirectoryError):
+        await read_tool.execute(path="directory")
+
+    target = tmp_path / "text.txt"
+    target.write_text("\ufefffirst\nsecond\n")
+    assert (
+        await read_tool.execute(path="text.txt", offset=10)
+        == "Offset 10 is beyond end of file (2 lines total)."
+    )
+    assert await read_tool.execute(path="text.txt") == "1: first\n2: second"
+
+    target.write_text("x" * 60_000)
+    assert "Truncated output at 50KB" in await read_tool.execute(path="text.txt")
+
+
+@pytest.mark.asyncio
 async def test_read_file_binary_and_missing(tmp_path: Path) -> None:
     read_tool = ReadFileTool(cwd=tmp_path)
 
@@ -76,6 +95,22 @@ async def test_edit_file_exact_match(tmp_path: Path) -> None:
     assert "-    print('old')" in res
     assert "+    print('new')" in res
     assert target.read_text() == "def hello():\n    print('new')\n"
+
+
+@pytest.mark.asyncio
+async def test_edit_file_directory_legacy_and_empty_edits_fail(tmp_path: Path) -> None:
+    edit_tool = EditFileTool(cwd=tmp_path)
+    (tmp_path / "directory").mkdir()
+    with pytest.raises(IsADirectoryError):
+        await edit_tool.execute(path="directory", oldText="old", newText="new")
+
+    target = tmp_path / "code.py"
+    target.write_text("old\n")
+    assert "Successfully applied 1 edit(s)" in await edit_tool.execute(
+        path="code.py", oldText="old", newText="new"
+    )
+    with pytest.raises(ValueError, match="cannot be empty"):
+        await edit_tool.execute(path="code.py", edits=[{"oldText": "", "newText": "x"}])
 
 
 @pytest.mark.asyncio

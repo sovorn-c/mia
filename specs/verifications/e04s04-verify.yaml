@@ -1,5 +1,5 @@
 story_id: e04s04
-verified_at: '2026-09-01T21:40:20Z'
+verified_at: '2026-09-02T01:08:12Z'
 verifier: verify-work
 branch: e04-agent-centric-foundation
 phases:
@@ -38,12 +38,16 @@ phases:
       - 'uv run --offline ruff check .'
   tests:
     passed: true
-    count: 138
+    count: 146
     command: 'uv run --offline pytest'
+    coverage_command: './scripts/check-coverage.sh'
+    coverage:
+      scoped_core_percent: 89
+      business_boundary_percent: 97
   terminal_verdict:
-    command: 'UV_PROJECT_ENVIRONMENT=/Users/sovorn/dev/harness/mia/.venv uv run --offline ruff format --check . && UV_PROJECT_ENVIRONMENT=/Users/sovorn/dev/harness/mia/.venv uv run --offline ruff check . && UV_PROJECT_ENVIRONMENT=/Users/sovorn/dev/harness/mia/.venv uv run --offline mypy src && UV_PROJECT_ENVIRONMENT=/Users/sovorn/dev/harness/mia/.venv uv run --offline pytest && uv build --offline && UV_PROJECT_ENVIRONMENT=/Users/sovorn/dev/harness/mia/.venv uv run --offline python -c "import yaml; from pathlib import Path; [yaml.safe_load(p.read_text()) for p in Path(\"specs\").rglob(\"*.yaml\")]"'
+    command: 'UV_PROJECT_ENVIRONMENT=/Users/sovorn/dev/harness/mia/.venv uv run --offline ruff format --check . && UV_PROJECT_ENVIRONMENT=/Users/sovorn/dev/harness/mia/.venv uv run --offline ruff check . && UV_PROJECT_ENVIRONMENT=/Users/sovorn/dev/harness/mia/.venv uv run --offline mypy src && UV_PROJECT_ENVIRONMENT=/Users/sovorn/dev/harness/mia/.venv uv run --offline pytest && ./scripts/check-coverage.sh && uv build --offline && UV_PROJECT_ENVIRONMENT=/Users/sovorn/dev/harness/mia/.venv uv run --offline python -c "import yaml; from pathlib import Path; [yaml.safe_load(p.read_text()) for p in Path(\"specs\").rglob(\"*.yaml\")]"'
     exit_code: 0
-    captured_at: '2026-09-01T21:40:00Z'
+    captured_at: '2026-09-02T01:08:12Z'
     note: 'Single contiguous mechanical-gate run.'
   manual:
     steps:
@@ -77,3 +81,7 @@ phases:
       - 'bp-read-agents.sh unavailable'
       - 'check-blind-spots.sh unavailable'
       - 'completeness-critic.sh unavailable'
+    coverage_gate:
+      passed: true
+      command: './scripts/check-coverage.sh'
+      note: 'Statement coverage is 89% for scoped first-party core and 97% for the execution/access/filesystem business boundary; terminal UI and external transport adapters remain separately scoped.'

@@ -25,6 +25,7 @@ mia = "mia_cli.main:app"
 
 [dependency-groups]
 dev = [
+    "coverage>=7.16.0",
     "mypy>=1.10",
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
