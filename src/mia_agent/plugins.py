@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from mia_agent.agents.model import normalize_plugin_id
+from mia_agent.agents.model import Agent, normalize_plugin_id
 from mia_agent.agents.storage import atomic_write_json
 
 if TYPE_CHECKING:
@@ -222,7 +222,7 @@ class PluginManager:
         )
         return installed
 
-    def enable(self, agent_id: str, plugin_id: str) -> Any:
+    def enable(self, agent_id: str, plugin_id: str) -> Agent:
         """Enable an installed Plugin for one persisted, non-built-in Agent."""
         manifest = self.get_manifest(plugin_id)
         installed = {record.plugin_id: record for record in self.list_installed()}
@@ -235,17 +235,77 @@ class PluginManager:
         inspection = self.agent_manager.inspect_agent(agent_id)
         if inspection["source"] == "builtin":
             raise ValueError("Cannot enable Plugins for immutable built-in Agents")
-        agent = inspection["agent"]
+        agent = Agent.model_validate(inspection["agent"])
         if manifest.plugin_id in agent.plugins:
             return agent
-        self.agent_manager.save_agent(
-            agent.model_copy(update={"plugins": [*agent.plugins, manifest.plugin_id]})
+        updated = Agent.model_validate(
+            agent.model_dump(mode="python") | {"plugins": [*agent.plugins, manifest.plugin_id]}
         )
+        self.agent_manager.save_agent(updated)
         return self.agent_manager.get_agent(agent.agent_id)
 
-    def enable_for_agent(self, agent_id: str, plugin_id: str) -> Any:
+    def enable_for_agent(self, agent_id: str, plugin_id: str) -> Agent:
         """Explicit spelling for callers managing per-Agent Plugin state."""
         return self.enable(agent_id, plugin_id)
+
+    def configure(self, agent_id: str, plugin_id: str, config: dict[str, Any]) -> Agent:
+        """Validate and persist configuration for an enabled Plugin."""
+        manifest = self.get_manifest(plugin_id)
+        self._installed_record(manifest)
+        inspection = self.agent_manager.inspect_agent(agent_id)
+        if inspection["source"] == "builtin":
+            raise ValueError("Cannot configure Plugins for immutable built-in Agents")
+        agent = Agent.model_validate(inspection["agent"])
+        if manifest.plugin_id not in agent.plugins:
+            raise ValueError(
+                f"Plugin '{manifest.plugin_id}' is not enabled for Agent '{agent.agent_id}'"
+            )
+        if manifest.plugin_id == "notes":
+            self._validate_notes_config(config)
+        updated_config = dict(agent.plugin_config)
+        updated_config[manifest.plugin_id] = dict(config)
+        updated = Agent.model_validate(
+            agent.model_dump(mode="python") | {"plugin_config": updated_config}
+        )
+        self.agent_manager.save_agent(updated)
+        return self.agent_manager.get_agent(agent.agent_id)
+
+    def disable(self, agent_id: str, plugin_id: str) -> Agent:
+        """Disable one Plugin for later Runs while retaining its configuration and data."""
+        manifest = self.get_manifest(plugin_id)
+        self._installed_record(manifest)
+        inspection = self.agent_manager.inspect_agent(agent_id)
+        if inspection["source"] == "builtin":
+            raise ValueError("Cannot disable Plugins for immutable built-in Agents")
+        agent = Agent.model_validate(inspection["agent"])
+        if manifest.plugin_id not in agent.plugins:
+            return agent
+        updated = Agent.model_validate(
+            agent.model_dump(mode="python")
+            | {"plugins": [item for item in agent.plugins if item != manifest.plugin_id]}
+        )
+        self.agent_manager.save_agent(updated)
+        return self.agent_manager.get_agent(agent.agent_id)
+
+    def _installed_record(self, manifest: PluginManifest) -> InstalledPlugin:
+        for record in self.list_installed():
+            if record.plugin_id == manifest.plugin_id:
+                if record.version != manifest.version or record.api_version != manifest.api_version:
+                    raise ValueError(f"Installed Plugin '{manifest.plugin_id}' is incompatible")
+                return record
+        raise ValueError(f"Plugin '{manifest.plugin_id}' is not installed; install it first")
+
+    @staticmethod
+    def _validate_notes_config(config: dict[str, Any]) -> None:
+        if set(config) - {"notebook_name"}:
+            raise ValueError("Notes configuration only supports notebook_name")
+        if "notebook_name" not in config:
+            return
+        name = config["notebook_name"]
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("notebook_name must be non-blank text")
+        if len(name.strip()) > 100 or "/" in name or "\\" in name:
+            raise ValueError("notebook_name must be a short display name, not a path")
 
     def resolve_tools(self, agent: Any) -> list[Any]:
         """Build every enabled Plugin Tool against the resolved Agent boundary."""
