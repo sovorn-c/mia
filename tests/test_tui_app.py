@@ -31,3 +31,31 @@ async def test_tui_mount_lists_builtin_and_persisted_agents(tmp_path: Path) -> N
             "lead",
             "coder",
         }
+
+
+@pytest.mark.asyncio
+async def test_tui_prompt_routes_through_agent_runner(tmp_path: Path) -> None:
+    from mia_ai.providers.mock import MockProvider
+    from mia_cli.tui.widgets.message_card import AssistantMessageCard, UserMessageCard
+
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    provider = MockProvider()
+    provider.queue_text_response("The Agent response.")
+    app = MiaApp(
+        agent_manager=manager,
+        model_name="mock-model",
+        cwd=tmp_path,
+        provider=provider,
+    )
+
+    async with app.run_test() as pilot:
+        textarea = app.query_one("#prompt-textarea")
+        textarea.text = "Hello Mia"
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.pause()
+
+        assert provider.recorded_calls
+        assert provider.recorded_calls[0]["system"]
+        assert app.query(UserMessageCard)
+        assert app.query(AssistantMessageCard)
