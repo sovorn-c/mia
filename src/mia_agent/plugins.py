@@ -100,6 +100,18 @@ class AgentTemplate(BaseModel):
             raise ValueError("Template text fields must not be blank")
         return value
 
+    @field_validator("tools")
+    @classmethod
+    def validate_tools(cls, value: list[str]) -> list[str]:
+        tools = [tool.strip() for tool in value]
+        if any(not re.fullmatch(r"[a-z][a-z0-9_]*", tool) for tool in tools):
+            raise ValueError(
+                "Template Tool names must use lowercase letters, numbers, and underscores"
+            )
+        if len(tools) != len(set(tools)):
+            raise ValueError("Template Tool names contain duplicates")
+        return tools
+
     @field_validator("plugin_config")
     @classmethod
     def validate_plugin_config(cls, value: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
