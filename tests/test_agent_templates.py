@@ -40,6 +40,15 @@ def test_notes_agent_template_is_allowlisted_and_serializable(tmp_path: Path) ->
 
     with pytest.raises(ValidationError):
         AgentTemplate(template_id="unsafe", unknown_private_field="secret")
+    with pytest.raises(ValidationError, match="credential-like"):
+        AgentTemplate(
+            template_id="unsafe-config",
+            version="1.0.0",
+            display_name="Unsafe",
+            description="Unsafe",
+            instructions="Unsafe",
+            plugin_config={"notes": {"api_key": "secret"}},
+        )
 
 
 def test_notes_template_instantiates_an_independent_agent(tmp_path: Path) -> None:
