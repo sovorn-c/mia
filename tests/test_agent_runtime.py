@@ -98,10 +98,7 @@ async def test_agent_runner_emits_canonical_event_envelopes(tmp_path) -> None:
     provider.queue_text_response("done")
     runner = AgentRunner(agent_manager=AgentManager(agents_dir=tmp_path / "agents"))
 
-    events = [
-        event
-        async for event in runner.prompt("say hello", provider=provider, cwd=tmp_path)
-    ]
+    events = [event async for event in runner.prompt("say hello", provider=provider, cwd=tmp_path)]
 
     assert events
     assert all(isinstance(event, AgentEventEnvelope) for event in events)
