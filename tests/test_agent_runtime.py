@@ -85,3 +85,25 @@ def test_runtime_factory_builds_agent_owned_runtime(tmp_path) -> None:
     assert not hasattr(runtime, "profile")
     metadata = runtime.session_store.load_entries()[0]
     assert metadata.data == identity.model_dump(exclude_none=True)
+
+
+@pytest.mark.asyncio
+async def test_agent_runner_emits_canonical_event_envelopes(tmp_path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_events import AgentEventEnvelope
+    from mia_ai.providers.mock import MockProvider
+
+    provider = MockProvider()
+    provider.queue_text_response("done")
+    runner = AgentRunner(agent_manager=AgentManager(agents_dir=tmp_path / "agents"))
+
+    events = [
+        event
+        async for event in runner.prompt("say hello", provider=provider, cwd=tmp_path)
+    ]
+
+    assert events
+    assert all(isinstance(event, AgentEventEnvelope) for event in events)
+    assert events[-1].agent_id == "mia"
+    assert events[-1].event.type == "turn_complete"
