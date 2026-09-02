@@ -1,16 +1,16 @@
 workflow_mode: solo-git
 session:
-  active_flow: release
-  active_epic_id: e04
-  active_story_id: e04s04
+  active_flow: plan
+  active_epic_id: null
+  active_story_id: null
   target_version: 0.4.0
 handoff:
-  next_skill: release-branch
+  next_skill: scope-work
   summary: >
-    e04 Agent-Centric Foundation and audit remediation are complete. The full quality gate passes,
-    the audit verdict is PASS, and the branch is ready for solo-local integration into main.
+    e04 Agent-Centric Foundation is merged into main and its completed capsule is archived. The next
+    initiative can now be bounded as e05 from the approved Agent-centric vision.
 git:
-  branch: e04-agent-centric-foundation
+  branch: main
 metrics:
   story_start: '2026-09-01T08:57:36Z'
   skill_timings:
