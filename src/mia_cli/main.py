@@ -10,17 +10,13 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from mia_agent.agent_runner import AgentRunner
 from mia_agent.agents import AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
-from mia_agent.orchestration import (
-    AgentRunner,
-    AgentRuntimeFactory,
-    ModeRuntime,
-    OrchestrationErrorEvent,
-)
 from mia_agent.plugins import PluginManager
-from mia_agent.profiles.manager import ProfileManager
+from mia_agent.runtime_events import RunErrorEvent
+from mia_agent.runtime_factory import AgentRuntimeFactory
 from mia_cli.renderers.rich_stream import RichStreamRenderer
 from mia_middleware.access import ApprovalCallback, ApprovalRequest
 
@@ -29,14 +25,12 @@ app = typer.Typer(
     help="Mia (Modular Intelligent Agent) - High-Performance AI Coding Agent Harness.",
     no_args_is_help=False,
 )
-profile_app = typer.Typer(help="Manage legacy profile aliases.")
 agent_app = typer.Typer(help="Create, inspect, and select named Agents.")
 sessions_app = typer.Typer(help="Inspect and manage saved session trees.")
 plugin_app = typer.Typer(help="Install and manage bundled Plugins.")
 template_app = typer.Typer(help="Inspect and instantiate Agent Templates.")
 
 app.add_typer(agent_app, name="agent")
-app.add_typer(profile_app, name="profile")
 app.add_typer(sessions_app, name="sessions")
 app.add_typer(plugin_app, name="plugin")
 app.add_typer(template_app, name="template")
@@ -59,48 +53,23 @@ def _confirm_tool(request: ApprovalRequest) -> bool:
 
 async def _run_agent_loop(
     prompt_text: str,
-    profile_name: str | None = None,
-    agent_name: str | None = "mia",
+    agent_name: str = "mia",
     model_override: str | None = None,
     session_id: str | None = None,
     compaction_threshold: float | None = None,
     context_window: int | None = None,
     cwd: Path | None = None,
-    mode_name: str = "single",
     approval_callback: ApprovalCallback | None = None,
 ) -> None:
     renderer = RichStreamRenderer(console=console)
-    if agent_name is not None:
-        manager = AgentManager()
-        runner = AgentRunner(
-            factory=AgentRuntimeFactory(agent_manager=manager),
-            agent_manager=manager,
-        )
-        async for envelope in runner.prompt(
-            prompt_text,
-            agent_id=agent_name,
-            model_override=model_override,
-            session_id=session_id,
-            cwd=cwd,
-            compaction_threshold=compaction_threshold,
-            context_window=context_window,
-            approval_callback=approval_callback,
-        ):
-            if isinstance(envelope.event, OrchestrationErrorEvent):
-                renderer._stop_status()
-                console.print(
-                    f"[bold red]Orchestration error ({envelope.event.stage}): "
-                    f"{envelope.event.error}[/bold red]"
-                )
-                continue
-            renderer.on_event(envelope.event)
-        return
-
-    legacy_runtime = ModeRuntime()
-    async for envelope in legacy_runtime.prompt(
+    manager = AgentManager()
+    runner = AgentRunner(
+        factory=AgentRuntimeFactory(agent_manager=manager),
+        agent_manager=manager,
+    )
+    async for envelope in runner.prompt(
         prompt_text,
-        mode_name=mode_name,
-        profile_name=profile_name or "coding",
+        agent_id=agent_name,
         model_override=model_override,
         session_id=session_id,
         cwd=cwd,
@@ -108,11 +77,10 @@ async def _run_agent_loop(
         context_window=context_window,
         approval_callback=approval_callback,
     ):
-        if isinstance(envelope.event, OrchestrationErrorEvent):
+        if isinstance(envelope.event, RunErrorEvent):
             renderer._stop_status()
             console.print(
-                f"[bold red]Orchestration error ({envelope.event.stage}): "
-                f"{envelope.event.error}[/bold red]"
+                f"[bold red]Run error ({envelope.event.stage}): {envelope.event.error}[/bold red]"
             )
             continue
         renderer.on_event(envelope.event)
@@ -121,9 +89,7 @@ async def _run_agent_loop(
 @app.command(name="run")
 def run_command(
     prompt: Annotated[str, typer.Option("--prompt", "-p", help="User instruction prompt")] = "",
-    agent: Annotated[str | None, typer.Option("--agent", help="Active Agent ID")] = "mia",
-    profile: Annotated[str | None, typer.Option("--profile", help="Legacy profile alias")] = None,
-    mode: Annotated[str, typer.Option("--mode", help="Legacy orchestration mode alias")] = "single",
+    agent: Annotated[str, typer.Option("--agent", help="Active Agent ID")] = "mia",
     model: Annotated[str | None, typer.Option("--model", "-m", help="LLM model identifier")] = None,
     resume: Annotated[
         str | None, typer.Option("--resume", "-r", help="Session ID to resume")
@@ -144,21 +110,14 @@ def run_command(
     """Execute one prompt through a named Agent in headless streaming mode."""
     if not prompt:
         prompt = typer.prompt("Prompt")
-    if profile is not None or mode != "single":
-        Console(stderr=True).print(
-            "[yellow]Warning: --profile/--mode are compatibility aliases; use --agent.[/yellow]"
-        )
-        agent = None
     asyncio.run(
         _run_agent_loop(
             prompt_text=prompt,
-            profile_name=profile,
             agent_name=agent,
             model_override=model,
             session_id=resume,
             compaction_threshold=compaction_threshold,
             context_window=context_window,
-            mode_name=mode,
             approval_callback=_confirm_tool,
         )
     )
@@ -237,20 +196,14 @@ def show_agent_command(
 ) -> None:
     """Inspect one Agent without displaying credential values."""
     try:
-        inspection = AgentManager().inspect_agent(agent_id)
+        agent = AgentManager().get_agent(agent_id)
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="AGENT_ID") from exc
-    agent = inspection["agent"]
     console.print(f"[bold cyan]{agent.display_name}[/bold cyan] ({agent.agent_id})")
     console.print(f"Description: {agent.description}")
     console.print(f"Access: {agent.access_policy}")
     console.print(f"Tools: {', '.join(agent.tools) if agent.tools else '(none)'}")
     console.print(f"Plugins: {', '.join(agent.plugins) if agent.plugins else '(none)'}")
-    console.print(f"Source: {inspection['source']}")
-    if inspection["collision"]:
-        console.print(
-            "[yellow]Collision: native Agent takes precedence over legacy Profile.[/yellow]"
-        )
 
 
 @agent_app.command(name="use")
@@ -418,51 +371,29 @@ def create_template_agent_command(
     )
 
 
-@profile_app.command(name="list")
-def list_profiles_command() -> None:
-    """List all available built-in and user profiles."""
-    manager = ProfileManager()
-    profiles = manager.list_profiles()
-
-    table = Table(title="Mia Agent Profiles")
-    table.add_column("Profile", style="bold cyan")
-    table.add_column("Tools", style="green")
-    table.add_column("Mode", style="magenta")
-    table.add_column("Description", style="white")
-
-    for p in profiles:
-        tools_str = ", ".join(p.tools) if p.tools else "(none)"
-        table.add_row(p.name, tools_str, p.execution_mode, p.description)
-
-    console.print(table)
-
-
 @sessions_app.command(name="list")
 def list_sessions_command(
-    profile: Annotated[
-        str, typer.Option("--profile", help="Profile to filter sessions")
-    ] = "coding",
+    agent: Annotated[str, typer.Option("--agent", help="Agent to filter sessions")] = "mia",
 ) -> None:
-    """List saved sessions for a given profile."""
-    manager = ProfileManager()
-    session_dir = manager.get_session_dir(profile)
-    if not session_dir.exists():
-        console.print(f"[dim]No sessions found for profile '{profile}'.[/dim]")
-        return
-
+    """List saved Sessions for an Agent."""
+    manager = AgentManager()
+    try:
+        session_dir = manager.get_session_dir(agent)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--agent") from exc
     session_files = list(session_dir.glob("*.jsonl"))
     if not session_files:
-        console.print(f"[dim]No sessions found for profile '{profile}'.[/dim]")
+        console.print(f"[dim]No Sessions found for Agent '{agent}'.[/dim]")
         return
 
-    table = Table(title=f"Saved Sessions ({profile})")
+    table = Table(title=f"Saved Sessions ({agent})")
     table.add_column("Session ID", style="bold cyan")
     table.add_column("File Size", style="dim")
     table.add_column("Path", style="dim")
 
-    for sf in session_files:
-        size_kb = sf.stat().st_size / 1024.0
-        table.add_row(sf.stem, f"{size_kb:.1f} KB", str(sf))
+    for session_file in session_files:
+        size_kb = session_file.stat().st_size / 1024.0
+        table.add_row(session_file.stem, f"{size_kb:.1f} KB", str(session_file))
 
     console.print(table)
 
@@ -485,9 +416,6 @@ def main_callback(
     ctx: typer.Context,
     model: Annotated[str | None, typer.Option("--model", "-m", help="Default model")] = None,
     agent: Annotated[str | None, typer.Option("--agent", help="Default Agent ID")] = None,
-    profile: Annotated[
-        str, typer.Option("--profile", "-p", help="Legacy Agent profile alias")
-    ] = "coding",
     session: Annotated[
         str | None,
         typer.Option("--session", help="Resume an interactive session by ID"),
@@ -500,14 +428,5 @@ def main_callback(
 
         from mia_cli.repl import MiaREPL
 
-        profile_source = ctx.get_parameter_source("profile")
-        profile_supplied = profile_source is not None and profile_source.name == "COMMANDLINE"
-        if (session and agent is None) or (profile_supplied and agent is None):
-            Console(stderr=True).print(
-                "[yellow]Warning: --profile is deprecated; use --agent instead.[/yellow]"
-            )
-            # Preserve the old constructor shape for compatibility scripts.
-            repl = MiaREPL(model=model, profile=profile, session_id=session)
-        else:
-            repl = MiaREPL(model=model, agent=agent or "mia", session_id=session)
+        repl = MiaREPL(model=model, agent=agent or "mia", session_id=session)
         repl.run()

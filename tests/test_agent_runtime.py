@@ -53,9 +53,8 @@ def test_agent_event_envelope_retains_the_inner_agent_event() -> None:
 
 
 def test_runtime_factory_does_not_accept_profile_manager() -> None:
-    from mia_agent.runtime_factory import AgentRuntimeFactory
-
     from mia_agent.profiles.manager import ProfileManager
+    from mia_agent.runtime_factory import AgentRuntimeFactory
 
     with pytest.raises(TypeError):
         AgentRuntimeFactory(profile_manager=ProfileManager())  # type: ignore[call-arg]

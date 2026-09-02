@@ -9,7 +9,8 @@ from pathlib import Path
 
 from mia_agent.agents import AgentManager
 from mia_agent.events import AgentErrorEvent, AssistantChunkEvent
-from mia_agent.runtime_events import AgentEventEnvelope, envelope as _envelope
+from mia_agent.runtime_events import AgentEventEnvelope
+from mia_agent.runtime_events import envelope as _envelope
 from mia_agent.runtime_events import error_envelope as _error_envelope
 from mia_agent.runtime_factory import AgentRuntimeFactory
 from mia_agent.runtime_models import AgentRuntime, RuntimeIdentity

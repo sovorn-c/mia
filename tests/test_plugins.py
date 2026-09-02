@@ -10,8 +10,9 @@ from mia_agent.agents import Agent, AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.events import ToolCallEvent, ToolResultEvent
-from mia_agent.orchestration import AgentRuntimeFactory, RuntimeIdentity
 from mia_agent.plugins import NotesPlugin, PluginManager
+from mia_agent.runtime_factory import AgentRuntimeFactory
+from mia_agent.runtime_models import RuntimeIdentity
 from mia_ai.providers.mock import MockProvider
 from mia_middleware.telemetry import AuditLogMiddleware
 from mia_tools.notes import NoteListTool

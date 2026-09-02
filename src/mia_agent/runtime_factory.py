@@ -9,10 +9,8 @@ from typing import Any
 from mia_agent.agents import Agent, AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.harness import AgentHarness
-from mia_agent.orchestration_models import _profile_from_agent
 from mia_agent.plugins import PluginManager
 from mia_agent.runtime_models import AgentRuntime, RuntimeIdentity
-from mia_agent.profiles.manager import ProfileManager
 from mia_agent.session.compactor import ContextCompactor
 from mia_agent.session.entries import CustomEntry
 from mia_agent.session.jsonl import JsonlSessionStore
@@ -35,13 +33,11 @@ class AgentRuntimeFactory:
         self,
         *,
         agent_manager: AgentManager | None = None,
-        profile_manager: ProfileManager | None = None,
         config_manager: ConfigManager | None = None,
         delegation_service: Any | None = None,
         plugin_manager: PluginManager | None = None,
     ) -> None:
-        self.profile_manager = profile_manager or ProfileManager()
-        self.agent_manager = agent_manager or AgentManager(profile_manager=self.profile_manager)
+        self.agent_manager = agent_manager or AgentManager()
         self.config_manager = config_manager or ConfigManager()
         self.delegation_service = delegation_service
         self.plugin_manager = plugin_manager or PluginManager(agent_manager=self.agent_manager)
@@ -63,21 +59,9 @@ class AgentRuntimeFactory:
         delegation_depth: int = 0,
     ) -> AgentRuntime:
         """Construct an Agent-scoped harness, restoring and annotating its Session."""
-        profile_name = getattr(identity, "profile", None)
-        if profile_name is not None:
-            # Compatibility callers still provide Profile and retain their old Session path.
-            profile = self.profile_manager.get_profile(profile_name)
-            try:
-                agent = self.agent_manager.get_agent(identity.agent_id)
-            except ValueError:
-                agent = self.agent_manager.get_agent(profile.name)
-            session_dir = self.profile_manager.get_session_dir(profile.name)
-            namespace = "orchestration"
-        else:
-            agent = self.agent_manager.get_agent(identity.agent_id)
-            profile = _profile_from_agent(agent)
-            session_dir = self.agent_manager.get_session_dir(agent.agent_id)
-            namespace = "agent"
+        agent = self.agent_manager.get_agent(identity.agent_id)
+        session_dir = self.agent_manager.get_session_dir(agent.agent_id)
+        namespace = "agent"
 
         if access_policy_override is not None or capabilities_override is not None:
             updates: dict[str, Any] = {}
@@ -91,8 +75,6 @@ class AgentRuntimeFactory:
         plugin_names = [tool.name for tool in plugin_tools]
         if agent.tools is not None and capabilities_override is None:
             agent = agent.model_copy(update={"tools": [*agent.tools, *plugin_names]})
-        profile = _profile_from_agent(agent)
-
         work_dir = cwd or Path.cwd()
         target_model = model_override or agent.model or ("" if provider else "claude-3-5-sonnet")
 
@@ -136,7 +118,6 @@ class AgentRuntimeFactory:
                 if tool_effect(tool.name, {"effect": tool.effect}) == "non-mutating"
             ]
             agent = agent.model_copy(update={"tools": [tool.name for tool in tools]})
-            profile = _profile_from_agent(agent)
         pipeline = self._build_pipeline(
             agent.middlewares,
             agent=agent,

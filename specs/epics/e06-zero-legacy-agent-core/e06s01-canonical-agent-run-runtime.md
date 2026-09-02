@@ -8,7 +8,7 @@
 - **Risk:** P0
 - **Context:** runtime, identity, events, Sessions, access, Plugins, and Delegation
 - **BCPs:** 8
-- **Status:** failing
+- **Status:** passing
 - **Requirement delta:** MODIFIED
 
 ## 2. User Story
