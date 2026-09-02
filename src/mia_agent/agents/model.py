@@ -18,6 +18,7 @@ LEGACY_PERMISSION_MAP: dict[str, AccessLevel] = {
 }
 
 _SECRET_KEY_PARTS = ("api_key", "apikey", "token", "secret", "authorization", "password")
+_SECRET_VALUE_RE = re.compile(r"(?i)(?:bearer\s+|sk-|ghp_|xoxb-)[^\s,;]+")
 _AGENT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _PLUGIN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
@@ -66,6 +67,8 @@ def _validate_metadata(value: dict[str, Any]) -> dict[str, Any]:
         elif isinstance(item, (list, tuple, set, frozenset)):
             for index, nested in enumerate(item):
                 visit(nested, f"{path}[{index}]")
+        elif isinstance(item, str) and _SECRET_VALUE_RE.search(item):
+            raise ValueError(f"{path} contains a secret-like value")
 
     visit(value)
     return value
