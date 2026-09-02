@@ -74,6 +74,17 @@ class NoteCreateTool(_NotesTool):
     }
 
     async def execute(self, title: str, content: str, **kwargs: Any) -> dict[str, Any]:
+        self._validate_input(title, content)
+        note = Note(
+            note_id=uuid.uuid4().hex,
+            title=title.strip(),
+            content=content,
+            created_at=datetime.now(UTC),
+        )
+        return self._persist(note)
+
+    @staticmethod
+    def _validate_input(title: str, content: str) -> None:
         if not isinstance(title, str) or not title.strip():
             raise ValueError("note title must not be blank")
         if len(title.strip()) > _MAX_TITLE_LENGTH:
@@ -83,12 +94,7 @@ class NoteCreateTool(_NotesTool):
         if len(content) > _MAX_CONTENT_LENGTH:
             raise ValueError("note content is too long")
 
-        note = Note(
-            note_id=uuid.uuid4().hex,
-            title=title.strip(),
-            content=content,
-            created_at=datetime.now(UTC),
-        )
+    def _persist(self, note: Note) -> dict[str, Any]:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         target = self._note_path(note.note_id)
         with NamedTemporaryFile(
