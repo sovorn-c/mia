@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 PluginEffect = Literal["non-mutating", "side-effecting"]
 _VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 _SECRET_KEY_PARTS = ("api_key", "apikey", "token", "secret", "authorization", "password")
-_SECRET_VALUE_RE = re.compile(r"(?i)(?:bearer\\s+|sk-|ghp_|xoxb-)[^\\s,;]+")
+_SECRET_VALUE_RE = re.compile(r"(?i)(?:bearer\s+|sk-|ghp_|xoxb-)[^\s,;]+")
 CORE_PLUGIN_API_VERSION = 1
 
 
