@@ -37,7 +37,7 @@ def test_top_level_session_option_resumes_interactive_repl() -> None:
     assert result.exit_code == 0
     repl_class.assert_called_once_with(
         model=None,
-        profile="coding",
+        agent="mia",
         session_id="session_abc123",
     )
     repl_class.return_value.run.assert_called_once_with()
@@ -51,17 +51,15 @@ def test_top_level_session_rejects_path_without_traceback() -> None:
     assert "Traceback" not in result.output
 
 
-def test_cli_run_exposes_mode_selection() -> None:
+def test_cli_run_exposes_agent_selection() -> None:
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
-    assert "--mode" in result.stdout
+    assert "--agent" in result.stdout
 
 
 def test_cli_agent_lifecycle(tmp_path: Path) -> None:
     manager = AgentManager(
         agents_dir=tmp_path / "agents",
-        profiles_dir=tmp_path / "profiles",
-        sessions_base_dir=tmp_path / "legacy-sessions",
     )
     with patch("mia_cli.main.AgentManager", return_value=manager):
         created = runner.invoke(
@@ -77,14 +75,6 @@ def test_cli_agent_lifecycle(tmp_path: Path) -> None:
     assert "Researcher" in shown.stdout
     assert selected.exit_code == 0
     assert manager.default_agent().agent_id == "researcher"
-
-
-def test_cli_profile_list() -> None:
-    result = runner.invoke(app, ["profile", "list"])
-    assert result.exit_code == 0
-    assert "coding" in result.stdout
-    assert "architect" in result.stdout
-    assert "minimal" in result.stdout
 
 
 def test_cli_login_flow(tmp_path: Path) -> None:

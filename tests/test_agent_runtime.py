@@ -49,15 +49,13 @@ def test_agent_event_envelope_retains_the_inner_agent_event() -> None:
     assert envelope.event is inner
     assert envelope.event.type == "turn_start"
     assert not hasattr(envelope, "mode")
-    assert not hasattr(envelope, "profile")
 
 
-def test_runtime_factory_does_not_accept_profile_manager() -> None:
-    from mia_agent.profiles.manager import ProfileManager
+def test_runtime_factory_rejects_unknown_constructor_options() -> None:
     from mia_agent.runtime_factory import AgentRuntimeFactory
 
     with pytest.raises(TypeError):
-        AgentRuntimeFactory(profile_manager=ProfileManager())  # type: ignore[call-arg]
+        AgentRuntimeFactory(removed_manager=object())  # type: ignore[call-arg]
 
 
 def test_runtime_factory_builds_agent_owned_runtime(tmp_path) -> None:
@@ -81,7 +79,6 @@ def test_runtime_factory_builds_agent_owned_runtime(tmp_path) -> None:
 
     assert runtime.agent.agent_id == "mia"
     assert runtime.session_store.path.parent == manager.agent_home("mia") / "sessions"
-    assert not hasattr(runtime, "profile")
     metadata = runtime.session_store.load_entries()[0]
     assert metadata.data == identity.model_dump(exclude_none=True)
 

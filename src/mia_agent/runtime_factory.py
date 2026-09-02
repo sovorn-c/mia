@@ -241,7 +241,7 @@ class AgentRuntimeFactory:
         session_store: JsonlSessionStore,
         parent_entry_id: str | None,
         *,
-        namespace: str = "orchestration",
+        namespace: str = "agent",
     ) -> str | None:
         data = identity.model_dump(exclude_none=True)
         for entry in session_store.load_entries():

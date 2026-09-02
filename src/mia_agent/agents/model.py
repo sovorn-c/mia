@@ -3,19 +3,11 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 AccessLevel = Literal["read-only", "approval-required", "full-access"]
-LegacyPermission = Literal["standard", "read_only", "no_tools", "full_access"]
-
-LEGACY_PERMISSION_MAP: dict[str, AccessLevel] = {
-    "standard": "approval-required",
-    "read_only": "read-only",
-    "full_access": "full-access",
-    "no_tools": "approval-required",
-}
 
 _SECRET_KEY_PARTS = ("api_key", "apikey", "token", "secret", "authorization", "password")
 _SECRET_VALUE_RE = re.compile(r"(?i)(?:bearer\s+|sk-|ghp_|xoxb-)[^\s,;]+")
@@ -77,18 +69,12 @@ def _validate_metadata(value: dict[str, Any]) -> dict[str, Any]:
 class Agent(BaseModel):
     """Validated, durable identity and configuration for one Agent."""
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     agent_id: str
-    display_name: str = Field(
-        default="",
-        validation_alias=AliasChoices("display_name", "name"),
-    )
+    display_name: str = ""
     description: str = ""
-    instructions: str = Field(
-        default="You are Mia, a helpful local AI Agent.",
-        validation_alias=AliasChoices("instructions", "system_prompt"),
-    )
+    instructions: str = "You are Mia, a helpful local AI Agent."
     model: str | None = None
     provider: str | None = None
     account: str | None = None
@@ -97,10 +83,7 @@ class Agent(BaseModel):
     tools: list[str] | None = None
     plugins: list[str] = Field(default_factory=list)
     plugin_config: dict[str, dict[str, Any]] = Field(default_factory=dict)
-    access_policy: AccessLevel = Field(
-        default="approval-required",
-        validation_alias=AliasChoices("access_policy", "access"),
-    )
+    access_policy: AccessLevel = "approval-required"
     full_access_confirmed: bool = False
     delegation_targets: list[str] = Field(default_factory=list)
     memory_path: str | None = None
@@ -121,13 +104,6 @@ class Agent(BaseModel):
     @classmethod
     def validate_display_name(cls, value: str) -> str:
         return value.strip()
-
-    @field_validator("access_policy", mode="before")
-    @classmethod
-    def map_access_policy(cls, value: Any) -> Any:
-        if isinstance(value, str):
-            return LEGACY_PERMISSION_MAP.get(value.strip().lower(), value.strip().lower())
-        return value
 
     @field_validator("delegation_targets")
     @classmethod
@@ -158,65 +134,11 @@ class Agent(BaseModel):
     def validate_metadata(cls, value: dict[str, Any]) -> dict[str, Any]:
         return _validate_metadata(value)
 
-    @model_validator(mode="before")
-    @classmethod
-    def accept_legacy_permission(cls, values: Any) -> Any:
-        if isinstance(values, dict) and "permission" in values:
-            values = dict(values)
-            permission = values["permission"]
-            values.setdefault("access_policy", permission)
-            if permission == "no_tools":
-                values.setdefault("tools", [])
-            values.pop("permission")
-        return values
-
     @model_validator(mode="after")
     def set_default_display_name(self) -> Agent:
         if not self.display_name:
             self.display_name = self.agent_id.replace("_", " ").replace("-", " ").title()
         return self
-
-    @property
-    def id(self) -> str:
-        """Short identity spelling for integrations."""
-        return self.agent_id
-
-    @property
-    def name(self) -> str:
-        """Compatibility spelling for the display name."""
-        return self.display_name
-
-    @property
-    def system_prompt(self) -> str:
-        """Compatibility spelling for Agent instructions."""
-        return self.instructions
-
-    @property
-    def access_level(self) -> AccessLevel:
-        """Alias used by policy-aware runtime callers."""
-        return self.access_policy
-
-    @property
-    def access(self) -> AccessLevel:
-        """Short alias for the effective configured access level."""
-        return self.access_policy
-
-    @property
-    def permission(self) -> LegacyPermission:
-        """Compatibility spelling for the former Profile permission field."""
-        return cast(
-            LegacyPermission,
-            {
-                "read-only": "read_only",
-                "approval-required": "standard",
-                "full-access": "full_access",
-            }[self.access_policy],
-        )
-
-    @property
-    def capabilities(self) -> list[str] | None:
-        """Return enabled Tool names under the target vocabulary."""
-        return self.tools
 
 
 BUILTIN_AGENTS: dict[str, Agent] = {
@@ -255,19 +177,6 @@ BUILTIN_AGENTS: dict[str, Agent] = {
         tools=["read_file"],
         access_policy="read-only",
     ),
-    "code-mode": Agent(
-        agent_id="code-mode",
-        display_name="Code Mode",
-        description="Programmatic code Agent for batching tool calls.",
-        instructions=(
-            "You are Mia in Code Mode. Batch tool calls programmatically when useful "
-            "to minimize token round-trips."
-        ),
-        temperature=0.0,
-        tools=["run_code", "read_file", "write_file", "edit_file", "bash"],
-        access_policy="approval-required",
-        metadata={"execution_mode": "code"},
-    ),
     "minimal": Agent(
         agent_id="minimal",
         display_name="Minimal",
@@ -290,7 +199,5 @@ __all__ = [
     "AccessLevel",
     "Agent",
     "BUILTIN_AGENTS",
-    "LEGACY_PERMISSION_MAP",
-    "LegacyPermission",
     "normalize_agent_id",
 ]

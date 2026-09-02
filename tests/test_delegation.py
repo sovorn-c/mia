@@ -22,8 +22,6 @@ from mia_ai.types import StreamChunk
 def make_manager(tmp_path: Path) -> AgentManager:
     return AgentManager(
         agents_dir=tmp_path / "agents",
-        profiles_dir=tmp_path / "profiles",
-        sessions_base_dir=tmp_path / "legacy-sessions",
     )
 
 

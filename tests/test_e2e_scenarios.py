@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from mia_agent.agents import AgentManager
 from mia_agent.harness import AgentHarness
-from mia_agent.profiles.manager import ProfileManager
 from mia_agent.session.compactor import ContextCompactor
 from mia_agent.session.entries import CompactionEntry, LeafEntry
 from mia_agent.session.jsonl import JsonlSessionStore
@@ -242,11 +242,11 @@ async def test_e2e_session_tree_branching_and_divergence(tmp_path: Path) -> None
     assert msgs_b[-1].content == "Branch B response."
 
 
-def test_e2e_profile_permissions_read_only_and_minimal() -> None:
-    """Verify architect profile blocks modification tools and minimal profile disables tools."""
-    manager = ProfileManager()
-    architect = manager.get_profile("architect")
-    minimal = manager.get_profile("minimal")
+def test_e2e_agent_permissions_read_only_and_minimal() -> None:
+    """Verify read-only access blocks modification tools and minimal Agent has none."""
+    manager = AgentManager()
+    architect = manager.get_agent("architect")
+    minimal = manager.get_agent("minimal")
 
     class ReadTool:
         name = "read_file"

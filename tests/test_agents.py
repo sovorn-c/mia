@@ -13,16 +13,11 @@ from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.runtime_factory import AgentRuntimeFactory
 from mia_agent.runtime_models import RuntimeIdentity
-from mia_agent.profiles.model import AgentProfile
 from mia_ai.providers.mock import MockProvider
 
 
 def make_manager(tmp_path: Path) -> AgentManager:
-    return AgentManager(
-        agents_dir=tmp_path / "agents",
-        profiles_dir=tmp_path / "profiles",
-        sessions_base_dir=tmp_path / "legacy-sessions",
-    )
+    return AgentManager(agents_dir=tmp_path / "agents")
 
 
 def test_agent_model_normalizes_identity_and_keeps_serialization_secret_free() -> None:
@@ -36,8 +31,8 @@ def test_agent_model_normalizes_identity_and_keeps_serialization_secret_free() -
     )
 
     assert agent.agent_id == "researcher"
-    assert agent.name == "Researcher"
-    assert agent.system_prompt == "Find and summarize evidence."
+    assert agent.display_name == "Researcher"
+    assert agent.instructions == "Find and summarize evidence."
     dumped = json.dumps(agent.model_dump())
     assert "openai" in dumped
     assert "personal" in dumped
@@ -82,7 +77,6 @@ def test_named_agent_lifecycle_survives_a_new_manager(tmp_path: Path) -> None:
     assert created.agent_id == "researcher"
     assert manager.get_agent("researcher") == created
     assert any(agent.agent_id == "researcher" for agent in manager.list_agents())
-    assert manager.inspect_agent("researcher")["source"] == "native"
 
     manager.set_default("researcher")
     reloaded = make_manager(tmp_path)
@@ -118,45 +112,6 @@ def test_agent_ids_are_rejected_before_filesystem_access(tmp_path: Path) -> None
 
     assert not outside.exists()
     assert list(tmp_path.rglob("outside.json")) == []
-
-
-def test_legacy_profile_projects_without_rewriting_and_native_wins(tmp_path: Path) -> None:
-    profiles_dir = tmp_path / "profiles"
-    profiles_dir.mkdir()
-    profile_file = profiles_dir / "reviewer.json"
-    profile_file.write_text(
-        json.dumps(
-            AgentProfile(
-                name="reviewer",
-                description="Legacy reviewer",
-                system_prompt="Review code.",
-                tools=["read_file"],
-                permission="read_only",
-            ).model_dump()
-        ),
-        encoding="utf-8",
-    )
-    before = profile_file.read_bytes()
-    manager = make_manager(tmp_path)
-
-    legacy = manager.get_agent("reviewer")
-    assert legacy.agent_id == "reviewer"
-    assert legacy.instructions == "Review code."
-    assert legacy.access_policy == "read-only"
-    assert manager.inspect_agent("reviewer")["source"] == "legacy"
-    assert profile_file.read_bytes() == before
-
-    manager.save_agent(legacy)
-    assert profile_file.read_bytes() == before
-    assert (tmp_path / "agents" / "reviewer" / "agent.json").exists()
-    assert manager.delete_agent("reviewer") is True
-
-    manager.create_agent("reviewer", display_name="Native reviewer", tools=[])
-    resolved = manager.get_agent("reviewer")
-    inspection = manager.inspect_agent("reviewer")
-    assert resolved.display_name == "Native reviewer"
-    assert inspection["source"] == "native"
-    assert inspection["collision"] is True
 
 
 def test_factory_builds_agent_owned_runtime_and_session(tmp_path: Path) -> None:
@@ -220,7 +175,7 @@ def test_canonical_agent_rejects_historical_fields_and_manager_options(tmp_path:
         Agent.model_validate({"agent_id": "reviewer", "permission": "standard"})
 
     with pytest.raises(TypeError):
-        AgentManager(profiles_dir=tmp_path / "profiles")  # type: ignore[call-arg]
+        AgentManager(legacy_options=tmp_path)  # type: ignore[call-arg]
 
 
 def test_native_agent_writes_are_atomic_and_do_not_copy_secret_values(tmp_path: Path) -> None:
