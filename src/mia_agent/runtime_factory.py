@@ -130,6 +130,8 @@ class AgentRuntimeFactory:
                 for tool in tools
                 if tool_effect(tool.name, {"effect": tool.effect}) == "non-mutating"
             ]
+            agent = agent.model_copy(update={"tools": [tool.name for tool in tools]})
+            profile = _profile_from_agent(agent)
         pipeline = self._build_pipeline(
             agent.middlewares,
             agent=agent,
