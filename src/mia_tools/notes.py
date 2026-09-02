@@ -35,7 +35,10 @@ class _NotesTool(BaseTool):
     plugin_id = "notes"
 
     def __init__(self, data_dir: str | Path) -> None:
-        self.data_dir = Path(data_dir).expanduser().resolve()
+        raw_dir = Path(data_dir).expanduser()
+        if any(path.is_symlink() for path in (raw_dir, *raw_dir.parents)):
+            raise ValueError("Notes data root cannot contain a symbolic link")
+        self.data_dir = raw_dir.resolve()
 
     def _note_path(self, note_id: str) -> Path:
         if not isinstance(note_id, str) or not _NOTE_ID_RE.fullmatch(note_id):
