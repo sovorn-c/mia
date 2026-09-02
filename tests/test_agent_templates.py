@@ -79,6 +79,28 @@ def test_notes_agent_template_is_allowlisted_and_serializable(tmp_path: Path) ->
         )
 
 
+def test_template_requires_installed_plugin_before_writing(tmp_path: Path) -> None:
+    agents, plugins = make_managers(tmp_path)
+
+    with pytest.raises(ValueError, match="not installed"):
+        plugins.instantiate("notes-agent", "my-notes")
+
+    assert not agents.agent_path("my-notes").exists()
+    assert not (tmp_path / "agents").exists()
+
+
+def test_template_collision_does_not_overwrite_existing_agent(tmp_path: Path) -> None:
+    agents, plugins = make_managers(tmp_path)
+    existing = agents.create_agent("my-notes", display_name="Existing")
+    before = agents.agent_path(existing.agent_id).read_bytes()
+    plugins.install("notes")
+
+    with pytest.raises(ValueError, match="already exists"):
+        plugins.instantiate("notes-agent", "my-notes")
+
+    assert agents.agent_path(existing.agent_id).read_bytes() == before
+
+
 def test_notes_template_instantiates_an_independent_agent(tmp_path: Path) -> None:
     agents, plugins = make_managers(tmp_path)
     plugins.install("notes")
