@@ -9,10 +9,11 @@ import pytest
 from mia_agent.agents import Agent, AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
-from mia_agent.events import ToolResultEvent
+from mia_agent.events import ToolCallEvent, ToolResultEvent
 from mia_agent.orchestration import AgentRuntimeFactory, RuntimeIdentity
 from mia_agent.plugins import NotesPlugin, PluginManager
 from mia_ai.providers.mock import MockProvider
+from mia_middleware.telemetry import AuditLogMiddleware
 from mia_tools.notes import NoteListTool
 
 
@@ -236,11 +237,19 @@ async def test_plugin_tool_uses_existing_access_policy_pipeline(tmp_path: Path) 
 
     events = [event async for event in runtime.harness.prompt("create a note")]
 
+    call = next(event for event in events if isinstance(event, ToolCallEvent))
     result = next(event for event in events if isinstance(event, ToolResultEvent))
+    assert call.plugin_id == "notes"
     assert result.is_error is False
     assert result.plugin_id == "notes"
     assert approvals[0].tool_name == "note_create"
     assert approvals[0].effect == "side-effecting"
+    audit = next(
+        middleware
+        for middleware in runtime.harness.pipeline.middlewares
+        if isinstance(middleware, AuditLogMiddleware)
+    )
+    assert audit.logs[0].plugin_id == "notes"
     assert list((tmp_path / "agents" / "alpha" / "plugins" / "notes").glob("*.json"))
 
 
