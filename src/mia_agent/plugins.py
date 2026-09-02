@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from mia_agent.agents.model import Agent, normalize_plugin_id
+from mia_agent.agents.model import AccessLevel, Agent, normalize_plugin_id
 from mia_agent.agents.storage import atomic_write_json
 
 if TYPE_CHECKING:
@@ -48,6 +48,58 @@ class PluginToolSpec(BaseModel):
         return value
 
 
+class AgentTemplate(BaseModel):
+    """Strict allowlist of reusable public Agent defaults."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    template_id: str
+    version: str
+    display_name: str
+    description: str
+    instructions: str
+    access_policy: AccessLevel = "approval-required"
+    tools: list[str] = Field(default_factory=list)
+    required_plugins: list[str] = Field(default_factory=list)
+    plugin_config: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+    @field_validator("template_id")
+    @classmethod
+    def validate_template_id(cls, value: str) -> str:
+        return normalize_plugin_id(value)
+
+    @field_validator("version")
+    @classmethod
+    def validate_version(cls, value: str) -> str:
+        value = value.strip()
+        if not _VERSION_RE.fullmatch(value):
+            raise ValueError("Template version must use MAJOR.MINOR.PATCH")
+        return value
+
+    @field_validator("display_name", "description", "instructions")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Template text fields must not be blank")
+        return value
+
+    @field_validator("required_plugins")
+    @classmethod
+    def validate_required_plugins(cls, value: list[str]) -> list[str]:
+        normalized = [normalize_plugin_id(plugin_id) for plugin_id in value]
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("Template Plugin requirements contain duplicates")
+        return normalized
+
+    @field_validator("access_policy")
+    @classmethod
+    def reject_full_access(cls, value: AccessLevel) -> AccessLevel:
+        if value == "full-access":
+            raise ValueError("Agent Templates cannot request full-access")
+        return value
+
+
 class PluginManifest(BaseModel):
     """Strict, serializable description of one bundled Plugin."""
 
@@ -59,6 +111,7 @@ class PluginManifest(BaseModel):
     display_name: str
     description: str
     tool_specs: list[PluginToolSpec] = Field(default_factory=list)
+    templates: list[AgentTemplate] = Field(default_factory=list)
 
     @field_validator("plugin_id")
     @classmethod
@@ -93,6 +146,9 @@ class PluginManifest(BaseModel):
         names = [tool.name for tool in self.tool_specs]
         if len(names) != len(set(names)):
             raise ValueError(f"Plugin '{self.plugin_id}' declares duplicate Tool names")
+        template_ids = [template.template_id for template in self.templates]
+        if len(template_ids) != len(set(template_ids)):
+            raise ValueError(f"Plugin '{self.plugin_id}' declares duplicate Template IDs")
         return self
 
     @property
@@ -287,6 +343,22 @@ class PluginManager:
         self.agent_manager.save_agent(updated)
         return self.agent_manager.get_agent(agent.agent_id)
 
+    def list_templates(self) -> list[AgentTemplate]:
+        """List bundled Agent Templates without installing or executing them."""
+        templates = [
+            template for manifest in self.list_available() for template in manifest.templates
+        ]
+        return sorted(templates, key=lambda template: template.template_id)
+
+    def get_template(self, template_id: str) -> AgentTemplate:
+        """Return one bundled Template or an actionable unknown-ID error."""
+        key = normalize_plugin_id(template_id)
+        for template in self.list_templates():
+            if template.template_id == key:
+                return template
+        available = ", ".join(template.template_id for template in self.list_templates())
+        raise ValueError(f"Agent Template '{key}' is unavailable. Available Templates: {available}")
+
     def _installed_record(self, manifest: PluginManifest) -> InstalledPlugin:
         for record in self.list_installed():
             if record.plugin_id == manifest.plugin_id:
@@ -341,6 +413,18 @@ class PluginManager:
             version="1.0.0",
             display_name="Notes",
             description="Private Agent-owned local notes.",
+            templates=[
+                AgentTemplate(
+                    template_id="notes-agent",
+                    version="1.0.0",
+                    display_name="Notes Agent",
+                    description="A focused Agent for private local notes.",
+                    instructions="You are a careful Agent for creating and retrieving private notes.",
+                    tools=[],
+                    required_plugins=["notes"],
+                    plugin_config={"notes": {"notebook_name": "Personal"}},
+                )
+            ],
             tool_specs=[
                 PluginToolSpec(
                     name="note_create",
@@ -363,6 +447,7 @@ class PluginManager:
 
 __all__ = [
     "CORE_PLUGIN_API_VERSION",
+    "AgentTemplate",
     "InstalledPlugin",
     "PluginEffect",
     "NotesPlugin",
