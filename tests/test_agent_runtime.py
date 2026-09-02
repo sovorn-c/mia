@@ -31,3 +31,22 @@ def test_runtime_identity_contains_only_canonical_attribution() -> None:
             session_id="session-1",
             mode="single",
         )
+
+
+def test_agent_event_envelope_retains_the_inner_agent_event() -> None:
+    from mia_agent.events import TurnStartEvent
+    from mia_agent.runtime_events import AgentEventEnvelope
+
+    inner = TurnStartEvent(turn_index=0, user_prompt="map the repository")
+    envelope = AgentEventEnvelope(
+        run_id="run-1",
+        task_id="root",
+        agent_id="mia",
+        session_id="session-1",
+        event=inner,
+    )
+
+    assert envelope.event is inner
+    assert envelope.event.type == "turn_start"
+    assert not hasattr(envelope, "mode")
+    assert not hasattr(envelope, "profile")
