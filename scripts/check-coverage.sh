@@ -5,10 +5,10 @@ set -euo pipefail
 uv run --offline coverage erase
 uv run --offline coverage run -m pytest "$@"
 
-# Overall first-party core excludes terminal UI, provider transport adapters, and legacy Herd.
+# Overall first-party core excludes terminal UI and provider transport adapters.
 uv run --offline coverage report \
   --include='src/*' \
-  --omit='src/mia_cli/*,src/mia_agent/auth/openai_auth.py,src/mia_ai/providers/anthropic.py,src/mia_ai/providers/openai_compatible.py,src/mia_agent/herd/*' \
+  --omit='src/mia_cli/*,src/mia_agent/auth/openai_auth.py,src/mia_ai/providers/anthropic.py,src/mia_ai/providers/openai_compatible.py' \
   --fail-under=80
 
 # Business boundary: execution, filesystem safety, and access-policy enforcement.
