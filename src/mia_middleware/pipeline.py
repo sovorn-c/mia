@@ -15,6 +15,7 @@ class ToolCallContext(BaseModel):
     step_index: int = 1
     call_id: str = ""
     tool_name: str
+    plugin_id: str | None = None
     arguments: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
 

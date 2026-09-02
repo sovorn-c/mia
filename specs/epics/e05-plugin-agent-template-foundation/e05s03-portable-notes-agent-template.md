@@ -8,7 +8,7 @@
 - **Risk:** P0
 - **Context:** domain, privacy, persistence, Plugin contributions, and CLI
 - **BCPs:** 5
-- **Status:** failing
+- **Status:** passing
 - **Requirement delta:** ADDED
 
 ## 2. User Story

@@ -1,14 +1,14 @@
 story_id: e05s02
 story_title: "Per-Agent Plugin Lifecycle and Integrity Boundary"
 spec: "e05s02-plugin-lifecycle-integrity.md"
-status: failing
+status: passing
 requirement_delta: MODIFIED
 bcps: 8
 tasks:
   - id: e05s02t01
     title: "Lock lifecycle and integrity failures with contract tests"
     description: "Specify per-Agent list/show/configure/disable behavior, malformed or incompatible Plugin rejection, no partial activation, Agent isolation, and preserved data."
-    status: failing
+    status: passing
     risk: P0
     security: high
     depends_on: []
@@ -23,7 +23,7 @@ tasks:
   - id: e05s02t02
     title: "Validate installed manifests and atomic per-Agent configuration"
     description: "Harden Plugin identity/version/contribution validation and persist explicit Agent enablement/configuration atomically without secrets or silent Tool/access expansion."
-    status: failing
+    status: passing
     risk: P0
     security: high
     depends_on: [e05s02t01]
@@ -38,7 +38,7 @@ tasks:
   - id: e05s02t03
     title: "Enforce Agent-scoped Notes isolation and non-destructive disablement"
     description: "Keep Notes data under the owning Agent, prevent cross-Agent reads, and remove capabilities from later Runs when disabled without deleting stored notes."
-    status: failing
+    status: passing
     risk: P0
     security: high
     depends_on: [e05s02t02]
@@ -53,7 +53,7 @@ tasks:
   - id: e05s02t04
     title: "Carry optional Plugin attribution through Tool execution"
     description: "Add backward-compatible Plugin identity to Tool context, call/result events, and redacted audit records while preserving existing renderers and Plugin-free events."
-    status: failing
+    status: passing
     risk: P0
     security: high
     depends_on: [e05s02t02]
@@ -69,7 +69,7 @@ tasks:
   - id: e05s02t05
     title: "Complete Plugin lifecycle commands and diagnostics"
     description: "Expose installed/available inspection, per-Agent configuration and disablement, and clear missing/malformed/incompatible diagnostics through thin CLI adapters."
-    status: failing
+    status: passing
     risk: P0
     security: medium
     depends_on: [e05s02t02, e05s02t03, e05s02t04]
@@ -84,7 +84,7 @@ tasks:
   - id: e05s02t06
     title: "Close lifecycle compatibility and quality gates"
     description: "Run Agent, runtime, Delegation, access, event, Session, CLI, and full project verification with Plugin-free and disabled-Plugin regressions."
-    status: failing
+    status: passing
     risk: P0
     security: high
     depends_on: [e05s02t03, e05s02t04, e05s02t05]

@@ -10,6 +10,7 @@ from mia_agent.agents import Agent, AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.harness import AgentHarness
 from mia_agent.orchestration_models import AgentRuntime, RuntimeIdentity, _profile_from_agent
+from mia_agent.plugins import PluginManager
 from mia_agent.profiles.manager import ProfileManager
 from mia_agent.session.compactor import ContextCompactor
 from mia_agent.session.entries import CustomEntry
@@ -36,11 +37,13 @@ class AgentRuntimeFactory:
         profile_manager: ProfileManager | None = None,
         config_manager: ConfigManager | None = None,
         delegation_service: Any | None = None,
+        plugin_manager: PluginManager | None = None,
     ) -> None:
         self.profile_manager = profile_manager or ProfileManager()
         self.agent_manager = agent_manager or AgentManager(profile_manager=self.profile_manager)
         self.config_manager = config_manager or ConfigManager()
         self.delegation_service = delegation_service
+        self.plugin_manager = plugin_manager or PluginManager(agent_manager=self.agent_manager)
 
     def build(
         self,
@@ -81,7 +84,12 @@ class AgentRuntimeFactory:
             if capabilities_override is not None:
                 updates["tools"] = list(capabilities_override)
             agent = agent.model_copy(update=updates)
-            profile = _profile_from_agent(agent)
+
+        plugin_tools = self.plugin_manager.resolve_tools(agent)
+        plugin_names = [tool.name for tool in plugin_tools]
+        if agent.tools is not None and capabilities_override is None:
+            agent = agent.model_copy(update={"tools": [*agent.tools, *plugin_names]})
+        profile = _profile_from_agent(agent)
 
         work_dir = cwd or Path.cwd()
         target_model = model_override or agent.model or ("" if provider else "claude-3-5-sonnet")
@@ -102,7 +110,11 @@ class AgentRuntimeFactory:
             WriteFileTool(cwd=work_dir),
             EditFileTool(cwd=work_dir),
             BashTool(cwd=work_dir),
+            *plugin_tools,
         ]
+        tool_names = [getattr(tool, "name", "") for tool in available_tools]
+        if len(tool_names) != len(set(tool_names)):
+            raise ValueError("Plugin activation failed: duplicate Tool names are not allowed")
         tools = self.agent_manager.filter_tools(agent, available_tools)
         active_delegation_service = delegation_service or self.delegation_service
         if (
@@ -121,6 +133,8 @@ class AgentRuntimeFactory:
                 for tool in tools
                 if tool_effect(tool.name, {"effect": tool.effect}) == "non-mutating"
             ]
+            agent = agent.model_copy(update={"tools": [tool.name for tool in tools]})
+            profile = _profile_from_agent(agent)
         pipeline = self._build_pipeline(
             agent.middlewares,
             agent=agent,
@@ -132,8 +146,7 @@ class AgentRuntimeFactory:
                 else full_access_confirmed
             ),
             tool_effects={
-                tool.name: tool_effect(tool.name, {"effect": tool.effect})
-                for tool in available_tools
+                tool.name: tool_effect(tool.name, {"effect": tool.effect}) for tool in tools
             },
         )
         session_store = JsonlSessionStore(session_dir / f"{identity.session_id}.jsonl")

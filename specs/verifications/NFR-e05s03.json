@@ -1,0 +1,21 @@
+{
+  "story_id": "e05s03",
+  "verified_at": "2026-09-02T03:27:00Z",
+  "status": "PASS",
+  "threshold_source": "e05s03 §13; no separate e05 NFR test-plan artifact exists",
+  "performance": {
+    "passed": true,
+    "threshold": "local Notes Plugin installation, template instantiation, and Tool resolution complete in under 1 second",
+    "evidence": "Deterministic offline probe completed the lifecycle and Tool resolution in 0.000659s."
+  },
+  "reliability": {
+    "passed": true,
+    "threshold": "template and Plugin failures leave no partial Agent state; full regression suite remains green",
+    "evidence": "Targeted task gates passed; full uv run --offline pytest completed with 168 passed tests, including missing-requirement, collision, isolation, traversal, malformed-state, and incompatible-state coverage."
+  },
+  "operability": {
+    "passed": true,
+    "threshold": "Template/Plugin CLI operations are observable, actionable, and persist attributable Agent state",
+    "evidence": "Offline CLI UAT completed help, template list/show without side effects, Plugin install, template creation, Agent inspection, configure/disable/enable lifecycle, and missing-requirement rejection. Runtime probe created an independent Session and executed a deterministic MockProvider turn."
+  }
+}

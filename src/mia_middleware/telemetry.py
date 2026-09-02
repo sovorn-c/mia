@@ -22,6 +22,7 @@ class AuditLogRecord(BaseModel):
     session_id: str
     step_index: int
     tool_name: str
+    plugin_id: str | None = None
     agent_id: str = ""
     run_id: str = ""
     task_id: str = ""
@@ -101,6 +102,7 @@ class AuditLogMiddleware:
                 session_id=ctx.session_id,
                 step_index=ctx.step_index,
                 tool_name=ctx.tool_name,
+                plugin_id=ctx.plugin_id or str(ctx.metadata.get("plugin_id", "")) or None,
                 arguments=sanitize_arguments(ctx.arguments),
                 duration_ms=duration_ms,
                 agent_id=str(ctx.metadata.get("agent_id", "")),

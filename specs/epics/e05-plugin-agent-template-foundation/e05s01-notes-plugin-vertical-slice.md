@@ -8,7 +8,7 @@
 - **Risk:** P0
 - **Context:** domain, security, persistence, runtime, tools, and CLI
 - **BCPs:** 8
-- **Status:** failing
+- **Status:** passing
 - **Requirement delta:** ADDED
 
 ## 2. User Story

@@ -14,12 +14,16 @@ from mia_agent.events import (
 )
 from mia_agent.harness import AgentHarness
 from mia_agent.orchestration import AgentRunner
+from mia_agent.plugins import AgentTemplate, NotesPlugin, PluginManager
 
 __all__ = [
     "Agent",
     "AgentEvent",
     "AgentManager",
     "AgentRunner",
+    "AgentTemplate",
+    "NotesPlugin",
+    "PluginManager",
     "DelegationService",
     "AgentHarness",
     "AssistantChunkEvent",

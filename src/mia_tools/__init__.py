@@ -12,6 +12,7 @@ from mia_tools.fs import (
     normalize_to_lf,
     restore_line_endings,
 )
+from mia_tools.notes import Note, NoteCreateTool, NoteListTool, NoteReadTool
 
 __all__ = [
     "BaseTool",
@@ -20,6 +21,10 @@ __all__ = [
     "EditFileTool",
     "ReadFileTool",
     "WriteFileTool",
+    "Note",
+    "NoteCreateTool",
+    "NoteListTool",
+    "NoteReadTool",
     "detect_line_ending",
     "generate_unified_diff",
     "normalize_to_lf",
