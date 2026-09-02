@@ -7,6 +7,7 @@ from mia_agent.agents.model import (
     AccessLevel,
     Agent,
     normalize_agent_id,
+    normalize_plugin_id,
 )
 
 __all__ = [
@@ -17,4 +18,5 @@ __all__ = [
     "default_agents_dir",
     "LEGACY_PERMISSION_MAP",
     "normalize_agent_id",
+    "normalize_plugin_id",
 ]
