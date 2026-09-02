@@ -133,7 +133,7 @@ class MiaPromptEditor(Vertical):
             self.command = command
             self.args = args
 
-    def __init__(self, default_target: str = "lead", **kwargs: Any) -> None:
+    def __init__(self, default_target: str = "mia", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.default_target = default_target
         self._history: list[str] = []
@@ -187,7 +187,7 @@ class MiaPromptEditor(Vertical):
         self._history.append(raw_text)
         self._history_idx = -1
 
-        # Check for slash command (/model, /profile, /compact, /clear, /help, /quit)
+        # Check for slash command (/model, /compact, /clear, /help, /quit)
         if raw_text.startswith("/") and "\n" not in raw_text:
             parts = raw_text[1:].split(" ", 1)
             cmd = parts[0].lower().strip()

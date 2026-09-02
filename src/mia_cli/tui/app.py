@@ -1,4 +1,4 @@
-"""Main Textual Application for Mia AI Coding Agent with managed async workers."""
+"""Textual presentation adapter for canonical Agent Runs."""
 
 from __future__ import annotations
 
@@ -12,9 +12,11 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.widgets import Static
 
-from mia_agent.events import AssistantChunkEvent
-from mia_agent.herd.manager import HerdManager
-from mia_agent.herd.models import AgentEventEnvelope, HerdEvent
+from mia_agent.agent_runner import AgentRunner
+from mia_agent.agents import AgentManager
+from mia_agent.events import AssistantChunkEvent, StepEndEvent, TurnCompleteEvent
+from mia_agent.runtime_events import AgentEventEnvelope, RunErrorEvent
+from mia_ai.providers.base import LLMProvider
 from mia_cli.tui.panes import AgentPaneContainer
 from mia_cli.tui.sidebar import AgentSidebar
 from mia_cli.tui.theme import MIA_THEME_CSS
@@ -22,7 +24,7 @@ from mia_cli.tui.widgets.prompt_editor import MiaPromptEditor
 
 
 class MiaHeader(Static):
-    """Modern header displaying active model, total cost, and token usage."""
+    """Header displaying the active model and current Run metrics."""
 
     def __init__(self, model_name: str = "mimo-v2.5", **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -61,8 +63,6 @@ class MiaFooter(Static):
             ("Switch Agent  ", "#9CA3AF"),
             (" [Ctrl+N] ", "bold #FF7A00"),
             ("New Agent  ", "#9CA3AF"),
-            (" [Ctrl+C] ", "bold #FF7A00"),
-            ("Cancel Turn  ", "#9CA3AF"),
             (" [Ctrl+Q] ", "bold #FF7A00"),
             ("Quit", "#9CA3AF"),
         )
@@ -70,7 +70,7 @@ class MiaFooter(Static):
 
 
 class MiaApp(App[None]):
-    """Full-screen interactive Textual TUI for Mia."""
+    """Full-screen Textual frontend for canonical Agent Runs."""
 
     CSS = MIA_THEME_CSS
 
@@ -85,14 +85,21 @@ class MiaApp(App[None]):
 
     def __init__(
         self,
-        herd_manager: HerdManager | None = None,
+        agent_manager: AgentManager | None = None,
+        agent_runner: AgentRunner | None = None,
         model_name: str = "mimo-v2.5",
         cwd: Path | None = None,
+        provider: LLMProvider | None = None,
     ) -> None:
         super().__init__()
-        self.herd_manager = herd_manager or HerdManager(cwd=cwd)
+        self.agent_manager = agent_manager or AgentManager()
+        self.agent_runner = agent_runner or AgentRunner(agent_manager=self.agent_manager)
         self.model_name = model_name
-        self.active_agent_id = "lead"
+        self.cwd = cwd or Path.cwd()
+        self.provider = provider
+        self.active_agent_id = "mia"
+        self.total_tokens = 0
+        self.total_cost = 0.0
 
         self.header_widget = MiaHeader(model_name=self.model_name)
         self.sidebar_widget = AgentSidebar(agents=[], active_id=self.active_agent_id)
@@ -109,45 +116,26 @@ class MiaApp(App[None]):
         yield self.footer_widget
 
     def on_mount(self) -> None:
-        """Initialize default agents and subscribe to events."""
-        # 1. Spawn default agents: @lead (architect) and @coder (coding)
-        self.herd_manager.spawn_agent(
-            agent_id="lead",
-            name="Lead Architect",
-            profile="architect",
-            model=self.model_name,
-        )
-        self.herd_manager.spawn_agent(
-            agent_id="coder",
-            name="Senior Coder",
-            profile="coding",
-            model=self.model_name,
-        )
-
-        self.sidebar_widget.update_agent_list(
-            self.herd_manager.list_agents(), active_id=self.active_agent_id
-        )
-
-        # 2. Subscribe to orchestrator events
-        self.herd_manager.subscribe(self._on_herd_event)
-
-    def _on_herd_event(self, event: HerdEvent) -> None:
-        """Handle incoming asynchronous event from HerdManager."""
-        self.call_later(self._process_event_in_main_thread, event)
-
-    def _process_event_in_main_thread(self, event: HerdEvent) -> None:
-        """Process event within Textual UI thread."""
-        agents = self.herd_manager.list_agents()
-        total_tokens = sum(a.total_tokens for a in agents)
-        total_cost = sum(a.total_cost_usd for a in agents)
-        self.header_widget.update_metrics(total_tokens, total_cost)
+        """Load the persisted Agent roster without creating transient workers."""
+        agents = self.agent_manager.list_agents()
+        if not any(agent.agent_id == self.active_agent_id for agent in agents) and agents:
+            self.active_agent_id = agents[0].agent_id
+            self.pane_container.switch_to_agent(self.active_agent_id)
+            self.prompt_editor.set_target(self.active_agent_id)
         self.sidebar_widget.update_agent_list(agents, active_id=self.active_agent_id)
 
-        if isinstance(event, AgentEventEnvelope):
-            self.pane_container.dispatch_event(event.agent_id, event.event)
+    def _process_event_in_main_thread(self, envelope: AgentEventEnvelope) -> None:
+        """Render one canonical Agent event in the target transcript."""
+        event = envelope.event
+        if isinstance(event, StepEndEvent):
+            self.total_tokens += event.input_tokens + event.output_tokens
+        elif isinstance(event, TurnCompleteEvent):
+            self.total_cost += event.total_cost_usd
+        self.header_widget.update_metrics(self.total_tokens, self.total_cost)
+        self.pane_container.dispatch_event(envelope.agent_id, event)
 
     def on_agent_sidebar_agent_selected(self, message: AgentSidebar.AgentSelected) -> None:
-        """User selected an agent from the sidebar."""
+        """Select an Agent from the sidebar."""
         self.active_agent_id = message.agent_id
         self.pane_container.switch_to_agent(self.active_agent_id)
         self.prompt_editor.set_target(self.active_agent_id)
@@ -155,18 +143,18 @@ class MiaApp(App[None]):
     def on_mia_prompt_editor_slash_command_triggered(
         self, message: MiaPromptEditor.SlashCommandTriggered
     ) -> None:
-        """Handle slash commands (/help, /model, /clear, /quit)."""
+        """Handle the small set of frontend-local slash commands."""
         cmd = message.command
         args = message.args
 
         if cmd == "help":
             help_msg = (
                 "**🥕 Mia Commands & Shortcuts:**\n\n"
-                "- `@<agent> <prompt>`: Send message to specific agent (e.g. `@coder fix tests`)\n"
-                "- `/model <name>`: Switch active model (e.g. `/model mimo-v2.5`)\n"
-                "- `/clear`: Clear active agent transcript\n"
-                "- `Alt+1..9`: Switch between active agents\n"
-                "- `Ctrl+N`: Spawn new worker agent\n"
+                "- `@<agent> <prompt>`: Send a prompt to an Agent\n"
+                "- `/model <name>`: Switch the active model\n"
+                "- `/clear`: Clear the active Agent transcript\n"
+                "- `Alt+1..9`: Switch between Agents\n"
+                "- `Ctrl+N`: Create a persisted Agent\n"
                 "- `Ctrl+Q`: Quit Mia"
             )
             self.pane_container.add_user_message(self.active_agent_id, "/help")
@@ -177,9 +165,7 @@ class MiaApp(App[None]):
         elif cmd == "model" and args:
             self.model_name = args
             self.header_widget.model_name = args
-            self.header_widget.update_metrics(
-                self.header_widget.total_tokens, self.header_widget.total_cost
-            )
+            self.header_widget.update_metrics(self.total_tokens, self.total_cost)
             self.pane_container.add_user_message(self.active_agent_id, f"/model {args}")
             self.pane_container.dispatch_event(
                 self.active_agent_id,
@@ -191,61 +177,76 @@ class MiaApp(App[None]):
     def on_mia_prompt_editor_prompt_submitted(
         self, message: MiaPromptEditor.PromptSubmitted
     ) -> None:
-        """User submitted a prompt for an agent."""
+        """Submit a prompt for an existing Agent."""
         target_id = message.target_agent
         prompt_text = message.prompt_text
-
-        # Ensure agent exists
-        if not self.herd_manager.get_agent(target_id):
-            self.herd_manager.spawn_agent(
-                agent_id=target_id,
-                name=f"Agent @{target_id}",
-                profile="coding",
-                model=self.model_name,
+        try:
+            self.agent_manager.get_agent(target_id)
+        except ValueError as exc:
+            self.pane_container.switch_to_agent(self.active_agent_id)
+            self.pane_container.dispatch_event(
+                self.active_agent_id,
+                AssistantChunkEvent(delta_text=f"Agent error: {exc}"),
             )
+            return
 
         self.active_agent_id = target_id
         self.sidebar_widget.update_agent_list(
-            self.herd_manager.list_agents(), active_id=self.active_agent_id
+            self.agent_manager.list_agents(), active_id=self.active_agent_id
         )
         self.pane_container.switch_to_agent(self.active_agent_id)
         self.pane_container.add_user_message(self.active_agent_id, prompt_text)
         self.prompt_editor.set_target(self.active_agent_id)
-
-        # Launch managed background agent worker
         self.run_agent_turn_worker(target_id, prompt_text)
 
     @work(exclusive=False, thread=False)
     async def run_agent_turn_worker(self, agent_id: str, prompt_text: str) -> None:
-        """Execute agent turn within Textual's managed async worker framework."""
+        """Run one Agent prompt through AgentRunner and render its events."""
         try:
-            async for _ in self.herd_manager.run_agent(agent_id, prompt_text):
-                pass
-        except Exception:
-            pass
+            async for envelope in self.agent_runner.prompt(
+                prompt_text,
+                agent_id=agent_id,
+                provider=self.provider,
+                model_override=self.model_name,
+                cwd=self.cwd,
+                session_id=f"tui_{agent_id}",
+            ):
+                self._process_event_in_main_thread(envelope)
+        except Exception as exc:
+            self._process_event_in_main_thread(
+                AgentEventEnvelope(
+                    run_id="tui",
+                    task_id="root",
+                    agent_id=agent_id,
+                    session_id=f"tui_{agent_id}",
+                    event=RunErrorEvent(stage="tui", error=str(exc)),
+                )
+            )
 
     def action_switch_agent(self, index: int) -> None:
-        """Switch agent via Alt+1..9 shortcut."""
-        agents = self.herd_manager.list_agents()
+        """Switch Agent via an Alt+number shortcut."""
+        agents = self.agent_manager.list_agents()
         if 1 <= index <= len(agents):
             target = agents[index - 1]
-            self.active_agent_id = target.id
+            self.active_agent_id = target.agent_id
             self.sidebar_widget.update_agent_list(agents, active_id=self.active_agent_id)
             self.pane_container.switch_to_agent(self.active_agent_id)
             self.prompt_editor.set_target(self.active_agent_id)
 
     def action_spawn_new_agent(self) -> None:
-        """Spawn a new worker agent via Ctrl+N."""
-        existing = len(self.herd_manager.list_agents())
+        """Create and select a persisted coding-style Agent."""
+        existing = len(self.agent_manager.list_agents())
         new_id = f"worker{existing + 1}"
-        self.herd_manager.spawn_agent(
-            agent_id=new_id,
-            name=f"Worker {existing + 1}",
-            profile="coding",
-            model=self.model_name,
+        self.agent_manager.create_agent(
+            new_id,
+            display_name=f"Worker {existing + 1}",
+            instructions="You are a helpful local coding Agent.",
+            model=self.model_name or None,
+            tools=["read_file", "write_file", "edit_file", "bash"],
+            access_policy="approval-required",
         )
-        self.action_switch_agent(len(self.herd_manager.list_agents()))
-
-
-# Alias for backward compatibility
-MiaHerdApp = MiaApp
+        agents = self.agent_manager.list_agents()
+        self.active_agent_id = new_id
+        self.sidebar_widget.update_agent_list(agents, active_id=new_id)
+        self.pane_container.switch_to_agent(new_id)
+        self.prompt_editor.set_target(new_id)

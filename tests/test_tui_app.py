@@ -27,7 +27,7 @@ async def test_tui_mount_lists_builtin_and_persisted_agents(tmp_path: Path) -> N
             "mia",
             "reviewer",
         }
-        assert not {item.agent.agent.agent_id for item in app.query(AgentListItem)} & {
+        assert not {item.agent.agent_id for item in app.query(AgentListItem)} & {
             "lead",
             "coder",
         }
