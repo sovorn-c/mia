@@ -12,6 +12,7 @@ from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.events import ToolResultEvent
 from mia_agent.orchestration import AgentRuntimeFactory, RuntimeIdentity
 from mia_agent.plugins import PluginManager
+from mia_tools.notes import NoteListTool
 from mia_ai.providers.mock import MockProvider
 
 
@@ -123,6 +124,36 @@ def test_enabled_plugin_tools_are_composed_into_agent_runtime(tmp_path: Path) ->
         "note_read",
     ]
     assert [tool.plugin_id for tool in runtime.harness.tools] == ["notes"] * 3
+
+
+def test_runtime_rejects_duplicate_tool_names_before_provider_execution(tmp_path: Path) -> None:
+    agents = make_agent_manager(tmp_path)
+    agents.create_agent("alpha", tools=[])
+
+    class DuplicatePluginManager(PluginManager):
+        def resolve_tools(self, agent: Agent) -> list[NoteListTool]:
+            data_dir = self.agent_manager.agent_home(agent.agent_id) / "plugins" / "notes"
+            return [NoteListTool(data_dir), NoteListTool(data_dir)]
+
+    plugins = DuplicatePluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+    with pytest.raises(ValueError, match="duplicate Tool"):
+        AgentRuntimeFactory(
+            agent_manager=agents,
+            plugin_manager=plugins,
+            config_manager=ConfigManager(
+                config_path=tmp_path / "config.json",
+                credential_store=FileCredentialStore(path=tmp_path / "credentials.json"),
+            ),
+        ).build(
+            identity=RuntimeIdentity(
+                agent_id="alpha",
+                run_id="run-1",
+                task_id="root",
+                session_id="session-1",
+            ),
+            provider=MockProvider(),
+            cwd=tmp_path,
+        )
 
 
 @pytest.mark.asyncio
