@@ -75,6 +75,22 @@ def test_installed_plugin_can_be_enabled_for_one_named_agent(tmp_path: Path) -> 
         plugins.enable("mia", "notes")
 
 
+def test_enabled_plugin_can_be_configured_and_disabled_without_data_loss(tmp_path: Path) -> None:
+    agents = make_agent_manager(tmp_path)
+    agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+    plugins.install("notes")
+    plugins.enable("alpha", "notes")
+
+    configured = plugins.configure("alpha", "notes", {"notebook_name": "Work"})
+    assert configured.plugin_config == {"notes": {"notebook_name": "Work"}}
+
+    disabled = plugins.disable("alpha", "notes")
+    assert disabled.plugins == []
+    assert disabled.plugin_config == {"notes": {"notebook_name": "Work"}}
+    assert agents.get_agent("alpha").plugins == []
+
+
 def test_enabled_plugin_tools_are_composed_into_agent_runtime(tmp_path: Path) -> None:
     agents = make_agent_manager(tmp_path)
     agents.create_agent("alpha", tools=[])
