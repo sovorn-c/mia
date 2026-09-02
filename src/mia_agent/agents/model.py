@@ -19,6 +19,7 @@ LEGACY_PERMISSION_MAP: dict[str, AccessLevel] = {
 
 _SECRET_KEY_PARTS = ("api_key", "apikey", "token", "secret", "authorization", "password")
 _AGENT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+_PLUGIN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
 def normalize_agent_id(value: str) -> str:
@@ -37,6 +38,18 @@ def normalize_agent_id(value: str) -> str:
         raise ValueError(
             f"Unsafe Agent ID '{value}': use letters, numbers, hyphens, and underscores"
         )
+    return candidate
+
+
+def normalize_plugin_id(value: str) -> str:
+    """Normalize a Plugin ID and reject values unsafe for local state paths."""
+    if not isinstance(value, str):
+        raise ValueError("Plugin ID must be text")
+    candidate = value.strip().lower()
+    if not candidate or "/" in candidate or "\\" in candidate or candidate in {".", ".."}:
+        raise ValueError("Plugin ID must be a non-blank path-safe identifier")
+    if not _PLUGIN_ID_RE.fullmatch(candidate):
+        raise ValueError("Plugin ID must use letters, numbers, hyphens, and underscores")
     return candidate
 
 
@@ -116,6 +129,14 @@ class Agent(BaseModel):
     @classmethod
     def validate_delegation_targets(cls, value: list[str]) -> list[str]:
         return [normalize_agent_id(target) for target in value]
+
+    @field_validator("plugins")
+    @classmethod
+    def validate_plugins(cls, value: list[str]) -> list[str]:
+        normalized = [normalize_plugin_id(plugin_id) for plugin_id in value]
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("Agent Plugin IDs contain duplicates")
+        return normalized
 
     @field_validator("metadata")
     @classmethod

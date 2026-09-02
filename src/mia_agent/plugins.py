@@ -8,27 +8,15 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from mia_agent.agents.model import normalize_plugin_id
 from mia_agent.agents.storage import atomic_write_json
 
 if TYPE_CHECKING:
     from mia_agent.agents.manager import AgentManager
 
 PluginEffect = Literal["non-mutating", "side-effecting"]
-_PLUGIN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 CORE_PLUGIN_API_VERSION = 1
-
-
-def normalize_plugin_id(value: str) -> str:
-    """Normalize a Plugin ID and reject values unsafe for local state paths."""
-    if not isinstance(value, str):
-        raise ValueError("Plugin ID must be text")
-    candidate = value.strip().lower()
-    if not candidate or "/" in candidate or "\\" in candidate or candidate in {".", ".."}:
-        raise ValueError("Plugin ID must be a non-blank path-safe identifier")
-    if not _PLUGIN_ID_RE.fullmatch(candidate):
-        raise ValueError("Plugin ID must use letters, numbers, hyphens, and underscores")
-    return candidate
 
 
 class PluginToolSpec(BaseModel):
