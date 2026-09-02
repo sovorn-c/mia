@@ -32,6 +32,8 @@ def test_agent_plugin_configuration_is_normalized_and_secret_free() -> None:
     assert agent.plugin_config == {"notes": {"notebook_name": "Personal"}}
     with pytest.raises(ValueError, match="credential-like"):
         Agent(agent_id="alpha", plugin_config={"notes": {"api_key": "secret"}})
+    with pytest.raises(ValueError, match="secret-like"):
+        Agent(agent_id="alpha", plugin_config={"notes": {"notebook_name": "sk-secret"}})
 
 
 def test_agent_plugin_ids_are_normalized_and_unique() -> None:
