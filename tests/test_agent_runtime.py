@@ -59,3 +59,29 @@ def test_runtime_factory_does_not_accept_profile_manager() -> None:
 
     with pytest.raises(TypeError):
         AgentRuntimeFactory(profile_manager=ProfileManager())  # type: ignore[call-arg]
+
+
+def test_runtime_factory_builds_agent_owned_runtime(tmp_path) -> None:
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_ai.providers.mock import MockProvider
+
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    identity = RuntimeIdentity(
+        run_id="run-1",
+        task_id="root",
+        agent_id="mia",
+        session_id="session-1",
+    )
+
+    runtime = AgentRuntimeFactory(agent_manager=manager).build(
+        identity=identity,
+        provider=MockProvider(),
+        cwd=tmp_path,
+    )
+
+    assert runtime.agent.agent_id == "mia"
+    assert runtime.session_store.path.parent == manager.agent_home("mia") / "sessions"
+    assert not hasattr(runtime, "profile")
+    metadata = runtime.session_store.load_entries()[0]
+    assert metadata.data == identity.model_dump(exclude_none=True)
