@@ -30,3 +30,14 @@ async def test_notes_tools_create_list_and_read_inside_agent_data_root(tmp_path:
     with pytest.raises(ValueError, match="note ID"):
         await by_name["note_read"].execute(note_id="../outside")
     assert not (tmp_path / "outside.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_notes_tools_reject_a_symlinked_data_root(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    linked_root = tmp_path / "linked-notes"
+    linked_root.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="symbolic link"):
+        NotesPlugin().build_tools(agent_id="alpha", data_dir=linked_root, config={})
