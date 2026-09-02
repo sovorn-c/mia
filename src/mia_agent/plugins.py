@@ -448,15 +448,25 @@ class PluginManager:
             plugin = NotesPlugin() if manifest.plugin_id == "notes" else None
             if plugin is None:
                 raise ValueError(f"Plugin '{manifest.plugin_id}' has no bundled implementation")
-            tools.extend(
-                plugin.build_tools(
-                    agent_id=agent.agent_id,
-                    data_dir=self.agent_manager.agent_home(agent.agent_id)
-                    / "plugins"
-                    / manifest.plugin_id,
-                    config=getattr(agent, "plugin_config", {}).get(manifest.plugin_id, {}),
-                )
+            plugin_tools = plugin.build_tools(
+                agent_id=agent.agent_id,
+                data_dir=self.agent_manager.agent_home(agent.agent_id)
+                / "plugins"
+                / manifest.plugin_id,
+                config=getattr(agent, "plugin_config", {}).get(manifest.plugin_id, {}),
             )
+            expected = {spec.name: spec.effect for spec in manifest.tool_specs}
+            actual = [getattr(tool, "name", "") for tool in plugin_tools]
+            if set(actual) != set(expected) or len(actual) != len(expected):
+                raise ValueError(f"Plugin '{manifest.plugin_id}' returned undeclared Tools")
+            for tool in plugin_tools:
+                if getattr(tool, "plugin_id", None) != manifest.plugin_id:
+                    raise ValueError(f"Plugin '{manifest.plugin_id}' returned unattributed Tools")
+                if getattr(tool, "effect", None) != expected[tool.name]:
+                    raise ValueError(
+                        f"Plugin '{manifest.plugin_id}' returned a Tool with an undeclared effect"
+                    )
+            tools.extend(plugin_tools)
         return tools
 
     @staticmethod
