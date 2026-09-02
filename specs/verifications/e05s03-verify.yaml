@@ -1,0 +1,97 @@
+story_id: e05s03
+verified_at: '2026-09-02T03:27:58Z'
+verifier: verify-work
+branch: e05-notes-plugin
+phases:
+  preflight:
+    passed: true
+    checks:
+      - 'feature branch is not main/master'
+      - 'git context is available'
+      - 'repository guidance was inspected directly'
+    note: 'bp-read-agents.sh is unavailable in this checkout and the main repository; AGENTS.md quality-gate commands were run directly.'
+  task_verification:
+    passed: true
+    tasks: [e05s03t01, e05s03t02, e05s03t03, e05s03t04, e05s03t05]
+    note: 'All five task verify commands passed.'
+  security:
+    passed: true
+    report: specs/security/REVIEW.md
+    note: 'Manual diff and data-flow review found no concrete HIGH or MEDIUM finding at confidence >= 8.'
+  blind_spots:
+    passed: null
+    skipped: true
+    note: 'scripts/check-blind-spots.sh is not present in this checkout.'
+  completeness:
+    passed: null
+    skipped: true
+    note: 'scripts/lib/completeness-critic.sh is not present in this checkout.'
+  nfr:
+    passed: true
+    report: specs/verifications/NFR-e05s03.json
+  build:
+    passed: true
+    command: 'uv build --offline'
+  typecheck:
+    passed: true
+    command: 'uv run --offline mypy src'
+  lint:
+    passed: true
+    commands:
+      - 'uv run --offline ruff format --check .'
+      - 'uv run --offline ruff check .'
+  tests:
+    passed: true
+    count: 168
+    command: 'uv run --offline pytest'
+    coverage_command: './scripts/check-coverage.sh'
+    coverage:
+      scoped_core_percent: 89
+      business_boundary_percent: 97
+  terminal_verdict:
+    command: 'uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest && ./scripts/check-coverage.sh && uv build --offline && uv run --offline python -c "import pathlib,yaml; [yaml.safe_load(p.read_text()) for p in pathlib.Path(\"specs\").rglob(\"*.yaml\") ]" && git diff --check'
+    exit_code: 0
+    captured_at: '2026-09-02T03:27:58Z'
+    note: 'Single contiguous mechanical-gate run; output captured in /tmp/e05s03-terminal-verdict.log.'
+  manual:
+    passed: true
+    steps:
+      - step: 'Run mia --help and inspect Template/Plugin command groups'
+        expected: 'Template and Plugin lifecycle commands are available.'
+        actual: 'Help rendered successfully with template and plugin command groups.'
+        passed: true
+      - step: 'List and show notes-agent before installation'
+        expected: 'Inspection works without installing a Plugin or creating an Agent home.'
+        actual: 'Both commands rendered the bundled Template; the temporary home remained absent.'
+        passed: true
+      - step: 'Install Notes and create my-notes from notes-agent'
+        expected: 'A fresh approval-required Agent is created with Notes enabled and no implicit default selection.'
+        actual: 'CLI created my-notes; persisted state contained approval-required access, Notes configuration, and full_access_confirmed=false without selecting the Agent.'
+        passed: true
+      - step: 'Configure, disable, and re-enable Notes for my-notes'
+        expected: 'Lifecycle commands succeed and configuration remains available after disablement.'
+        actual: 'All three commands completed successfully; persisted configuration and enablement were verified.'
+        passed: true
+      - step: 'Instantiate Notes Tools and execute create/list/read for two Agents'
+        expected: 'Notes are readable by the owner and isolated from another Agent.'
+        actual: 'Owner create/list/read succeeded; the second Agent list was empty.'
+        passed: true
+      - step: 'Attempt template creation without installing Notes'
+        expected: 'The command fails with an actionable missing-requirement error and no target Agent directory.'
+        actual: 'Command failed with not-installed guidance and created no target directory.'
+        passed: true
+      - step: 'Build a template Agent runtime with MockProvider'
+        expected: 'A deterministic turn completes and a Session is persisted under the created Agent home.'
+        actual: 'MockProvider turn completed and the Agent-owned Session JSONL file was created.'
+        passed: true
+  gaps:
+    closed: true
+    known_infrastructure_gaps:
+      - 'bp-read-agents.sh unavailable'
+      - 'check-blind-spots.sh unavailable'
+      - 'completeness-critic.sh unavailable'
+      - 'verify-cwe-fixture-sync.sh unavailable'
+    coverage_gate:
+      passed: true
+      command: './scripts/check-coverage.sh'
+      note: 'Statement coverage is 89% for scoped first-party core and 97% for the execution/access/filesystem business boundary.'

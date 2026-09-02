@@ -49,3 +49,18 @@
 - Delegation validates recipient eligibility before provider/session access, rejects self/recursive requests, bounds prompt/timeout/depth, intersects caller and recipient capabilities, and requires both sides' full-access consent for a delegated full-access child.
 - Provider, Tool, orchestration, audit, and Delegation error payloads are sanitized before user-visible event/session/telemetry boundaries. No credential literal was introduced in changed source.
 - No new shell interpolation, unsafe deserialization, SQL/HTTP sink, authentication endpoint, or dependency was introduced. `BashTool` still runs with the configured working directory and remains approval-gated for side effects; the filesystem Tools now reject paths outside that directory.
+
+## e05 Plugin and Agent Template Addendum
+
+- **Branch:** `e05-notes-plugin`
+- **Diff scope:** `main...HEAD`, limited to Plugin manifests/lifecycle, Notes storage Tools, Agent Template validation/instantiation, runtime Tool composition, telemetry attribution, and CLI commands.
+- **Reviewed:** local installation state and JSON validation; Agent/Plugin ID normalization; template allowlisting and secret rejection; requirement checks before persistence; Agent-owned note/session paths; symlink and traversal checks; capability/effect filtering; Plugin Tool attribution; CLI error/output paths.
+- **Verdict:** PASS — no concrete HIGH or MEDIUM vulnerability at confidence >= 8 was identified.
+
+### Boundary checks
+
+- Plugin installation is bundled and explicit; no arbitrary Python loading, network fetch, or implicit installation was added. Installed state is JSON-loaded and validated through Pydantic, with malformed/duplicate state rejected.
+- Template instantiation validates required compatible Plugins and target identity before `AgentManager` persistence. Templates exclude runtime identity, credentials, Sessions, memory, metadata, defaults, and full-access consent; full-access templates are rejected.
+- Plugin and Agent IDs are normalized before local path use. Notes roots reject symlinked ancestors, note IDs are allowlisted, note files are atomically replaced, and list/read reject unsafe symlinks.
+- Plugin Tools are composed through the existing access/effect middleware and carry Plugin provenance into events and audit records. CLI inspection renders metadata only and does not expose Plugin configuration values.
+- No new command, HTTP, SQL, unsafe-deserialization, or secret-bearing logging sink was introduced.
