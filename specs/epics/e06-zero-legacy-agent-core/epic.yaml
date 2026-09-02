@@ -44,7 +44,7 @@ stories:
 
   - id: e06s02
     title: Agent-Native Textual TUI Adapter
-    status: failing
+    status: passing
     bcps: 4
     risk: P1
     delta: MODIFIED

@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.6.0
-updated_at: '2026-09-02T05:53:38Z'
+updated_at: '2026-09-02T06:01:10Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-08-21T23:11:33Z'
@@ -176,8 +176,8 @@ epics:
         bcps: 4
         risk: P1
         tasks_total: 4
-        tasks_passing: 0
-        tasks_failing: 4
+        tasks_passing: 4
+        tasks_failing: 0
       e06s03:
         title: Remove Legacy Identity, Orchestration, and CLI Surfaces
         status: failing

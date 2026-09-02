@@ -1,7 +1,7 @@
 story_id: e06s02
 title: Agent-Native Textual TUI Adapter
 spec: e06s02-agent-native-textual-tui-adapter.md
-status: failing
+status: passing
 bcps: 4
 risk: P1
 delta: MODIFIED
@@ -82,7 +82,7 @@ tasks:
       categories: ["TUI", "Regression"]
   - id: e06s02t04
     title: Remove Herd dependencies from the retained frontend
-    status: failing
+    status: passing
     risk: P1
     depends_on: [e06s02t03]
     story_steps: [4, 5]

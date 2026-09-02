@@ -8,7 +8,7 @@
 - **Risk:** P1
 - **Context:** Textual frontend, Agent selection, streaming events, and tests
 - **BCPs:** 4
-- **Status:** failing
+- **Status:** passing
 - **Requirement delta:** MODIFIED
 
 ## 2. User Story
