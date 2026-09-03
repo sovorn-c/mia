@@ -43,6 +43,24 @@ def test_top_level_session_option_resumes_interactive_repl() -> None:
     repl_class.return_value.run.assert_called_once_with()
 
 
+def test_top_level_repl_uses_selected_agent(tmp_path: Path) -> None:
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    manager.create_agent("researcher", display_name="Researcher")
+    manager.set_default("researcher")
+    with (
+        patch("mia_cli.main.AgentManager", return_value=manager),
+        patch("mia_cli.repl.MiaREPL") as repl_class,
+    ):
+        result = runner.invoke(app, [])
+
+    assert result.exit_code == 0
+    repl_class.assert_called_once_with(
+        model=None,
+        agent="researcher",
+        session_id=None,
+    )
+
+
 def test_top_level_session_rejects_path_without_traceback() -> None:
     result = runner.invoke(app, ["--session", "../outside"])
 

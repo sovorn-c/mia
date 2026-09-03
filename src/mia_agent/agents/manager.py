@@ -24,7 +24,10 @@ class AgentManager:
     """Resolve, persist, and select built-in or native Agents."""
 
     def __init__(self, agents_dir: Path | None = None) -> None:
-        self.agents_dir = (agents_dir or default_agents_dir()).expanduser().resolve()
+        configured = (agents_dir or default_agents_dir()).expanduser().absolute()
+        if configured.is_symlink():
+            raise ValueError("Agent storage root must not be a symlink")
+        self.agents_dir = configured.parent.resolve() / configured.name
 
     def get_agent(self, agent_id: str | None = None) -> Agent:
         """Resolve one Agent, defaulting to the selected or built-in Mia Agent."""
@@ -34,7 +37,7 @@ class AgentManager:
 
     def default_agent(self) -> Agent:
         """Return the selected Agent, or Mia when no valid selection is saved."""
-        selection = self.agents_dir / DEFAULT_SELECTION_FILE
+        selection = self._owned_path(self.agents_dir / DEFAULT_SELECTION_FILE)
         try:
             selected = selection.read_text(encoding="utf-8").strip()
         except OSError:
@@ -52,7 +55,7 @@ class AgentManager:
             agent_id: agent.model_copy(deep=True) for agent_id, agent in BUILTIN_AGENTS.items()
         }
         for definition in sorted(self.agents_dir.glob(f"*/{AGENT_DEFINITION_FILE}")):
-            agent = load_native(definition)
+            agent = load_native(self._owned_path(definition))
             if agent.agent_id not in BUILTIN_AGENTS:
                 agents[agent.agent_id] = agent
         return sorted(agents.values(), key=lambda agent: agent.agent_id)
@@ -125,7 +128,8 @@ class AgentManager:
             if agent.agent_id not in BUILTIN_AGENTS:
                 write_agent(self, agent)
         self.agents_dir.mkdir(parents=True, exist_ok=True)
-        atomic_write_text(self.agents_dir / DEFAULT_SELECTION_FILE, agent.agent_id + "\n")
+        selection = self._owned_path(self.agents_dir / DEFAULT_SELECTION_FILE)
+        atomic_write_text(selection, agent.agent_id + "\n")
         return agent
 
     def use_agent(self, agent_id: str, *, confirm_full_access: bool = False) -> Agent:
@@ -134,15 +138,15 @@ class AgentManager:
 
     def agent_home(self, agent_id: str) -> Path:
         """Return the path-safe home for one Agent."""
-        return self.agents_dir / normalize_agent_id(agent_id)
+        return self._owned_path(self.agents_dir / normalize_agent_id(agent_id))
 
     def agent_path(self, agent_id: str) -> Path:
         """Return the native Agent definition path."""
-        return self.agent_home(agent_id) / AGENT_DEFINITION_FILE
+        return self._owned_path(self.agent_home(agent_id) / AGENT_DEFINITION_FILE)
 
     def get_session_dir(self, agent_id: str, create: bool = True) -> Path:
         """Return the Agent-owned Session directory."""
-        path = self.agent_home(agent_id) / "sessions"
+        path = self._owned_path(self.agent_home(agent_id) / "sessions")
         if create:
             path.mkdir(parents=True, exist_ok=True)
         return path
@@ -152,7 +156,7 @@ class AgentManager:
         path = self.get_session_dir(agent_id, create=create) / (
             f"{normalize_agent_id(session_id)}.jsonl"
         )
-        return path
+        return self._owned_path(path)
 
     def filter_tools(self, agent: Agent, available_tools: Sequence[Any]) -> list[Any]:
         """Filter visible Tools by Agent capability scope and access policy."""
@@ -182,7 +186,7 @@ class AgentManager:
         raise ValueError(f"Agent '{key}' not found. Available Agents: {available}")
 
     def _selected_id(self) -> str | None:
-        selection = self.agents_dir / DEFAULT_SELECTION_FILE
+        selection = self._owned_path(self.agents_dir / DEFAULT_SELECTION_FILE)
         try:
             value = selection.read_text(encoding="utf-8").strip()
             return normalize_agent_id(value) if value else None
@@ -191,7 +195,26 @@ class AgentManager:
 
     def _clear_default(self) -> None:
         with contextlib.suppress(FileNotFoundError):
-            (self.agents_dir / DEFAULT_SELECTION_FILE).unlink()
+            self._owned_path(self.agents_dir / DEFAULT_SELECTION_FILE).unlink()
+
+    def _owned_path(self, path: Path) -> Path:
+        """Reject symlink components and paths outside the Agent storage root."""
+        try:
+            relative = path.relative_to(self.agents_dir)
+        except ValueError as exc:
+            raise ValueError("Agent storage path escapes its configured root") from exc
+
+        current = self.agents_dir
+        for part in relative.parts:
+            current /= part
+            if current.is_symlink():
+                raise ValueError("Agent storage paths must not contain symlinks")
+
+        try:
+            path.resolve().relative_to(self.agents_dir)
+        except ValueError as exc:
+            raise ValueError("Agent storage path escapes its configured root") from exc
+        return path
 
 
 __all__ = [

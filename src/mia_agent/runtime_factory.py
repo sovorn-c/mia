@@ -60,7 +60,6 @@ class AgentRuntimeFactory:
     ) -> AgentRuntime:
         """Construct an Agent-scoped harness, restoring and annotating its Session."""
         agent = self.agent_manager.get_agent(identity.agent_id)
-        session_dir = self.agent_manager.get_session_dir(agent.agent_id)
         namespace = "agent"
 
         if access_policy_override is not None or capabilities_override is not None:
@@ -132,7 +131,9 @@ class AgentRuntimeFactory:
                 tool.name: tool_effect(tool.name, {"effect": tool.effect}) for tool in tools
             },
         )
-        session_store = JsonlSessionStore(session_dir / f"{identity.session_id}.jsonl")
+        session_store = JsonlSessionStore(
+            self.agent_manager.get_session_path(agent.agent_id, identity.session_id)
+        )
         initial_messages, last_entry_id = self._restore_session(session_store)
         last_entry_id = self._persist_identity(
             identity, session_store, last_entry_id, namespace=namespace

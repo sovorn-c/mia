@@ -1,9 +1,9 @@
 # specs/execution-status.yaml — delivery status
 version: 0.6.0
-updated_at: '2026-09-02T06:30:00Z'
+updated_at: '2026-09-03T08:22:40Z'
 gate_trace:
   verdict: WAIVED
-  generated_at: '2026-09-02T06:30:00Z'
+  generated_at: '2026-09-03T08:22:40Z'
   rationale: 'The traceability helper is not present; story verification evidence and the full quality gate are recorded manually.'
   heuristic_ratio: null
   downgrade_applied: false

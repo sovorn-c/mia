@@ -114,7 +114,7 @@ class AgentTranscriptView(VerticalScroll):
 class AgentPaneContainer(Vertical):
     """Container managing active and background agent transcript views."""
 
-    def __init__(self, active_agent_id: str = "lead", **kwargs: Any) -> None:
+    def __init__(self, active_agent_id: str = "mia", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.active_agent_id = active_agent_id
         self._transcripts: dict[str, AgentTranscriptView] = {}

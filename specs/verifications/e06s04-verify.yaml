@@ -1,58 +1,78 @@
 story_id: e06s04
-verified_at: '2026-09-02T06:38:29Z'
+verified_at: '2026-09-03T08:24:46Z'
 verifier: verify-work
 branch: e06-zero-legacy-agent-core
 status: passing
 phases:
+  branch:
+    passed: true
+    command: 'git branch --show-current'
+    actual: e06-zero-legacy-agent-core
   guidance:
     passed: true
     command: cmp -s AGENTS.md CLAUDE.md
-    note: 'AGENTS.md and CLAUDE.md are byte-for-byte identical and teach the AgentRunner-to-AgentHarness path.'
+    note: 'Guidance files are byte-for-byte identical and teach the AgentRunner-to-AgentHarness path.'
+  task_verifications:
+    passed: true
+    tasks: [e06s04t01, e06s04t02, e06s04t03, e06s04t04]
+    note: 'All active task verify commands passed.'
   public_surface:
     passed: true
     command: ./scripts/check-public-surface.sh
-    note: 'The repository-wide scan returned public surface: clean.'
-  artifact_purge:
-    passed: true
-    note: 'Obsolete planning capsules, snapshots, and verification records were removed; Git history preserves them.'
   specs:
     passed: true
     command: "uv run --offline python -c \"import pathlib,yaml; [yaml.safe_load(p.read_text()) for p in pathlib.Path('specs').rglob('*.yaml')]\""
-    note: 'All remaining specification YAML parsed successfully.'
   tui_package:
     passed: true
     commands:
       - grep -q 'textual>=' pyproject.toml
-      - uv run --offline python scripts/check-wheel-surface.py
+      - wheel_dir=$(mktemp -d); trap 'rm -rf "$wheel_dir"' EXIT; uv build --offline --out-dir "$wheel_dir"; uv run --offline python scripts/check-wheel-surface.py "$wheel_dir"/*.whl
       - uv run --offline mia tui --help
-    note: 'Textual remains declared, mia tui help renders, and the wheel retains mia_cli/tui without removed packages.'
-  lint:
+    note: 'Textual remains declared, TUI help renders, and the wheel retains mia_cli/tui while removed packages remain absent.'
+  mechanical:
     passed: true
     commands:
       - uv run --offline ruff format --check .
       - uv run --offline ruff check .
-  typecheck:
-    passed: true
-    command: uv run --offline mypy src
-  tests:
-    passed: true
-    count: 151
-    command: uv run --offline pytest
-  coverage:
-    passed: true
-    command: ./scripts/check-coverage.sh
-    scoped_core_percent: 89
+      - uv run --offline mypy src
+      - uv run --offline pytest
+      - ./scripts/check-coverage.sh
+      - uv build --offline
+    tests: 165
+    scoped_core_percent: 91
     business_boundary_percent: 97
-  build:
+  security:
     passed: true
-    command: uv build --offline
+    method: manual_changed_path_review
+    checks: [injection, authorization, path handling, deserialization, credential exposure, process/network sinks]
+    note: 'Prior path, disclosure, cancellation, approval, gate, and metadata findings were fixed and independently re-reviewed.'
+  uat:
+    passed: true
+    mode: cli
+    isolation: 'temporary HOME directory'
+    steps:
+      - action: 'Run root, Agent, and TUI help commands.'
+        expected: 'Each command exits successfully and renders usage information.'
+        actual: 'All commands passed.'
+      - action: 'List and inspect the built-in mia Agent.'
+        expected: 'Agent list and detail output contain mia without credential values.'
+        actual: 'Both commands passed.'
+      - action: 'List Sessions, Plugins, and Templates.'
+        expected: 'Each command exits successfully in an empty isolated home.'
+        actual: 'All commands passed.'
+      - action: 'Pass an unsupported root option.'
+        expected: 'The CLI exits non-zero with an actionable error.'
+        actual: 'Command failed as expected and emitted an error.'
+  gaps:
+    closed: true
+    count: 0
   terminal_verdict:
     passed: true
     exit_code: 0
-    captured_at: '2026-09-02T06:38:29Z'
-    command: 'cmp -s AGENTS.md CLAUDE.md && ./scripts/check-public-surface.sh && YAML validation && uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest -q && ./scripts/check-coverage.sh && uv build --offline && uv run --offline python scripts/check-wheel-surface.py'
-    log: /tmp/e06s04-terminal-verdict-final.log
-    note: 'Single contiguous clean-break and quality-gate run passed.'
+    captured_at: '2026-09-03T08:24:46Z'
+    command: 'Single contiguous command: branch check; guidance comparison; public-surface scan; YAML parse; Textual declaration; Ruff; Mypy; pytest; coverage; wheel build/inspection; isolated CLI/TUI UAT; manual changed-path sink scan.'
+    log: /tmp/e06-review-terminal-verdict.log
+    note: '165 tests passed; full verification command exited 0.'
 known_infrastructure_gaps:
-  - 'No repository consistency helper is present in this checkout; all remaining specs YAML parsed successfully.'
-  - 'No separate security scanner is present; specs/security/REVIEW.md records the affected-path review.'
+  - 'Optional Bigpowers helper scripts for timing, preflight, blind spots, completeness, churn ranking, parallel worktrees, and spec consistency are absent from this checkout; direct checks and manual evidence were used.'
+  - 'No separate security scanner is present; the accepted exception and manual review rationale are recorded in specs/security/EXCEPTIONS.md.'

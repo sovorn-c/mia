@@ -1,14 +1,16 @@
 workflow_mode: solo-git
 session:
-  active_flow: build
+  active_flow: release
   active_epic_id: e06
   active_story_id: e06s04
   target_version: 0.6.0
 handoff:
-  next_skill: audit-code
+  next_skill: release-branch
   summary: >-
-    e06s01 through e06s04 are passing on the isolated branch. Agent-centric runtime, CLI, TUI, project
-    surfaces, package checks, and the full offline quality gate are complete. Run audit-code before release.
+    Independent re-review and the final offline quality gate pass on the isolated branch. Session and
+    Agent path boundaries, Run error handling, cancellation, credential redaction, CLI/TUI approval and
+    selection, public-surface gates, wheel inspection, and version metadata are hardened. Ready for the
+    release-branch decision.
 git:
   branch: e06-zero-legacy-agent-core
 metrics:

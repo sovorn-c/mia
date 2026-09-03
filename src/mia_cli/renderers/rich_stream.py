@@ -14,6 +14,7 @@ from rich.syntax import Syntax
 from rich.text import Text
 
 from mia_agent.events import (
+    AgentErrorEvent,
     AgentEvent,
     AssistantChunkEvent,
     StepEndEvent,
@@ -248,6 +249,11 @@ class RichStreamRenderer:
 
         elif isinstance(event, StepEndEvent):
             self._end_streams()
+
+        elif isinstance(event, AgentErrorEvent):
+            self._stop_status()
+            self._end_streams()
+            self.console.print(f"[bold red]Agent error: {event.error}[/bold red]")
 
         elif isinstance(event, TurnCompleteEvent):
             self._stop_status()

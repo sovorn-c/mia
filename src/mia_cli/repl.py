@@ -7,7 +7,6 @@ import contextlib
 import getpass
 import os
 import subprocess
-import uuid
 from pathlib import Path
 from typing import Any
 
@@ -32,8 +31,7 @@ from mia_agent.auth.openai_auth import OpenAIOAuthManager
 from mia_agent.events import StepEndEvent, TurnCompleteEvent
 from mia_agent.harness import AgentHarness
 from mia_agent.runtime_events import RunErrorEvent
-from mia_agent.runtime_factory import AgentRuntimeFactory
-from mia_agent.runtime_models import AgentRuntime, RuntimeIdentity
+from mia_agent.runtime_models import AgentRuntime
 from mia_agent.session.entries import LeafEntry, MessageEntry, SessionInfoEntry
 from mia_agent.session.jsonl import JsonlSessionStore
 from mia_agent.session.tree import SessionTree
@@ -138,15 +136,11 @@ class MiaREPL:
         self.config_mgr = ConfigManager()
         self.cred_store = FileCredentialStore()
         self.agent_mgr = agent_manager or AgentManager()
-        self.agent_id = agent or "mia"
+        self.agent_id = agent or self.agent_mgr.default_agent().agent_id
         self.custom_provider = custom_provider
-        self.runtime_factory = AgentRuntimeFactory(
+        self.agent_runner = AgentRunner(
             agent_manager=self.agent_mgr,
             config_manager=self.config_mgr,
-        )
-        self.agent_runner = AgentRunner(
-            factory=self.runtime_factory,
-            agent_manager=self.agent_mgr,
         )
 
         # Never assume a model unless explicitly authenticated or provided
@@ -196,16 +190,11 @@ class MiaREPL:
         if not self.model_name and not agent.model and not self.custom_provider:
             self.harness = None
             return
-        identity = RuntimeIdentity(
-            run_id=f"run_{uuid.uuid4().hex}",
-            task_id="root",
+        self.agent_runtime = self.agent_runner.prepare_runtime(
             agent_id=agent.agent_id,
-            session_id=self.session_id,
-        )
-        self.agent_runtime = self.runtime_factory.build(
-            identity=identity,
             provider=self.custom_provider,
             model_override=self.model_name,
+            session_id=self.session_id,
             cwd=self.cwd,
             approval_callback=self._approval_callback,
         )
@@ -789,7 +778,7 @@ class MiaREPL:
         self.console.print(
             Panel(
                 banner_content,
-                title="[bold #FF7A00]🥕 Mia v0.2.0[/bold #FF7A00]",
+                title="[bold #FF7A00]🥕 Mia v0.6.0[/bold #FF7A00]",
                 border_style="#2D3342",
                 padding=(0, 1),
             )

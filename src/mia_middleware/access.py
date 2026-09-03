@@ -23,7 +23,13 @@ TOOL_EFFECTS: dict[str, ToolEffect] = {
 }
 
 _SECRET_KEY_PARTS = ("api_key", "apikey", "token", "secret", "authorization", "password")
-_SECRET_VALUE_RE = re.compile(r"(?i)(?:bearer\s+|sk-|ghp_|xoxb-)[^\s,;]+")
+_SECRET_VALUE_RE = re.compile(r"(?i)(?:bearer\s+|sk-|ghp_|gho_|github_pat_|xoxb-|xoxp-)[^\s,;]+")
+_SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?i)(?P<key_quote>[\"']?)(?P<key>[A-Za-z0-9_-]*(?:api[-_]?key|"
+    r"apikey|token|secret|authorization|password))(?P=key_quote)"
+    r"(?P<separator>\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|"
+    r"(?:[A-Za-z]+\s+)?[^\s,;]+)"
+)
 
 
 class PolicyRejectedError(PermissionError):
@@ -227,7 +233,10 @@ def sanitize_arguments(value: Any, key: str = "") -> Any:
     if isinstance(value, list):
         return [sanitize_arguments(item, key) for item in value]
     if isinstance(value, str):
-        return _SECRET_VALUE_RE.sub("[REDACTED]", value)
+        redacted = _SECRET_ASSIGNMENT_RE.sub(
+            r"\g<key_quote>\g<key>\g<key_quote>\g<separator>[REDACTED]", value
+        )
+        return _SECRET_VALUE_RE.sub("[REDACTED]", redacted)
     return value
 
 

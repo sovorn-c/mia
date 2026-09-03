@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
+from unittest.mock import Mock
+
 import pytest
 from pydantic import ValidationError
 
@@ -100,6 +104,161 @@ async def test_agent_runner_emits_canonical_event_envelopes(tmp_path) -> None:
     assert all(isinstance(event, AgentEventEnvelope) for event in events)
     assert events[-1].agent_id == "mia"
     assert events[-1].event.type == "turn_complete"
+
+
+@pytest.mark.asyncio
+async def test_runner_rejects_unknown_agent_without_escaping(tmp_path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_events import RunErrorEvent
+    from mia_ai.providers.mock import MockProvider
+
+    runner = AgentRunner(agent_manager=AgentManager(agents_dir=tmp_path / "agents"))
+
+    events = [
+        event
+        async for event in runner.prompt(
+            "hello", agent_id="missing", provider=MockProvider(), cwd=tmp_path
+        )
+    ]
+
+    assert len(events) == 1
+    assert isinstance(events[0].event, RunErrorEvent)
+    assert events[0].agent_id == "missing"
+
+
+@pytest.mark.asyncio
+async def test_runner_rejects_session_traversal_without_writing_outside(tmp_path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_events import RunErrorEvent
+    from mia_ai.providers.mock import MockProvider
+
+    runner = AgentRunner(agent_manager=AgentManager(agents_dir=tmp_path / "agents"))
+
+    events = [
+        event
+        async for event in runner.prompt(
+            "hello", session_id="../outside", provider=MockProvider(), cwd=tmp_path
+        )
+    ]
+
+    assert len(events) == 1
+    assert isinstance(events[0].event, RunErrorEvent)
+    assert "/" not in events[0].session_id
+    assert not (tmp_path / "outside.jsonl").exists()
+
+
+@pytest.mark.asyncio
+async def test_runner_propagates_cancellation_after_emitting_event(tmp_path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_events import RunErrorEvent
+    from mia_ai.providers.base import LLMProvider
+    from mia_ai.types import ChatMessage, StreamChunk, ToolDefinition
+
+    started = asyncio.Event()
+
+    class BlockingProvider(LLMProvider):
+        async def stream(
+            self,
+            *,
+            model: str,
+            messages: list[ChatMessage],
+            tools: list[ToolDefinition] | None = None,
+            system: str | None = None,
+            temperature: float = 0.7,
+            max_tokens: int | None = None,
+        ) -> AsyncIterator[StreamChunk]:
+            started.set()
+            await asyncio.Event().wait()
+            yield StreamChunk(type="finish")
+
+    runner = AgentRunner(agent_manager=AgentManager(agents_dir=tmp_path / "agents"))
+    seen = []
+
+    async def consume() -> None:
+        async for event in runner.prompt("hello", provider=BlockingProvider(), cwd=tmp_path):
+            seen.append(event)
+
+    task = asyncio.create_task(consume())
+    await asyncio.wait_for(started.wait(), timeout=1)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert isinstance(seen[-1].event, RunErrorEvent)
+    assert seen[-1].event.cancelled is True
+
+
+@pytest.mark.asyncio
+async def test_research_coordinator_failure_is_attributed(tmp_path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_events import RunErrorEvent
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_ai.providers.mock import MockProvider
+
+    provider = MockProvider()
+    provider.queue_text_response("findings")
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    identity = RuntimeIdentity(
+        run_id="run-specialist",
+        task_id="specialist",
+        agent_id="architect",
+        session_id="session-specialist",
+    )
+    specialist = AgentRuntimeFactory(agent_manager=manager).build(
+        identity=identity, provider=provider, cwd=tmp_path
+    )
+    factory = Mock(spec=AgentRuntimeFactory)
+    factory.build.side_effect = [specialist, RuntimeError("coordinator failed")]
+    runner = AgentRunner(factory=factory, agent_manager=manager)
+
+    events = [event async for event in runner.prompt("research", agent_id="research")]
+
+    assert isinstance(events[-1].event, RunErrorEvent)
+    assert events[-1].event.stage == "coordinator"
+
+
+@pytest.mark.asyncio
+async def test_research_factory_failure_is_sanitized(tmp_path) -> None:
+    from unittest.mock import Mock
+
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_events import RunErrorEvent
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+
+    factory = Mock(spec=AgentRuntimeFactory)
+    factory.build.side_effect = RuntimeError("Authorization: Bearer secret-token")
+    runner = AgentRunner(
+        factory=factory,
+        agent_manager=AgentManager(agents_dir=tmp_path / "agents"),
+    )
+
+    events = [
+        event
+        async for event in runner.prompt("research", agent_id="research", session_id="../outside")
+    ]
+
+    assert len(events) == 1
+    assert isinstance(events[0].event, RunErrorEvent)
+    assert events[0].event.error == "Authorization: [REDACTED]"
+    assert events[0].agent_id == "architect"
+    assert "/" not in events[0].session_id
+
+
+def test_error_redacts_plain_credential_assignments() -> None:
+    from mia_middleware.access import sanitize_arguments
+
+    assert sanitize_arguments("api_key=supersecret") == "api_key=[REDACTED]"
+    assert sanitize_arguments("token: supersecret") == "token: [REDACTED]"
+    assert sanitize_arguments("password='secret value'") == "password=[REDACTED]"
+    assert "supersecret" not in sanitize_arguments('{"api_key": "supersecret"}')
+    assert "super secret" not in sanitize_arguments("{'api_key': 'super secret'}")
+    assert sanitize_arguments("Authorization: Basic abc123") == "Authorization: [REDACTED]"
+    assert "gho_secret" not in sanitize_arguments("provider failed: gho_secret")
 
 
 def test_run_error_event_is_sanitized_and_attributed() -> None:

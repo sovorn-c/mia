@@ -476,48 +476,51 @@ def test_repl_scoped_model_picker(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_repl_resume_and_tree_fork(tmp_path: Path) -> None:
-    session_dir = tmp_path / "sessions"
+    session_dir = tmp_path / "agents" / "mia" / "sessions"
     mock = MockProvider()
-    repl = MiaREPL(cwd=tmp_path, custom_provider=mock)
+    repl = MiaREPL(
+        cwd=tmp_path,
+        custom_provider=mock,
+        agent_manager=AgentManager(agents_dir=tmp_path / "agents"),
+    )
 
-    with patch.object(repl.agent_mgr, "get_session_dir", return_value=session_dir):
-        repl.session_id = "saved-session"
-        repl._init_harness()
-        assert repl.harness is not None
-        mock.queue_text_response("Root answer")
-        await repl.execute_turn("Root question")
-        mock.queue_text_response("Second answer")
-        await repl.execute_turn("Second question")
+    repl.session_id = "saved-session"
+    repl._init_harness()
+    assert repl.harness is not None
+    mock.queue_text_response("Root answer")
+    await repl.execute_turn("Root question")
+    mock.queue_text_response("Second answer")
+    await repl.execute_turn("Second question")
 
-        entries = JsonlSessionStore(session_dir / "saved-session.jsonl").load_entries()
-        first_user = next(entry for entry in entries if isinstance(entry, MessageEntry))
+    entries = JsonlSessionStore(session_dir / "saved-session.jsonl").load_entries()
+    first_user = next(entry for entry in entries if isinstance(entry, MessageEntry))
 
-        repl.session_id = "new-session"
-        repl._init_harness()
-        with patch("mia_cli.repl.interactive_select", return_value="saved-session"):
-            assert repl.handle_slash_command("/resume") is True
-        assert repl.session_id == "saved-session"
-        assert repl.harness is not None
-        assert [message.content for message in repl.harness.messages] == [
-            "Root question",
-            "Root answer",
-            "Second question",
-            "Second answer",
-        ]
+    repl.session_id = "new-session"
+    repl._init_harness()
+    with patch("mia_cli.repl.interactive_select", return_value="saved-session"):
+        assert repl.handle_slash_command("/resume") is True
+    assert repl.session_id == "saved-session"
+    assert repl.harness is not None
+    assert [message.content for message in repl.harness.messages] == [
+        "Root question",
+        "Root answer",
+        "Second question",
+        "Second answer",
+    ]
 
-        with patch("mia_cli.repl.interactive_select", return_value=first_user.id):
-            assert repl.handle_slash_command("/tree") is True
-        assert [message.content for message in repl.harness.messages] == ["Root question"]
+    with patch("mia_cli.repl.interactive_select", return_value=first_user.id):
+        assert repl.handle_slash_command("/tree") is True
+    assert [message.content for message in repl.harness.messages] == ["Root question"]
 
-        mock.queue_text_response("Fork answer")
-        await repl.execute_turn("Fork question")
-        assert repl.harness.messages[-1].content == "Fork answer"
+    mock.queue_text_response("Fork answer")
+    await repl.execute_turn("Fork question")
+    assert repl.harness.messages[-1].content == "Fork answer"
 
-        (session_dir / "old-session.jsonl").write_text("", encoding="utf-8")
-        repl.delete_session("old-session")
-        assert not (session_dir / "old-session.jsonl").exists()
-        with pytest.raises(ValueError, match="active session"):
-            repl.delete_session("saved-session")
+    (session_dir / "old-session.jsonl").write_text("", encoding="utf-8")
+    repl.delete_session("old-session")
+    assert not (session_dir / "old-session.jsonl").exists()
+    with pytest.raises(ValueError, match="active session"):
+        repl.delete_session("saved-session")
 
 
 @pytest.mark.asyncio

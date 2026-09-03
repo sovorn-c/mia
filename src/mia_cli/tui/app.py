@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import Awaitable
 from pathlib import Path
 from typing import Any
 
@@ -15,12 +18,15 @@ from textual.widgets import Static
 from mia_agent.agent_runner import AgentRunner
 from mia_agent.agents import AgentManager
 from mia_agent.events import AssistantChunkEvent, StepEndEvent, TurnCompleteEvent
-from mia_agent.runtime_events import AgentEventEnvelope, RunErrorEvent
+from mia_agent.runtime_events import AgentEventEnvelope, error_envelope
+from mia_agent.runtime_models import RuntimeIdentity
 from mia_ai.providers.base import LLMProvider
 from mia_cli.tui.panes import AgentPaneContainer
 from mia_cli.tui.sidebar import AgentSidebar
 from mia_cli.tui.theme import MIA_THEME_CSS
+from mia_cli.tui.widgets.approval_modal import ApprovalModal
 from mia_cli.tui.widgets.prompt_editor import MiaPromptEditor
+from mia_middleware.access import ApprovalCallback, ApprovalRequest
 
 
 class MiaHeader(Static):
@@ -44,7 +50,7 @@ class MiaHeader(Static):
         cost_str = f"${self.total_cost:.4f}" if self.total_cost > 0 else "$0.0000"
         return Text.assemble(
             ("🥕 MIA ", "bold #FF7A00"),
-            ("v0.2.0  ", "dim #9CA3AF"),
+            ("v0.6.0  ", "dim #9CA3AF"),
             ("│  Model: ", "#9CA3AF"),
             (f"{self.model_name}  ", "bold #38BDF8"),
             ("│  Tokens: ", "#9CA3AF"),
@@ -90,6 +96,7 @@ class MiaApp(App[None]):
         model_name: str = "mimo-v2.5",
         cwd: Path | None = None,
         provider: LLMProvider | None = None,
+        approval_callback: ApprovalCallback | None = None,
     ) -> None:
         super().__init__()
         self.agent_manager = agent_manager or AgentManager()
@@ -97,7 +104,8 @@ class MiaApp(App[None]):
         self.model_name = model_name
         self.cwd = cwd or Path.cwd()
         self.provider = provider
-        self.active_agent_id = "mia"
+        self.approval_callback = approval_callback or self._request_tool_approval
+        self.active_agent_id = self.agent_manager.default_agent().agent_id
         self.total_tokens = 0
         self.total_cost = 0.0
 
@@ -114,6 +122,24 @@ class MiaApp(App[None]):
             yield self.pane_container
         yield self.prompt_editor
         yield self.footer_widget
+
+    def _request_tool_approval(self, request: ApprovalRequest) -> Awaitable[bool]:
+        """Open a modal and resolve the Tool approval when the user responds."""
+        future = asyncio.get_running_loop().create_future()
+
+        def complete(result: bool | None) -> None:
+            if not future.done():
+                future.set_result(bool(result))
+
+        self.push_screen(
+            ApprovalModal(
+                action_name=request.tool_name,
+                details=json.dumps(request.arguments, ensure_ascii=False),
+                agent_id=request.agent_id or self.active_agent_id,
+            ),
+            complete,
+        )
+        return future
 
     def on_mount(self) -> None:
         """Load the persisted Agent roster without creating transient workers."""
@@ -210,18 +236,17 @@ class MiaApp(App[None]):
                 model_override=self.model_name,
                 cwd=self.cwd,
                 session_id=f"tui_{agent_id}",
+                approval_callback=self.approval_callback,
             ):
                 self._process_event_in_main_thread(envelope)
         except Exception as exc:
-            self._process_event_in_main_thread(
-                AgentEventEnvelope(
-                    run_id="tui",
-                    task_id="root",
-                    agent_id=agent_id,
-                    session_id=f"tui_{agent_id}",
-                    event=RunErrorEvent(stage="tui", error=str(exc)),
-                )
+            identity = RuntimeIdentity(
+                run_id="tui",
+                task_id="root",
+                agent_id=agent_id,
+                session_id=f"tui_{agent_id}",
             )
+            self._process_event_in_main_thread(error_envelope(identity, "tui", str(exc)))
 
     def action_switch_agent(self, index: int) -> None:
         """Switch Agent via an Alt+number shortcut."""

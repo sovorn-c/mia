@@ -4,7 +4,7 @@
 - **Epic:** e06 — Agent Core Clean Break
 - **Type:** refactor
 - **Risk:** P1
-- **Status:** in-progress
+- **Status:** passing
 
 ## User story
 

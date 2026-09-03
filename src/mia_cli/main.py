@@ -14,6 +14,7 @@ from mia_agent.agent_runner import AgentRunner
 from mia_agent.agents import AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
+from mia_agent.events import AgentErrorEvent
 from mia_agent.plugins import PluginManager
 from mia_agent.runtime_events import RunErrorEvent
 from mia_agent.runtime_factory import AgentRuntimeFactory
@@ -53,15 +54,16 @@ def _confirm_tool(request: ApprovalRequest) -> bool:
 
 async def _run_agent_loop(
     prompt_text: str,
-    agent_name: str = "mia",
+    agent_name: str | None = None,
     model_override: str | None = None,
     session_id: str | None = None,
     compaction_threshold: float | None = None,
     context_window: int | None = None,
     cwd: Path | None = None,
     approval_callback: ApprovalCallback | None = None,
-) -> None:
+) -> bool:
     renderer = RichStreamRenderer(console=console)
+    had_error = False
     manager = AgentManager()
     runner = AgentRunner(
         factory=AgentRuntimeFactory(agent_manager=manager),
@@ -78,18 +80,22 @@ async def _run_agent_loop(
         approval_callback=approval_callback,
     ):
         if isinstance(envelope.event, RunErrorEvent):
+            had_error = True
             renderer._stop_status()
             console.print(
                 f"[bold red]Run error ({envelope.event.stage}): {envelope.event.error}[/bold red]"
             )
             continue
+        if isinstance(envelope.event, AgentErrorEvent):
+            had_error = True
         renderer.on_event(envelope.event)
+    return not had_error
 
 
 @app.command(name="run")
 def run_command(
     prompt: Annotated[str, typer.Option("--prompt", "-p", help="User instruction prompt")] = "",
-    agent: Annotated[str, typer.Option("--agent", help="Active Agent ID")] = "mia",
+    agent: Annotated[str | None, typer.Option("--agent", help="Active Agent ID")] = None,
     model: Annotated[str | None, typer.Option("--model", "-m", help="LLM model identifier")] = None,
     resume: Annotated[
         str | None, typer.Option("--resume", "-r", help="Session ID to resume")
@@ -110,7 +116,7 @@ def run_command(
     """Execute one prompt through a named Agent in headless streaming mode."""
     if not prompt:
         prompt = typer.prompt("Prompt")
-    asyncio.run(
+    succeeded = asyncio.run(
         _run_agent_loop(
             prompt_text=prompt,
             agent_name=agent,
@@ -121,6 +127,8 @@ def run_command(
             approval_callback=_confirm_tool,
         )
     )
+    if not succeeded:
+        raise typer.Exit(code=1)
 
 
 @app.command(name="login")
@@ -428,5 +436,6 @@ def main_callback(
 
         from mia_cli.repl import MiaREPL
 
-        repl = MiaREPL(model=model, agent=agent or "mia", session_id=session)
+        selected_agent = agent or AgentManager().default_agent().agent_id
+        repl = MiaREPL(model=model, agent=selected_agent, session_id=session)
         repl.run()

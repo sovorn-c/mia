@@ -68,8 +68,10 @@ tasks:
       - tests/test_tui_app.py
     verify: >-
       grep -q 'textual>=' pyproject.toml
-      && uv build --offline
-      && uv run --offline python scripts/check-wheel-surface.py
+      && wheel_dir=$(mktemp -d)
+      && trap 'rm -rf "$wheel_dir"' EXIT
+      && uv build --offline --out-dir "$wheel_dir"
+      && uv run --offline python scripts/check-wheel-surface.py "$wheel_dir"/*.whl
   - id: e06s04t04
     title: Run the clean-break quality gate
     status: passing

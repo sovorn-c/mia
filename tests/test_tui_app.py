@@ -62,6 +62,34 @@ async def test_tui_prompt_routes_through_agent_runner(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_tui_passes_approval_callback_to_agent_runner(tmp_path: Path) -> None:
+    from mia_ai.providers.mock import MockProvider
+
+    approvals = []
+    provider = MockProvider()
+    provider.queue_tool_call_response("write_file", {"path": "approved.txt", "content": "approved"})
+    provider.queue_text_response("The file is ready.")
+    app = MiaApp(
+        agent_manager=AgentManager(agents_dir=tmp_path / "agents"),
+        model_name="mock-model",
+        cwd=tmp_path,
+        provider=provider,
+        approval_callback=lambda request: approvals.append(request) or True,
+    )
+
+    async with app.run_test() as pilot:
+        textarea = app.query_one("#prompt-textarea")
+        textarea.text = "Write the file"
+        await pilot.press("enter")
+        for _ in range(3):
+            await pilot.pause()
+
+    assert approvals
+    assert approvals[0].tool_name == "write_file"
+    assert (tmp_path / "approved.txt").read_text() == "approved"
+
+
+@pytest.mark.asyncio
 async def test_tui_switches_and_persists_a_new_agent(tmp_path: Path) -> None:
     manager = AgentManager(agents_dir=tmp_path / "agents")
     app = MiaApp(agent_manager=manager, model_name="mock-model", cwd=tmp_path)

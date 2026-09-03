@@ -36,4 +36,4 @@ uv run --offline ruff check .
 uv run --offline mypy src
 ```
 
-See `specs/verifications/e06s03-verify.yaml` for the completed runtime evidence.
+See `specs/verifications/e06s04-verify.yaml` for the final runtime and epic evidence.

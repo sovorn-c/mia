@@ -41,4 +41,4 @@ artifacts:
   epic: specs/epics/e06-zero-legacy-agent-core/epic.yaml
   impact: specs/IMPACT_LATEST.md
   release_plan: specs/release-plan.yaml
-next_skill: audit-code
+next_skill: release-branch

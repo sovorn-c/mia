@@ -114,6 +114,37 @@ def test_agent_ids_are_rejected_before_filesystem_access(tmp_path: Path) -> None
     assert list(tmp_path.rglob("outside.json")) == []
 
 
+def test_agent_session_paths_reject_traversal_and_symlinks(tmp_path: Path) -> None:
+    manager = make_manager(tmp_path)
+    outside_root = tmp_path / "outside-root"
+    outside_root.mkdir()
+    linked_root = tmp_path / "linked-root"
+    linked_root.symlink_to(outside_root, target_is_directory=True)
+    with pytest.raises(ValueError, match="storage root"):
+        AgentManager(agents_dir=linked_root)
+    with pytest.raises(ValueError, match="Unsafe Agent ID"):
+        manager.get_session_path("mia", "../escaped")
+    assert not (tmp_path / "agents" / "escaped.jsonl").exists()
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir(exist_ok=True)
+    (agents_dir / "evil").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(ValueError, match="symlink"):
+        manager.get_session_dir("evil")
+    with pytest.raises(ValueError, match="symlink"):
+        manager.create_agent("evil", display_name="Evil")
+
+    manager.create_agent("safe", display_name="Safe")
+    session_dir = manager.get_session_dir("safe")
+    outside_session = outside / "outside.jsonl"
+    outside_session.write_text("", encoding="utf-8")
+    (session_dir / "session.jsonl").symlink_to(outside_session)
+    with pytest.raises(ValueError, match="symlink"):
+        manager.get_session_path("safe", "session")
+
+
 def test_factory_builds_agent_owned_runtime_and_session(tmp_path: Path) -> None:
     manager = make_manager(tmp_path)
     manager.create_agent(

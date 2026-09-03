@@ -278,6 +278,16 @@ class AgentHarness:
                 self.session_store.append_entry(a_entry)
                 self._last_entry_id = a_entry.id
 
+            if provider_error is not None:
+                if self.session_store and self._last_entry_id:
+                    self.session_store.append_entry(LeafEntry(entry_id=self._last_entry_id))
+                yield StepEndEvent(
+                    step_index=step_index,
+                    input_tokens=step_usage.input_tokens,
+                    output_tokens=step_usage.output_tokens,
+                )
+                return
+
             # If tool calls were made, execute them
             if tool_calls:
                 for tc in tool_calls:
