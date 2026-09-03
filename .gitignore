@@ -41,8 +41,18 @@ htmlcov/
 # Mia local sessions, environment, and agent workspace files
 .mia/
 .env
-AGENTS.md
-CLAUDE.md
-CONVENTIONS.md
 docs/
+
+# Local agent cockpit
+specs/
+CLAUDE.md
+AGENTS.md
+CONVENTIONS.md
+claude.md
+agents.md
+.codex/
+.codex
+.pi/
+.pi
+graphify-out/
 
