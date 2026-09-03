@@ -18,4 +18,4 @@ epics:
     slug: "zero-legacy-agent-core"
     title: "Agent Core Clean Break"
     status: "completed"
-    directory: "specs/epics/e06-zero-legacy-agent-core"
+    directory: "specs/epics/archive/e06-zero-legacy-agent-core"

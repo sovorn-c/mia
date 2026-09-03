@@ -38,7 +38,7 @@ key_decisions:
     rationale: Existing behavior remains useful without adding a public orchestration abstraction.
 artifacts:
   scope: specs/product/SCOPE_LATEST.yaml
-  epic: specs/epics/e06-zero-legacy-agent-core/epic.yaml
+  epic: specs/epics/archive/e06-zero-legacy-agent-core/epic.yaml
   impact: specs/IMPACT_LATEST.md
   release_plan: specs/release-plan.yaml
-next_skill: release-branch
+next_skill: survey-context

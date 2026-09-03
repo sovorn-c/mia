@@ -1,18 +1,17 @@
 workflow_mode: solo-git
 session:
-  active_flow: release
-  active_epic_id: e06
-  active_story_id: e06s04
+  active_flow: plan
+  active_epic_id: null
+  active_story_id: null
   target_version: 0.6.0
 handoff:
-  next_skill: release-branch
+  next_skill: survey-context
   summary: >-
-    Independent re-review and the final offline quality gate pass on the isolated branch. Session and
-    Agent path boundaries, Run error handling, cancellation, credential redaction, CLI/TUI approval and
-    selection, public-surface gates, wheel inspection, and version metadata are hardened. Ready for the
-    release-branch decision.
+    Agent Core Clean Break was merged into main and its completed capsule was archived. Release gates
+    passed: 165 tests, 91% scoped coverage, 97% business-boundary coverage, clean Ruff/Mypy/build,
+    public-surface and wheel checks, and independent review. The next increment can now be scoped.
 git:
-  branch: e06-zero-legacy-agent-core
+  branch: main
 metrics:
   story_start: '2026-09-01T08:57:36Z'
   skill_timings:
