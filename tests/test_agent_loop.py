@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import pytest
 
+from mia_agent.events import AgentErrorEvent
 from mia_agent.harness import AgentHarness
 from mia_ai.providers.mock import MockProvider
+from mia_ai.types import StreamChunk
 
 
 @pytest.mark.asyncio
@@ -45,6 +47,22 @@ async def test_single_turn_text_response() -> None:
     assert harness.messages[0].role == "user"
     assert harness.messages[1].role == "assistant"
     assert harness.messages[1].content == "Here is the answer!"
+
+
+@pytest.mark.asyncio
+async def test_provider_error_does_not_emit_success() -> None:
+    class ErrorProvider(MockProvider):
+        async def stream(self, **kwargs):
+            yield StreamChunk(type="error", error="provider failed")
+            yield StreamChunk(type="finish", finish_reason="stop")
+
+    harness = AgentHarness(provider=ErrorProvider(), model="mock-model")
+
+    events = [event async for event in harness.prompt("Hello Mia")]
+
+    assert any(isinstance(event, AgentErrorEvent) for event in events)
+    assert events[-1].type == "step_end"
+    assert not any(event.type == "turn_complete" for event in events)
 
 
 @pytest.mark.asyncio

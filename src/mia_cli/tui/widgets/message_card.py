@@ -15,7 +15,7 @@ from textual.widgets import Static
 class UserMessageCard(Vertical):
     """Card displaying a user instruction sent to an agent."""
 
-    def __init__(self, prompt: str, target_agent: str = "coder", **kwargs: Any) -> None:
+    def __init__(self, prompt: str, target_agent: str = "mia", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.prompt = prompt
         self.target_agent = target_agent

@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mia-ai"
-version = "0.1.0"
-description = "A hybrid Python coding-agent harness combining Pi's simplicity with DSH middleware guardrails."
+version = "0.6.0"
+description = "A modular local Agent core with streaming providers, guarded Tools, Plugins, Delegation, and Sessions."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"

@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from mia_agent.agents import BUILTIN_AGENTS
 from mia_agent.agents.model import Agent, normalize_plugin_id
 from mia_agent.agents.storage import atomic_write_json
 from mia_agent.plugin_catalog import NotesPlugin
@@ -111,10 +112,9 @@ class PluginManager:
         if record.version != manifest.version or record.api_version != manifest.api_version:
             raise ValueError(f"Installed Plugin '{manifest.plugin_id}' is incompatible")
 
-        inspection = self.agent_manager.inspect_agent(agent_id)
-        if inspection["source"] == "builtin":
+        agent = self.agent_manager.get_agent(agent_id)
+        if agent.agent_id in BUILTIN_AGENTS:
             raise ValueError("Cannot enable Plugins for immutable built-in Agents")
-        agent = Agent.model_validate(inspection["agent"])
         if manifest.plugin_id in agent.plugins:
             return agent
         updated = Agent.model_validate(
@@ -127,10 +127,9 @@ class PluginManager:
         """Validate and persist configuration for an enabled Plugin."""
         manifest = self.get_manifest(plugin_id)
         self._installed_record(manifest)
-        inspection = self.agent_manager.inspect_agent(agent_id)
-        if inspection["source"] == "builtin":
+        agent = self.agent_manager.get_agent(agent_id)
+        if agent.agent_id in BUILTIN_AGENTS:
             raise ValueError("Cannot configure Plugins for immutable built-in Agents")
-        agent = Agent.model_validate(inspection["agent"])
         if manifest.plugin_id not in agent.plugins:
             raise ValueError(
                 f"Plugin '{manifest.plugin_id}' is not enabled for Agent '{agent.agent_id}'"
@@ -149,10 +148,9 @@ class PluginManager:
         """Disable one Plugin for later Runs while retaining its configuration and data."""
         manifest = self.get_manifest(plugin_id)
         self._installed_record(manifest)
-        inspection = self.agent_manager.inspect_agent(agent_id)
-        if inspection["source"] == "builtin":
+        agent = self.agent_manager.get_agent(agent_id)
+        if agent.agent_id in BUILTIN_AGENTS:
             raise ValueError("Cannot disable Plugins for immutable built-in Agents")
-        agent = Agent.model_validate(inspection["agent"])
         if manifest.plugin_id not in agent.plugins:
             return agent
         updated = Agent.model_validate(

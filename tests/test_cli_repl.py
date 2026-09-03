@@ -8,7 +8,6 @@ import os
 import select
 import subprocess
 import sys
-from collections.abc import AsyncIterator
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -17,7 +16,6 @@ from prompt_toolkit.document import Document
 from rich.console import Console
 
 from mia_agent.agents import AgentManager
-from mia_agent.orchestration import OrchestrationErrorEvent, OrchestrationEventEnvelope
 from mia_agent.session.entries import MessageEntry
 from mia_agent.session.jsonl import JsonlSessionStore
 from mia_ai.providers.mock import MockProvider
@@ -57,8 +55,7 @@ def test_command_discovery_has_one_truthful_canonical_list() -> None:
 
     canonical = [command for command, _ in COMMAND_HINTS]
 
-    assert len(canonical) == 18
-    assert "/mode" in canonical
+    assert len(canonical) == 17
     assert "/scoped-models" in canonical
     assert "/stop" not in canonical
     assert canonical == SLASH_COMMANDS
@@ -72,9 +69,8 @@ def test_help_contract_describes_only_implemented_behavior(tmp_path: Path) -> No
 
     repl.handle_slash_command("/help")
     help_output = repl.console.export_text()
-    assert "18 Canonical Slash Commands" in help_output
+    assert "17 Canonical Slash Commands" in help_output
     assert "shortcuts" not in help_output
-    assert "/mode" in help_output
     assert "/stop" not in help_output
 
     repl.console = Console(record=True, width=120)
@@ -165,11 +161,7 @@ def test_double_escape_opens_tree_only_on_second_press() -> None:
 
 
 def test_repl_agent_command_selects_named_agent(tmp_path: Path) -> None:
-    manager = AgentManager(
-        agents_dir=tmp_path / "agents",
-        profiles_dir=tmp_path / "profiles",
-        sessions_base_dir=tmp_path / "legacy-sessions",
-    )
+    manager = AgentManager(agents_dir=tmp_path / "agents")
     manager.create_agent("researcher", display_name="Researcher", tools=[])
     repl = MiaREPL(
         agent="mia",
@@ -183,7 +175,6 @@ def test_repl_agent_command_selects_named_agent(tmp_path: Path) -> None:
     assert "Mia" in repl.console.export_text()
     assert repl.handle_slash_command("/agent researcher") is True
     assert repl.agent_id == "researcher"
-    assert repl.profile_name == "researcher"
 
 
 def test_repl_slash_commands_suite(tmp_path: Path) -> None:
@@ -193,12 +184,6 @@ def test_repl_slash_commands_suite(tmp_path: Path) -> None:
     assert repl.handle_slash_command("/") is True
     assert repl.handle_slash_command("/?") is True
     assert repl.handle_slash_command("/help") is True
-    assert repl.handle_slash_command("/profile") is True
-    assert repl.handle_slash_command("/mode") is True
-    assert repl.handle_slash_command("/mode research") is True
-    assert repl.mode_name == "research"
-    assert repl.handle_slash_command("/mode single") is True
-    assert repl.mode_name == "single"
     assert repl.handle_slash_command("/cost") is True
     assert repl.handle_slash_command("/stats") is True
     assert repl.handle_slash_command("/diff") is True
@@ -216,8 +201,6 @@ def test_repl_slash_commands_suite(tmp_path: Path) -> None:
     assert repl.handle_slash_command("/clear") is True
     assert repl.handle_slash_command("/model mock-model") is True
     assert repl.model_name == "mock-model"
-    assert repl.handle_slash_command("/profile architect") is True
-    assert repl.profile_name == "architect"
     assert repl.handle_slash_command("/quit") is False
 
 
@@ -242,22 +225,6 @@ def test_session_resume_hint_is_shown_on_quit_and_eof(tmp_path: Path) -> None:
     assert "mia --session session_resume_me" in eof_output
 
 
-def test_invalid_profile_preserves_active_runtime(tmp_path: Path) -> None:
-    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
-    repl.console = Console(record=True, width=120)
-    original_harness = repl.harness
-    original_runtime = repl.agent_runtime
-
-    assert repl.handle_slash_command("/profile does-not-exist") is True
-
-    assert repl.profile_name == "coding"
-    assert repl.harness is original_harness
-    assert repl.agent_runtime is original_runtime
-    output = repl.console.export_text()
-    assert "not found" in output
-    assert "Available profiles" in output
-
-
 def test_diff_reports_git_failure_instead_of_clean_tree(tmp_path: Path) -> None:
     repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
     repl.console = Console(record=True, width=120)
@@ -274,42 +241,6 @@ def test_diff_reports_git_failure_instead_of_clean_tree(tmp_path: Path) -> None:
     output = repl.console.export_text()
     assert "not a git repository" in output
     assert "Working tree clean" not in output
-
-
-def test_repl_mode_selection_and_invalid_mode(tmp_path: Path) -> None:
-    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
-
-    assert repl.handle_slash_command("/mode") is True
-    assert repl.mode_name == "single"
-    assert repl.handle_slash_command("/mode research") is True
-    assert repl.mode_name == "research"
-    assert repl.handle_slash_command("/mode single") is True
-    assert repl.mode_name == "single"
-    assert repl.handle_slash_command("/mode unknown") is True
-    assert repl.mode_name == "single"
-
-
-@pytest.mark.asyncio
-async def test_repl_stops_status_on_orchestration_error(tmp_path: Path) -> None:
-    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
-
-    async def error_events() -> AsyncIterator[OrchestrationEventEnvelope]:
-        yield OrchestrationEventEnvelope(
-            mode="research",
-            run_id="run-error",
-            task_id="specialist",
-            agent_id="specialist",
-            profile="architect",
-            event=OrchestrationErrorEvent(stage="specialist", error="specialist unavailable"),
-        )
-
-    with (
-        patch.object(repl.mode_runtime, "prompt", return_value=error_events()),
-        patch.object(repl.stream_renderer, "_stop_status") as stop_status,
-    ):
-        await repl.execute_turn("research this repository")
-
-    stop_status.assert_called_once()
 
 
 def test_repl_pi_style_auth_and_model_scoper(tmp_path: Path) -> None:
@@ -545,48 +476,51 @@ def test_repl_scoped_model_picker(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_repl_resume_and_tree_fork(tmp_path: Path) -> None:
-    session_dir = tmp_path / "sessions"
+    session_dir = tmp_path / "agents" / "mia" / "sessions"
     mock = MockProvider()
-    repl = MiaREPL(cwd=tmp_path, custom_provider=mock)
+    repl = MiaREPL(
+        cwd=tmp_path,
+        custom_provider=mock,
+        agent_manager=AgentManager(agents_dir=tmp_path / "agents"),
+    )
 
-    with patch.object(repl.profile_mgr, "get_session_dir", return_value=session_dir):
-        repl.session_id = "saved-session"
-        repl._init_harness()
-        assert repl.harness is not None
-        mock.queue_text_response("Root answer")
-        await repl.execute_turn("Root question")
-        mock.queue_text_response("Second answer")
-        await repl.execute_turn("Second question")
+    repl.session_id = "saved-session"
+    repl._init_harness()
+    assert repl.harness is not None
+    mock.queue_text_response("Root answer")
+    await repl.execute_turn("Root question")
+    mock.queue_text_response("Second answer")
+    await repl.execute_turn("Second question")
 
-        entries = JsonlSessionStore(session_dir / "saved-session.jsonl").load_entries()
-        first_user = next(entry for entry in entries if isinstance(entry, MessageEntry))
+    entries = JsonlSessionStore(session_dir / "saved-session.jsonl").load_entries()
+    first_user = next(entry for entry in entries if isinstance(entry, MessageEntry))
 
-        repl.session_id = "new-session"
-        repl._init_harness()
-        with patch("mia_cli.repl.interactive_select", return_value="saved-session"):
-            assert repl.handle_slash_command("/resume") is True
-        assert repl.session_id == "saved-session"
-        assert repl.harness is not None
-        assert [message.content for message in repl.harness.messages] == [
-            "Root question",
-            "Root answer",
-            "Second question",
-            "Second answer",
-        ]
+    repl.session_id = "new-session"
+    repl._init_harness()
+    with patch("mia_cli.repl.interactive_select", return_value="saved-session"):
+        assert repl.handle_slash_command("/resume") is True
+    assert repl.session_id == "saved-session"
+    assert repl.harness is not None
+    assert [message.content for message in repl.harness.messages] == [
+        "Root question",
+        "Root answer",
+        "Second question",
+        "Second answer",
+    ]
 
-        with patch("mia_cli.repl.interactive_select", return_value=first_user.id):
-            assert repl.handle_slash_command("/tree") is True
-        assert [message.content for message in repl.harness.messages] == ["Root question"]
+    with patch("mia_cli.repl.interactive_select", return_value=first_user.id):
+        assert repl.handle_slash_command("/tree") is True
+    assert [message.content for message in repl.harness.messages] == ["Root question"]
 
-        mock.queue_text_response("Fork answer")
-        await repl.execute_turn("Fork question")
-        assert repl.harness.messages[-1].content == "Fork answer"
+    mock.queue_text_response("Fork answer")
+    await repl.execute_turn("Fork question")
+    assert repl.harness.messages[-1].content == "Fork answer"
 
-        (session_dir / "old-session.jsonl").write_text("", encoding="utf-8")
-        repl.delete_session("old-session")
-        assert not (session_dir / "old-session.jsonl").exists()
-        with pytest.raises(ValueError, match="active session"):
-            repl.delete_session("saved-session")
+    (session_dir / "old-session.jsonl").write_text("", encoding="utf-8")
+    repl.delete_session("old-session")
+    assert not (session_dir / "old-session.jsonl").exists()
+    with pytest.raises(ValueError, match="active session"):
+        repl.delete_session("saved-session")
 
 
 @pytest.mark.asyncio

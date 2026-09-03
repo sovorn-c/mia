@@ -1,7 +1,7 @@
 story_id: e06s01
 title: Canonical Agent Run Runtime
 spec: e06s01-canonical-agent-run-runtime.md
-status: failing
+status: passing
 bcps: 8
 risk: P0
 delta: MODIFIED
@@ -14,7 +14,7 @@ scenarios:
 tasks:
   - id: e06s01t01
     title: Specify Agent-only runtime contracts
-    status: failing
+    status: passing
     risk: P0
     depends_on: []
     story_steps: [1]
@@ -36,7 +36,7 @@ tasks:
       categories: ["Runtime", "Security Review", "Contract tests"]
   - id: e06s01t02
     title: Extract canonical runtime contracts
-    status: failing
+    status: passing
     risk: P0
     depends_on: [e06s01t01]
     story_steps: [2]
@@ -61,7 +61,7 @@ tasks:
       categories: ["Runtime", "Delegation", "Events"]
   - id: e06s01t03
     title: Make AgentRuntimeFactory Agent-only
-    status: failing
+    status: passing
     risk: P0
     depends_on: [e06s01t02]
     story_steps: [3]
@@ -85,7 +85,7 @@ tasks:
       categories: ["Runtime", "Access Control", "Plugin", "Security Review"]
   - id: e06s01t04
     title: Preserve Research Agent and Delegation behavior
-    status: failing
+    status: passing
     risk: P0
     depends_on: [e06s01t03]
     story_steps: [4]
@@ -109,7 +109,7 @@ tasks:
       categories: ["Research Agent", "Delegation", "Failure semantics"]
   - id: e06s01t05
     title: Verify canonical runtime consumers
-    status: failing
+    status: passing
     risk: P1
     depends_on: [e06s01t04]
     story_steps: [5, 6]

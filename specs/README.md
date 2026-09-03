@@ -2,7 +2,7 @@
 
 All planning documents for this project live here.
 
-- `product/` owns product scope, vision, glossary, and release snapshots.
+- `product/` owns product scope, vision, and glossary.
 - `epics/` owns epic manifests, story requirements, and runnable task plans.
 - `tech-architecture/` owns architecture, security, test, design, impact, and refactor plans.
 - `adr/` owns durable architectural decisions.
@@ -11,4 +11,3 @@ All planning documents for this project live here.
 - `state.yaml` owns active workflow and handoff state.
 - `release-plan.yaml` owns release intent and epic ordering.
 - `execution-status.yaml` owns delivery progress.
-- `planning-status.yaml` owns discover-phase progress.

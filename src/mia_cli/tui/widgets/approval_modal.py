@@ -36,7 +36,7 @@ class ApprovalModal(ModalScreen[bool]):
     }
     """
 
-    def __init__(self, action_name: str, details: str, agent_id: str = "coder") -> None:
+    def __init__(self, action_name: str, details: str, agent_id: str = "mia") -> None:
         super().__init__()
         self.action_name = action_name
         self.details = details

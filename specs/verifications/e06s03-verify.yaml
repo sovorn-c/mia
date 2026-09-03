@@ -1,0 +1,43 @@
+story_id: e06s03
+verified_at: '2026-09-02T06:16:17Z'
+verifier: develop-tdd
+branch: e06-zero-legacy-agent-core
+status: passing
+checks:
+  canonical_boundary:
+    passed: true
+    note: 'Agent rejects historical field/access aliases; AgentManager is native-only and Sessions are Agent-owned.'
+  runtime_and_cli:
+    passed: true
+    note: 'AgentRunner, AgentRuntimeFactory, Delegation, CLI, REPL, and TUI use canonical contracts.'
+  removed_packages:
+    passed: true
+    note: 'Retired source packages and modules are absent; package inspection is repeated by the final gate.'
+  tests:
+    passed: true
+    count: 151
+    command: uv run --offline pytest
+  coverage:
+    passed: true
+    command: ./scripts/check-coverage.sh
+    scoped_core_percent: 89
+    business_boundary_percent: 97
+  format:
+    passed: true
+    command: uv run --offline ruff format --check .
+  lint:
+    passed: true
+    command: uv run --offline ruff check .
+  typecheck:
+    passed: true
+    command: uv run --offline mypy src
+  build:
+    passed: true
+    command: uv build --offline
+  terminal_verdict:
+    passed: true
+    exit_code: 0
+    note: 'Single contiguous quality-gate run completed successfully.'
+known_infrastructure_gaps:
+  - 'No separate security scanner is available in this checkout; affected-path review found no new security findings.'
+  - 'The repository consistency helper is not present in this checkout; all specs YAML parsed successfully.'

@@ -1,102 +1,71 @@
-# specs/product/SCOPE_LATEST.yaml — bounded PRD for the zero-legacy Agent core
+# specs/product/SCOPE_LATEST.yaml — bounded PRD for the Agent core clean break
 initiative_id: e06
-initiative_name: Zero-Legacy Agent Core
+initiative_name: Agent Core Clean Break
 status: approved
-supersedes: specs/epics/archive/e05-plugin-agent-template-foundation
 
-core_value: >
-  Give Mia one clear Agent identity and one trusted execution path so users and contributors do not
-  need to understand obsolete Profile, Mode, Workflow, or Herd architecture.
-
-summary: >
-  Mia's released Agent, Plugin, Delegation, Session, access, and provider capabilities remain useful,
-  but the active project still exposes the historical Profile/Mode/Herd model through runtime code,
-  aliases, CLI commands, tests, and documentation. This initiative makes Agent the only public identity
-  and routes every supported frontend through the existing headless AgentRunner and AgentRuntimeFactory.
-
-  The Textual TUI remains supported as a shallow frontend. It will receive only the changes required to
-  select persisted Agents and stream AgentRunner events; no visual redesign, new TUI feature set, or
-  second orchestration backend is introduced. Legacy user files are not deleted or migrated automatically.
+core_value: >-
+  Give Mia one clear Agent identity and one trusted execution path so users and contributors can work
+  from the same public model.
+summary: >-
+  Mia keeps its released Agent, Plugin, Delegation, Session, access, provider, and Textual capabilities.
+  This initiative makes Agent the only public identity, routes every supported frontend through
+  AgentRunner and AgentRuntimeFactory, and removes obsolete project artifacts without touching user files.
 
 in_scope:
   - id: e06s01
     name: Canonical Agent Run Runtime
-    description: >
-      Extract clean Agent/Run/Task/Session runtime contracts, make AgentRunner and AgentRuntimeFactory
-      the sole active execution path, and preserve provider, access, Plugin, Delegation, Session,
-      attribution, Research Agent, and truthful failure behavior.
-
+    description: >-
+      Keep clean Agent/Run/Task/Session contracts and one AgentRunner/AgentRuntimeFactory execution path.
   - id: e06s02
     name: Agent-Native Textual TUI Adapter
-    description: >
-      Keep mia tui and its existing visual behavior while replacing Herd-backed transient workers with
-      AgentManager and AgentRunner. The TUI lists and selects named Agents and streams their events.
-
+    description: >-
+      Keep mia tui and its visual behavior while listing named Agents and streaming AgentRunner events.
   - id: e06s03
-    name: Remove Legacy Identity, Orchestration, and CLI Surfaces
-    description: >
-      Remove Profile, Mode, Workflow, Herd, compatibility aliases, projections, re-export shims,
-      legacy storage fallback, old access labels, and deprecated CLI/REPL commands from active code and tests.
-
+    name: Canonical Runtime and CLI Surface
+    description: >-
+      Keep one Agent schema, native registry, access vocabulary, runtime, CLI, REPL, and Session path.
   - id: e06s04
-    name: Purge Legacy Project Surfaces and Verify the Clean Break
-    description: >
-      Rewrite living guidance and specifications, delete legacy-only documentation and verification
-      artifacts, retain Textual packaging, and prove the built package and source tree expose only the
-      Agent-centric model.
+    name: Project Surface Purge and Clean-Break Gate
+    description: >-
+      Rewrite active guidance and specifications, remove obsolete repository artifacts, retain Textual
+      packaging, and prove the source and package surfaces are clean.
 
 out_of_scope:
   - id: oos-01
     name: TUI redesign or feature expansion
-    rationale: >
-      The TUI is a frontend compatibility surface, not this initiative's product focus. Preserve its
-      current interaction shape and return later for deeper UX work.
-
+    rationale: Preserve the current interaction shape; deeper UX work needs a separate scope.
   - id: oos-02
-    name: Automatic migration or deletion of user legacy files
-    rationale: >
-      Removing compatibility code does not authorize destructive filesystem changes. Existing Profile
-      and legacy Session files remain untouched and are simply no longer read by Mia.
-
+    name: Automatic migration or deletion of user files
+    rationale: Repository cleanup must not make destructive filesystem changes outside the checkout.
   - id: oos-03
-    name: New Skills, Plugins, providers, channels, or Agent collaboration features
-    rationale: >
-      e05 established the current Plugin and Template proof. This initiative only removes identity and
-      orchestration confusion; new capabilities need their own bounded scope.
-
+    name: New Skills, Plugins, providers, channels, or collaboration features
+    rationale: New capabilities need their own bounded scope.
   - id: oos-04
-    name: New multi-Agent orchestration framework
-    rationale: >
-      Existing bounded Delegation and the private Research Agent sequence are sufficient. No public
-      Workflow graph, Herd replacement, scheduler, mailbox, or autonomous swarm is added.
-
+    name: New multi-Agent runtime infrastructure
+    rationale: Existing bounded Delegation and private research sequencing are sufficient.
   - id: oos-05
-    name: Changing core AgentHarness semantics or access safeguards
-    rationale: >
-      The clean break changes composition and vocabulary, not the headless loop, middleware security,
-      redaction, approval, or full-access consent guarantees.
+    name: Changing AgentHarness semantics or access safeguards
+    rationale: This initiative changes composition and project vocabulary, not loop or security behavior.
 
 constraints:
   - Use Agent, Skill, Tool, Plugin, Task, Delegation, Run, and Session as the active domain vocabulary.
   - AgentRunner and AgentRuntimeFactory remain the only active prompt composition path.
-  - Keep AgentHarness headless and keep mia_agent independent from Rich, Textual, Typer, and prompt_toolkit.
-  - Keep the Textual dependency and mia tui command; make only the minimum Agent identity/backend changes.
-  - Existing Plugin, Delegation, Session, access, provider, and filesystem boundaries remain enforced.
-  - Do not read, project, rewrite, or delete legacy Profile/Session files.
-  - Use Python 3.12+, Pydantic boundaries, strict Mypy, Ruff, offline pytest, and the release coverage gate.
-  - Do not add a runtime dependency or a generic migration/compatibility framework.
+  - Keep AgentHarness headless and keep mia_agent independent from UI frameworks and terminal output.
+  - Keep the Textual dependency and mia tui command.
+  - Preserve Plugin, Delegation, Session, access, provider, filesystem, and redaction boundaries.
+  - Do not read, project, rewrite, or delete user files outside the repository.
+  - Use Python 3.12+, Pydantic boundaries, strict Mypy, Ruff, offline pytest, and coverage gates.
+  - Do not add a runtime dependency or a generic migration framework.
 
 success_criteria:
-  - Every supported prompt frontend uses AgentRunner and AgentRuntimeFactory exactly once per execution path.
-  - Runtime identities and event envelopes contain Agent, Run, Task, and Session attribution without Mode/Profile fields.
-  - Research remains a private Research Agent sequence with truthful failure and cancellation behavior.
-  - AgentManager resolves only built-in and native persisted Agents, with Agent-owned Session paths.
-  - Profile, Mode, Workflow, Herd, projection, alias, and re-export modules are absent from active source and package output.
-  - Canonical CLI/REPL use Agent commands only; removed flags and slash commands fail as unknown interfaces.
-  - mia tui remains launchable and streams events for persisted or built-in Agents without importing Herd/Profile code.
-  - Existing Plugin, Delegation, access, Session, provider, filesystem, and Agent Template tests remain green after import updates.
-  - Living docs and instructions teach only the Agent-centric model; legacy-only docs/specs are removed.
-  - Ruff, strict Mypy, offline pytest, coverage, package build, YAML validation, and forbidden-symbol scans pass.
+  - Every supported prompt frontend uses AgentRunner and AgentRuntimeFactory once per execution path.
+  - Runtime identities and event envelopes contain Agent, Run, Task, and Session attribution.
+  - AgentManager resolves built-in and native persisted Agents with Agent-owned Session paths.
+  - Obsolete source packages, commands, aliases, and project artifacts are absent.
+  - mia tui remains launchable and streams events for built-in or persisted Agents.
+  - Existing Plugin, Delegation, access, Session, provider, filesystem, and Template tests remain green.
+  - Living docs and instructions teach only the Agent-centric model.
+  - Ruff, Mypy, pytest, coverage, package build, YAML validation, and public-surface scans pass.
 
 references:
   - specs/product/VISION_LATEST.yaml

@@ -15,8 +15,8 @@ from mia_agent.delegation_models import (
     TaskResult,
 )
 from mia_agent.events import AgentErrorEvent, AssistantChunkEvent, TurnCompleteEvent
-from mia_agent.orchestration_models import AgentRuntime, RuntimeIdentity
 from mia_agent.runtime_factory import AgentRuntimeFactory
+from mia_agent.runtime_models import AgentRuntime, RuntimeIdentity
 from mia_agent.session.entries import CustomEntry
 from mia_ai.providers.base import LLMProvider
 from mia_middleware.access import compose_effective_access, sanitize_arguments

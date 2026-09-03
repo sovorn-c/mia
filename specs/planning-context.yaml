@@ -1,46 +1,44 @@
-# specs/planning-context.yaml — active planning context for e06
-feature_name: Zero-Legacy Agent Core
-problem_statement: >
-  Mia's active source, tests, CLI, TUI backend, and living documentation still expose the historical
-  Profile/Mode/Workflow/Herd identity model beside the canonical Agent model. This creates duplicate
-  registries and execution roots and makes public contribution confusing.
+# specs/planning-context.yaml — active context for e06
+feature_name: Agent Core Clean Break
+problem_statement: >-
+  Mia's active source, interfaces, tests, and living documentation must present one clear Agent model
+  and one trusted execution path.
 actors:
   - Public Mia users selecting and running named Agents
   - Contributors working on Agent, Skill, Tool, Plugin, Delegation, Run, and Session code
   - Maintainers protecting access, attribution, persistence, and package boundaries
-  - Textual TUI users who need the existing frontend to keep working
-solution_summary: >
-  Establish AgentRunner and AgentRuntimeFactory as the only active runtime path, keep the Textual TUI
-  as a shallow Agent-native frontend, remove Profile/Mode/Workflow/Herd implementation and compatibility
-  shims, and purge active docs/specs/tests of the old identity vocabulary.
+  - Textual users relying on the retained frontend
+solution_summary: >-
+  AgentRunner and AgentRuntimeFactory are the only active runtime path. The Textual frontend remains a
+  shallow Agent-native adapter, and retired project artifacts are removed while user files remain untouched.
 constraints:
   - Keep mia tui and Textual; do not redesign the UI or add new TUI features.
-  - Do not migrate, rewrite, or delete legacy user files; make them unreachable by code.
+  - Do not migrate, rewrite, or delete user files outside the repository.
   - Preserve Agent, Plugin, Delegation, Session, access, provider, filesystem, and redaction behavior.
-  - No new runtime dependency; use strict Mypy, Ruff, offline tests, and coverage gates.
-  - No public Mode or Workflow object; private sequencing may remain inside the Research Agent runner.
-  - No second orchestration root, generic compatibility layer, or re-export shim.
+  - Use strict Mypy, Ruff, offline tests, coverage, YAML validation, and wheel checks.
+  - Keep research sequencing private to AgentRunner; expose no public graph object.
+  - Do not create a second runtime root, generic compatibility layer, or re-export shim.
 out_of_scope:
   - TUI visual redesign, new widgets, and new interaction model
   - New Skills, Plugins, providers, channels, scheduling, or collaboration semantics
-  - Automatic legacy data migration or deletion
-  - Public Workflow graphs, Herd replacement, autonomous swarms, or unrestricted worker messaging
+  - Automatic migration or deletion of user data
+  - New multi-Agent runtime infrastructure or unrestricted messaging
 success_criteria:
-  - Canonical Agent-only runtime and frontend paths pass focused and full quality gates.
-  - Forbidden legacy symbols and imports are absent from active source, tests, docs, and package output.
-  - Existing supported features remain green.
+  - Canonical Agent runtime and frontend paths pass focused and full quality gates.
+  - Runtime identities and events contain Agent, Run, Task, and Session attribution.
+  - AgentManager resolves built-in and native persisted Agents with Agent-owned Sessions.
+  - Retired source packages, commands, aliases, and project artifacts are absent.
+  - Textual remains declared, launchable, tested, and packaged.
 key_decisions:
-  - decision: Keep the Textual frontend and replace only its Herd/Profile backend dependencies.
-    rationale: The UI is not the identity model; preserving it avoids unnecessary product loss while deferring deeper TUI work.
-  - decision: Delete compatibility code instead of translating old files or commands.
-    rationale: The requested clean break targets public clarity, and Git history is sufficient preservation.
-  - decision: Retain private Research Agent sequencing without a public Workflow model.
-    rationale: It is useful existing behavior and fits the Agent-centric target as internal implementation logic.
-  - decision: Keep Textual installed.
-    rationale: mia tui remains a supported shallow frontend in this initiative.
+  - decision: Keep Textual as a shallow frontend backed by AgentManager and AgentRunner.
+    rationale: Preserve the supported interface without creating another runtime composition root.
+  - decision: Remove obsolete project surfaces instead of adding a migration framework.
+    rationale: Git history preserves repository artifacts, and user files are not touched.
+  - decision: Retain private research sequencing inside AgentRunner.
+    rationale: Existing behavior remains useful without adding a public orchestration abstraction.
 artifacts:
   scope: specs/product/SCOPE_LATEST.yaml
   epic: specs/epics/e06-zero-legacy-agent-core/epic.yaml
   impact: specs/IMPACT_LATEST.md
   release_plan: specs/release-plan.yaml
-next_skill: kickoff-branch
+next_skill: release-branch

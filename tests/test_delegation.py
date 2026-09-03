@@ -13,7 +13,8 @@ from mia_agent.agents import AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.delegation import TaskRequest, TaskResult
-from mia_agent.orchestration import AgentRuntimeFactory, RuntimeIdentity
+from mia_agent.runtime_factory import AgentRuntimeFactory
+from mia_agent.runtime_models import RuntimeIdentity
 from mia_ai.providers.mock import MockProvider
 from mia_ai.types import StreamChunk
 
@@ -21,8 +22,6 @@ from mia_ai.types import StreamChunk
 def make_manager(tmp_path: Path) -> AgentManager:
     return AgentManager(
         agents_dir=tmp_path / "agents",
-        profiles_dir=tmp_path / "profiles",
-        sessions_base_dir=tmp_path / "legacy-sessions",
     )
 
 

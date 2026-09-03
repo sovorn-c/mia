@@ -1,224 +1,141 @@
-# specs/product/GLOSSARY_LATEST.yaml — canonical Mia ubiquitous language
+# specs/product/GLOSSARY_LATEST.yaml — canonical Mia language
 
 document:
-  title: "Mia Agent-Centric Ubiquitous Language"
-  status: "approved"
-  authority: "This YAML file is the source of truth for Mia target product terminology."
-  projection: "specs/UBIQUITOUS_LANGUAGE_LATEST.md"
+  title: "Mia Agent-Centric Language"
+  status: approved
+  authority: "Source of truth for target product terminology."
+  projection: specs/UBIQUITOUS_LANGUAGE_LATEST.md
   scope: "Agent identity, capability, extension, delegation, and execution"
-  product_vision: "specs/product/VISION_LATEST.yaml"
-  current_runtime_model: "specs/tech-architecture/tech-stack.md#10-implemented-e03-orchestration-domain-model"
-  decision_note: >
-    Historical e03 artifacts and current Profile, ModeRuntime, and Workflow code describe implemented
-    behavior and are not rewritten by this product-language update.
+  product_vision: specs/product/VISION_LATEST.yaml
+  runtime_model: specs/tech-architecture/tech-stack.md
 
 invariant: "Agent acts; Skill guides; Tool enables; Plugin extends; Agent delegates through Mia Core."
 
 classification_rules:
-  - "Agent is the single canonical term for a durable configured and addressable intelligent entity."
-  - "Do not create separate Assistant, Profile, or Bot domain entities."
-  - "A Run is one execution of an Agent, not a second identity concept."
-  - "A Skill is reusable instruction or procedure; a Tool is callable capability; a Plugin is installable executable code."
-  - "A Task is bounded work and Delegation routes a Task from one Agent to another through Mia Core."
-  - "Workflow is private implementation logic, not a required public product object."
-  - "Mode and Profile are current-runtime compatibility terms, not target product concepts."
-  - "Mia Core owns identity, routing, permissions, sessions, event integrity, cancellation, and truthful outcomes."
+  - "Agent is the only durable configured and addressable intelligent identity."
+  - "A Run is one execution of one Agent."
+  - "A Skill is reusable instruction or procedure; a Tool is callable capability."
+  - "A Plugin is an installable extension that contributes declared capabilities."
+  - "A Task is bounded work; Delegation routes it between Agents through Mia Core."
+  - "Mia Core owns identity, routing, access, Sessions, event integrity, cancellation, and outcomes."
 
 terms:
-  - term: "Mia Core"
-    group: "Foundation"
-    kind: "platform_core"
-    definition: >
-      Lightweight runtime that owns Agent execution and routing, provider contracts, Sessions,
-      Tools, permissions, Plugins, events, cancellation, and truthful outcomes.
-    responsibility: "Provides the trusted execution and collaboration boundary"
-    avoid: ["Agent", "workflow engine", "plugin-owned runtime"]
-
-  - term: "Agent"
-    group: "Identity"
-    kind: "durable_entity"
-    identity: "agent_id"
-    definition: >
-      Durable, addressable intelligent entity combining identity, configuration, private state,
-      capabilities, access policy, Plugins, and collaboration behavior.
+  - term: Mia Core
+    group: Foundation
+    kind: platform_core
+    definition: "Trusted runtime boundary for Agent execution, routing, policy, persistence, and events."
+    responsibility: "Provides the core execution and collaboration boundary"
+  - term: Agent
+    group: Identity
+    kind: durable_entity
+    identity: agent_id
+    definition: "Durable addressable identity combining instructions, configuration, state, Tools, Plugins, and access policy."
     responsibility: "Receives work, acts through capabilities, and may delegate Tasks"
-    examples: ["Mia", "Research Agent", "Coding Agent", "Finance Agent", "Travel Agent"]
-    avoid: ["Assistant", "Profile", "Bot", "Agent Instance", "Mode"]
-
-  - term: "Skill"
-    group: "Capabilities"
-    kind: "reusable_instruction"
-    definition: "Reusable instructions, knowledge, or procedure teaching an Agent how to perform a capability."
+    examples: [Mia, Research Agent, Coding Agent]
+  - term: Skill
+    group: Capabilities
+    kind: reusable_instruction
+    definition: "Reusable instruction, knowledge, or procedure that guides an Agent."
     responsibility: "Guides behavior"
-    avoid: ["Tool", "Plugin", "mandatory Workflow", "scheduled Routine"]
-
-  - term: "Tool"
-    group: "Capabilities"
-    kind: "callable_capability"
-    definition: "Callable capability exposed through Mia Core's validated invocation boundary."
+  - term: Tool
+    group: Capabilities
+    kind: callable_capability
+    definition: "Callable capability exposed through Mia Core policy and middleware."
     responsibility: "Enables an Agent to act"
-    avoid: ["Skill", "Plugin package", "unmediated function call"]
-
-  - term: "Plugin"
-    group: "Extension"
-    kind: "installable_executable_extension"
-    definition: >
-      Installable executable package contributing Skills, Tools, integrations, hooks, private
-      workflows, Agent templates, or other declared capabilities.
-    responsibility: "Extends Agents through explicit installation and enablement"
-    avoid: ["Agent identity", "core runtime owner", "permission bypass"]
-
-  - term: "Agent Template"
-    group: "Extension"
-    kind: "distributable_definition"
-    definition: >
-      Shareable starting definition that becomes an independently configured Agent when installed,
-      without carrying another user's private credentials, memory, or Sessions.
+  - term: Plugin
+    group: Extension
+    kind: installable_extension
+    definition: "Installable executable extension contributing declared Tools, Skills, or Templates."
+    responsibility: "Extends an Agent through explicit lifecycle controls"
+  - term: Agent Template
+    group: Extension
+    kind: distributable_definition
+    definition: "Shareable starting definition used to create an independent Agent without private state."
     responsibility: "Distributes a reusable Agent design"
-    avoid: ["running Agent", "shared private state", "Plugin runtime"]
-
-  - term: "Task"
-    group: "Collaboration"
-    kind: "runtime_entity"
-    identity: "task_id"
-    definition: "Bounded work assigned to an Agent with one attributable terminal outcome."
-    responsibility: "Owns one bounded unit of work"
-    avoid: ["backlog task", "Skill", "Workflow Stage", "unbounded conversation"]
-
-  - term: "Delegation"
-    group: "Collaboration"
-    kind: "core_protocol"
-    definition: >
-      Core-mediated assignment of a Task from one Agent to another with attributable input, output,
-      permission context, failure, rejection, cancellation, and timeout semantics.
-    responsibility: "Coordinates Agents without requiring a public workflow graph"
-    avoid: ["unattributed prompt injection", "shared mutable Session", "silent privilege escalation"]
-
-  - term: "Run"
-    group: "Execution"
-    kind: "runtime_entity"
-    identity: "run_id"
+  - term: Task
+    group: Collaboration
+    kind: runtime_entity
+    identity: task_id
+    definition: "Bounded work assigned to an Agent with one attributable outcome."
+    responsibility: "Owns one unit of assigned work"
+  - term: Delegation
+    group: Collaboration
+    kind: core_protocol
+    definition: "Core-mediated assignment of a Task between Agents with access, attribution, timeout, and cancellation semantics."
+    responsibility: "Coordinates Agents safely"
+  - term: Run
+    group: Execution
+    kind: runtime_entity
+    identity: run_id
     definition: "One prompt- or Task-scoped execution of one Agent."
-    responsibility: "Owns execution progress and one truthful terminal outcome"
-    avoid: ["Agent identity", "CLI command", "Session", "long-lived process"]
-
-  - term: "Runtime Identity"
-    group: "Execution"
-    kind: "value_object"
-    definition: >
-      Immutable attribution identifying the Run, executing Agent, Session, and optional caller Agent
-      and delegated Task.
-    responsibility: "Attributes execution and collaboration events"
-    avoid: ["Agent configuration", "Session metadata", "display-only label"]
-
-  - term: "Event Envelope"
-    group: "Execution"
-    kind: "value_object"
-    definition: "Attribution wrapper retaining one unchanged agent, Tool, Delegation, or core event."
+    responsibility: "Owns execution progress and its truthful outcome"
+  - term: Runtime Identity
+    group: Execution
+    kind: value_object
+    definition: "Immutable attribution for Run, Agent, Session, and optional Task lineage."
+    responsibility: "Attributes runtime activity"
+  - term: Event Envelope
+    group: Execution
+    kind: value_object
+    definition: "Immutable attribution wrapper around an Agent or core event."
     responsibility: "Makes emitted activity attributable"
-    avoid: ["chat message", "mutable status record", "unattributed log"]
-
-  - term: "Session"
-    group: "Conversation"
-    kind: "durable_entity"
-    identity: "session_id"
-    definition: "Durable conversation history owned under a defined Agent boundary and reusable across Runs."
-    responsibility: "Persists context without becoming an Agent or Run"
-    avoid: ["Agent", "Run", "transcript file", "active process"]
-
-  - term: "Session Tree"
-    group: "Conversation"
-    kind: "aggregate"
-    definition: "Append-only directed tree of immutable Session Entries with one active root-to-leaf path."
+  - term: Session
+    group: Conversation
+    kind: durable_entity
+    identity: session_id
+    definition: "Append-only conversation history owned by an Agent and reused across Runs."
+    responsibility: "Persists context"
+  - term: Session Tree
+    group: Conversation
+    kind: aggregate
+    definition: "Append-only tree of immutable Session Entries with one active path."
     responsibility: "Owns durable conversation branching"
-    avoid: ["Agent hierarchy", "Run tree", "mutable transcript"]
-
-  - term: "Turn"
-    group: "Execution"
-    kind: "runtime_entity"
-    identity: "turn_index within one Run"
-    definition: "One input and the Agent activity needed to reach one terminal Turn outcome."
+  - term: Turn
+    group: Execution
+    kind: runtime_entity
+    identity: turn_index
+    definition: "One input and the Agent activity needed for one terminal result."
     responsibility: "Owns ordered model interaction Steps"
-    avoid: ["Run", "Task", "message"]
-
-  - term: "Step"
-    group: "Execution"
-    kind: "runtime_entity"
-    identity: "step_index within one Turn"
-    definition: "One model interaction within a Turn, including requested Tool Invocations and usage."
+  - term: Step
+    group: Execution
+    kind: runtime_entity
+    identity: step_index
+    definition: "One model interaction within a Turn, including Tool Invocations and usage."
     responsibility: "Advances a Turn"
-    avoid: ["Workflow Stage", "Task", "Turn"]
-
-  - term: "Tool Invocation"
-    group: "Execution"
-    kind: "runtime_entity"
-    identity: "call_id within one Step"
-    definition: "One model-requested Tool execution carried through core policy and middleware to a terminal result."
+  - term: Tool Invocation
+    group: Execution
+    kind: runtime_entity
+    identity: call_id
+    definition: "One Tool request carried through core policy and middleware to a terminal result."
     responsibility: "Executes one authorized capability request"
-    avoid: ["Task", "Step", "unmediated Plugin call"]
-
-  - term: "Access Policy"
-    group: "Trust"
-    kind: "policy"
-    definition: >
-      One of read-only, approval-required, or full-access, governing whether enabled capabilities
-      may mutate state and whether side effects require confirmation.
-    responsibility: "Controls approval and mutation while Capability Scope defines which capabilities exist"
-    avoid: ["Agent", "sandbox", "Tool allowlist", "no-tools access level"]
-
-  - term: "Capability Scope"
-    group: "Trust"
-    kind: "policy"
-    definition: "Declared Tools, Plugins, resources, and delegation targets an Agent may use."
+  - term: Access Policy
+    group: Trust
+    kind: policy
+    definition: "One of read-only, approval-required, or full-access, controlling mutation and confirmation."
+    responsibility: "Controls side effects"
+  - term: Capability Scope
+    group: Trust
+    kind: policy
+    definition: "Declared Tools, Plugins, resources, and delegation targets available to an Agent."
     responsibility: "Bounds available capability"
-    avoid: ["Access Policy", "identity", "system prompt"]
-
-  - term: "Terminal Outcome"
-    group: "State semantics"
-    kind: "value"
-    definition: "Final success, failure, rejection, cancellation, timeout, or skip result after which an entity cannot transition."
+  - term: Terminal Outcome
+    group: State semantics
+    kind: value
+    definition: "Final success, failure, rejection, cancellation, timeout, or skip result."
     responsibility: "Closes a Run, Task, Turn, or Tool Invocation truthfully"
-    avoid: ["done", "stop reason", "status message"]
-
-non_canonical_terms:
-  - term: "Assistant"
-    resolution: "Use Agent. Assistant may remain ordinary descriptive prose only."
-  - term: "Profile"
-    resolution: "Use Agent in the target model. Profile describes current implementation until migration."
-  - term: "Bot"
-    resolution: "Use Agent. Bot may describe a messaging-channel presentation only."
-  - term: "Agent Instance"
-    resolution: "Use Agent for identity and Run for one execution."
-  - term: "Routine"
-    resolution: "Use Skill for a reusable procedure; scheduling is a separate future capability."
-  - term: "Workflow"
-    resolution: "Use only for private multi-step logic inside an Agent, Skill, or Plugin."
-  - term: "Mode"
-    resolution: "Use only when documenting current ModeRuntime behavior; do not add it to the target model."
 
 relationships:
   - "An Agent selects Skills, Tools, Plugins, Access Policy, and Capability Scope."
-  - "One Agent can own multiple Sessions and execute multiple sequential Runs."
-  - "A Plugin may contribute an Agent Template but does not become the installed Agent."
-  - "A Skill may describe a procedure; a Plugin may execute one; neither requires Workflow as a public object."
+  - "One Agent can own multiple Sessions and execute multiple Runs."
+  - "A Plugin can contribute an Agent Template but does not become the created Agent."
   - "One caller Agent delegates one Task to one recipient Agent through Mia Core."
-  - "Mia Core enforces identity, routing, permissions, attribution, Session integrity, and Terminal Outcomes."
-  - "A Plugin cannot silently expand the Capability Scope of an Agent that enables it."
   - "A Run executes exactly one Agent and may originate from direct input or a delegated Task."
-  - "A Session preserves history across Runs under explicit Agent ownership rules."
-  - "A Turn belongs to one Run and may produce Tool Invocations or Delegations."
-  - "Profile, Mode, and ModeRuntime describe current implementation only and must not drive new target design."
+  - "Mia Core enforces identity, access, attribution, Session integrity, and Terminal Outcomes."
 
 flagged_ambiguities:
-  - term: "Agent scope"
-    resolution: "Agent combines durable identity and configuration; Run is its temporary execution."
-  - term: "Plugin freedom"
-    resolution: "Plugins may implement broad domain behavior but remain constrained by core security, permission, attribution, and lifecycle contracts."
-  - term: "Agent isolation"
-    resolution: "Agent is a logical identity and state boundary; filesystem or process isolation must be implemented and claimed separately."
-  - term: "Task"
+  - term: Agent scope
+    resolution: "Agent is durable identity and configuration; Run is temporary execution."
+  - term: Agent isolation
+    resolution: "Agent is a logical state boundary; filesystem or process isolation must be implemented and claimed separately."
+  - term: Task
     resolution: "Use Task for runtime work assigned to an Agent and backlog task for planning work."
-  - term: "Run"
-    resolution: "Use Run for Agent execution and `mia run` only for the CLI command."
-  - term: "Session"
-    resolution: "Use Session for durable history, not Agent identity or active execution."

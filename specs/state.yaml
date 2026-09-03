@@ -1,17 +1,18 @@
 workflow_mode: solo-git
 session:
-  active_flow: plan
+  active_flow: release
   active_epic_id: e06
-  active_story_id: e06s01
+  active_story_id: e06s04
   target_version: 0.6.0
 handoff:
-  next_skill: kickoff-branch
-  summary: 'e05 Plugin and Agent Template Foundation is merged and archived. e06 Zero-Legacy
-    Agent Core is planned: keep the Textual TUI as a shallow Agent frontend, replace
-    its Herd backend, remove Profile/Mode/Workflow/Herd compatibility code, and purge
-    active legacy docs/specs. All e06 tasks start failing until verified.'
+  next_skill: release-branch
+  summary: >-
+    Independent re-review and the final offline quality gate pass on the isolated branch. Session and
+    Agent path boundaries, Run error handling, cancellation, credential redaction, CLI/TUI approval and
+    selection, public-surface gates, wheel inspection, and version metadata are hardened. Ready for the
+    release-branch decision.
 git:
-  branch: main
+  branch: e06-zero-legacy-agent-core
 metrics:
   story_start: '2026-09-01T08:57:36Z'
   skill_timings:
@@ -23,6 +24,7 @@ metrics:
       calls: 5
       total_seconds: 10063.0
       avg_seconds: 2012.6
+      _start: '2026-09-02T05:35:22Z'
     verify-work:
       calls: 3
       total_seconds: 1103.0

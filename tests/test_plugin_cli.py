@@ -17,8 +17,6 @@ runner = CliRunner()
 def make_managers(tmp_path: Path) -> tuple[AgentManager, PluginManager]:
     agents = AgentManager(
         agents_dir=tmp_path / "agents",
-        profiles_dir=tmp_path / "profiles",
-        sessions_base_dir=tmp_path / "legacy-sessions",
     )
     agents.create_agent("alpha", tools=[])
     return agents, PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")

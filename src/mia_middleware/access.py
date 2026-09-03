@@ -22,14 +22,14 @@ TOOL_EFFECTS: dict[str, ToolEffect] = {
     "bash": "side-effecting",
 }
 
-_LEGACY_ACCESS: dict[str, AccessLevel] = {
-    "standard": "approval-required",
-    "read_only": "read-only",
-    "full_access": "full-access",
-    "no_tools": "approval-required",
-}
 _SECRET_KEY_PARTS = ("api_key", "apikey", "token", "secret", "authorization", "password")
-_SECRET_VALUE_RE = re.compile(r"(?i)(?:bearer\s+|sk-|ghp_|xoxb-)[^\s,;]+")
+_SECRET_VALUE_RE = re.compile(r"(?i)(?:bearer\s+|sk-|ghp_|gho_|github_pat_|xoxb-|xoxp-)[^\s,;]+")
+_SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?i)(?P<key_quote>[\"']?)(?P<key>[A-Za-z0-9_-]*(?:api[-_]?key|"
+    r"apikey|token|secret|authorization|password))(?P=key_quote)"
+    r"(?P<separator>\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|"
+    r"(?:[A-Za-z]+\s+)?[^\s,;]+)"
+)
 
 
 class PolicyRejectedError(PermissionError):
@@ -59,13 +59,6 @@ class AccessPolicy(BaseModel):
     def validate_access_level(cls, value: str) -> AccessLevel:
         return normalize_access_level(value)
 
-    @classmethod
-    def from_legacy(cls, value: str, capabilities: Sequence[str] | None = None) -> AccessPolicy:
-        return cls(
-            access_level=normalize_access_level(value),
-            capabilities=None if capabilities is None else set(capabilities),
-        )
-
 
 class ApprovalRequest(BaseModel):
     """Sanitized, attributable request for one side-effecting Tool call."""
@@ -80,8 +73,8 @@ class ApprovalRequest(BaseModel):
 
 
 def normalize_access_level(value: str) -> AccessLevel:
-    """Normalize the three target levels and deterministic legacy labels."""
-    normalized = _LEGACY_ACCESS.get(value.strip().lower(), value.strip().lower())
+    """Normalize one of the three supported access levels."""
+    normalized = value.strip().lower()
     if normalized not in {"read-only", "approval-required", "full-access"}:
         raise ValueError("Unknown access policy. Use read-only, approval-required, or full-access.")
     return normalized  # type: ignore[return-value]
@@ -240,7 +233,10 @@ def sanitize_arguments(value: Any, key: str = "") -> Any:
     if isinstance(value, list):
         return [sanitize_arguments(item, key) for item in value]
     if isinstance(value, str):
-        return _SECRET_VALUE_RE.sub("[REDACTED]", value)
+        redacted = _SECRET_ASSIGNMENT_RE.sub(
+            r"\g<key_quote>\g<key>\g<key_quote>\g<separator>[REDACTED]", value
+        )
+        return _SECRET_VALUE_RE.sub("[REDACTED]", redacted)
     return value
 
 

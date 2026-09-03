@@ -20,19 +20,18 @@ from mia_tools.bash import BashTool
 from mia_tools.fs import ReadFileTool, WriteFileTool
 
 
-def test_access_levels_map_legacy_values_and_unknown_tools_fail_closed() -> None:
-    assert normalize_access_level("read_only") == "read-only"
-    assert normalize_access_level("standard") == "approval-required"
-    assert normalize_access_level("full_access") == "full-access"
-    assert normalize_access_level("no_tools") == "approval-required"
+def test_access_levels_accept_only_canonical_values_and_fail_closed() -> None:
+    for value in ("read_only", "standard", "full_access", "no_tools", "auto"):
+        with pytest.raises(ValueError, match="Unknown access policy"):
+            normalize_access_level(value)
+    assert normalize_access_level("read-only") == "read-only"
+    assert normalize_access_level("approval-required") == "approval-required"
+    assert normalize_access_level("full-access") == "full-access"
     assert tool_effect("read_file") == "non-mutating"
     assert tool_effect("unknown_plugin_tool") == "side-effecting"
-    assert AccessPolicy.from_legacy("standard", ["read_file"]).access_level == "approval-required"
     assert ReadFileTool.effect == "non-mutating"
     assert WriteFileTool.effect == "side-effecting"
     assert BashTool.effect == "side-effecting"
-    with pytest.raises(ValueError, match="Unknown access policy"):
-        normalize_access_level("auto")
 
 
 def test_effective_access_alias_handles_policy_objects_and_one_sided_capabilities() -> None:
