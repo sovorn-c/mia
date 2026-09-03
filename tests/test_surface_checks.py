@@ -23,6 +23,19 @@ def test_public_surface_rejects_removed_module_filename(tmp_path: Path) -> None:
     assert "retired public surface" in result.stderr
 
 
+def test_public_surface_ignores_archived_specs(tmp_path: Path) -> None:
+    script = tmp_path / "check-public-surface.sh"
+    script.write_bytes((ROOT / "scripts/check-public-surface.sh").read_bytes())
+    retired_symbol = "Mode" + "Runtime"
+    archive = tmp_path / "specs" / "epics" / "archive"
+    archive.mkdir(parents=True)
+    (archive / "historical.md").write_text(retired_symbol, encoding="utf-8")
+
+    result = subprocess.run(["bash", str(script)], cwd=tmp_path, capture_output=True, text=True)
+
+    assert result.returncode == 0
+
+
 def test_wheel_surface_rejects_flattened_removed_module(tmp_path: Path) -> None:
     wheel = tmp_path / "fixture.whl"
     removed_module = "profiles" + ".py"

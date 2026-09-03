@@ -1,0 +1,247 @@
+story_id: e04s02
+story_title: "Agent-Owned State and Access Boundary"
+status: passing
+requirement_delta: MODIFIED
+bcps: 8
+tasks:
+  - id: e04s02t01
+    title: "Specify the complete access and ownership matrix"
+    status: passing
+    agent_type: "security-test-engineer"
+    risk: high
+    depends_on: [e04s01t06]
+    story_steps: [1]
+    scenarios:
+      - SC-e04s02-P0-01
+      - SC-e04s02-P0-02
+      - SC-e04s02-P0-03
+      - SC-e04s02-P0-04
+      - SC-e04s02-P0-05
+      - SC-e04s02-P0-06
+      - SC-e04s02-P0-07
+      - SC-e04s02-P1-08
+    work:
+      - "Expand tests/test_access_policy.py to cover exactly three access levels and every built-in Tool effect."
+      - "Specify legacy permission mappings, empty capability scope, unknown Tool behavior, missing/denied approval, explicit full-access, permanent guards, effective-access composition, and secret-free artifacts."
+      - "Use spies proving rejected Tools never reach the executor."
+    files:
+      - tests/test_access_policy.py
+      - tests/test_agents.py
+      - tests/test_credentials.py
+      - tests/test_middleware_pipeline.py
+    verify: >-
+      uv run --offline pytest tests/test_access_policy.py -k
+      'matrix or legacy or unknown or denial or full_access or permanent_guard or effective or secret'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s02 Agent-Owned State and Access Boundary"
+      sub_suite: "Access contracts"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Agent-Owned State and Access Boundary"
+      feature: "Trust model"
+      tags: [e04, e04s02, access, policy, contract, security]
+
+  - id: e04s02t02
+    title: "Classify Tool effects and enforce three access levels"
+    status: passing
+    agent_type: "middleware-security-engineer"
+    risk: high
+    depends_on: [e04s02t01]
+    story_steps: [2]
+    scenarios:
+      - SC-e04s02-P0-01
+      - SC-e04s02-P0-02
+      - SC-e04s02-P0-03
+      - SC-e04s02-P0-04
+      - SC-e04s02-P0-05
+    work:
+      - "Add fail-closed Tool effect metadata: read_file non-mutating; write_file, edit_file, bash side-effecting; unknown defaults side-effecting."
+      - "Extend the e04s01 access middleware to enforce read-only, approval-required, and full-access."
+      - "Map standard/read_only/no_tools/full_access legacy values without adding a fourth target access level."
+      - "Preserve capability filtering and SecurityGuard under all decisions."
+      - "Expose typed policy rejection distinct from Tool execution failure."
+    files:
+      - src/mia_tools/base.py
+      - src/mia_tools/fs.py
+      - src/mia_tools/bash.py
+      - src/mia_middleware/access.py
+      - src/mia_middleware/pipeline.py
+      - src/mia_agent/harness.py
+      - tests/test_access_policy.py
+      - tests/test_middleware_pipeline.py
+      - tests/test_agent_loop.py
+    verify: >-
+      uv run --offline pytest tests/test_access_policy.py tests/test_middleware_pipeline.py
+      tests/test_agent_loop.py -k
+      'effect or capability or read_only or approval or full_access or rejected or security'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s02 Agent-Owned State and Access Boundary"
+      sub_suite: "Middleware enforcement"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Agent-Owned State and Access Boundary"
+      feature: "Access enforcement"
+      tags: [e04, e04s02, tools, middleware, rejection, security]
+
+  - id: e04s02t03
+    title: "Add safe approval and full-access frontend adapters"
+    status: passing
+    agent_type: "cli-security-engineer"
+    risk: high
+    depends_on: [e04s02t02]
+    story_steps: [3]
+    scenarios:
+      - SC-e04s02-P0-02
+      - SC-e04s02-P0-03
+      - SC-e04s02-P0-04
+      - SC-e04s02-P0-07
+    work:
+      - "Render one sanitized approval request per side-effecting invocation in interactive and print frontends."
+      - "Require an explicit confirmation before selecting or persisting full-access."
+      - "Ensure missing terminal input or declined confirmation rejects execution."
+      - "Redact credential-like values from arguments and never place approval UI imports in core modules."
+    files:
+      - src/mia_cli/main.py
+      - src/mia_cli/repl.py
+      - src/mia_cli/interactive_input.py
+      - src/mia_middleware/access.py
+      - tests/test_cli_repl.py
+      - tests/test_cli_print_mode.py
+      - tests/test_access_policy.py
+    verify: >-
+      uv run --offline pytest tests/test_access_policy.py tests/test_cli_repl.py
+      tests/test_cli_print_mode.py -k
+      'approval or confirm or deny or missing_callback or full_access or redact'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s02 Agent-Owned State and Access Boundary"
+      sub_suite: "Approval adapters"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Agent-Owned State and Access Boundary"
+      feature: "User-selected access"
+      tags: [e04, e04s02, cli, approval, full-access, redaction]
+
+  - id: e04s02t04
+    title: "Complete Agent state ownership and global credential references"
+    status: passing
+    agent_type: "persistence-auth-engineer"
+    risk: high
+    depends_on: [e04s01t06, e04s02t01]
+    story_steps: [4]
+    scenarios:
+      - SC-e04s02-P0-07
+      - SC-e04s02-P1-08
+    work:
+      - "Define Agent-owned paths for definition, Sessions, memory location, Plugin references, and supported channel identity without claiming sandboxing."
+      - "Keep provider/account references in Agent state and resolve secret values only at provider construction."
+      - "Prove native-first legacy Session lookup is additive and collision behavior is visible."
+      - "Scan Agent JSON, Session metadata, events, audit records, approval output, and inspection output for credential leakage."
+    files:
+      - src/mia_agent/agents/model.py
+      - src/mia_agent/agents/manager.py
+      - src/mia_agent/orchestration.py
+      - src/mia_agent/auth/config.py
+      - src/mia_agent/auth/credentials.py
+      - src/mia_agent/session/entries.py
+      - tests/test_agents.py
+      - tests/test_sessions.py
+      - tests/test_credentials.py
+    verify: >-
+      uv run --offline pytest tests/test_agents.py tests/test_sessions.py tests/test_credentials.py -k
+      'ownership or native or legacy or credential or secret or reopen or collision'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s02 Agent-Owned State and Access Boundary"
+      sub_suite: "State and credentials"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Agent-Owned State and Access Boundary"
+      feature: "Agent ownership"
+      tags: [e04, e04s02, state, session, credentials, secrets]
+
+  - id: e04s02t05
+    title: "Implement monotonic effective-access composition"
+    status: passing
+    agent_type: "security-domain-engineer"
+    risk: high
+    depends_on: [e04s02t02, e04s02t04]
+    story_steps: [5]
+    scenarios:
+      - SC-e04s02-P0-05
+      - SC-e04s02-P0-06
+    work:
+      - "Add one small shared resolver choosing the more restrictive access level and capability intersection."
+      - "Reject unknown levels and attempted escalation rather than silently coercing them."
+      - "Keep no-Tools as an empty capability set."
+      - "Expose the resolver to runtime and later Delegation without adding a policy DSL."
+    files:
+      - src/mia_agent/agents/model.py
+      - src/mia_middleware/access.py
+      - tests/test_access_policy.py
+    verify: >-
+      uv run --offline pytest tests/test_access_policy.py -k
+      'effective or restrictive or intersect or escalation or no_tools'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s02 Agent-Owned State and Access Boundary"
+      sub_suite: "Policy composition"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Agent-Owned State and Access Boundary"
+      feature: "Monotonic effective access"
+      tags: [e04, e04s02, policy, composition, escalation]
+
+  - id: e04s02t06
+    title: "Close access, ownership, and security gates"
+    status: passing
+    agent_type: "security-verification-engineer"
+    risk: high
+    depends_on: [e04s02t03, e04s02t05]
+    story_steps: [6]
+    scenarios:
+      - SC-e04s02-P0-01
+      - SC-e04s02-P0-02
+      - SC-e04s02-P0-03
+      - SC-e04s02-P0-04
+      - SC-e04s02-P0-05
+      - SC-e04s02-P0-06
+      - SC-e04s02-P0-07
+      - SC-e04s02-P1-08
+    work:
+      - "Run the complete access matrix and legacy permission compatibility tests."
+      - "Verify Tool rejection, permanent guards, approval redaction, credential exclusion, and Session ownership."
+      - "Run format, lint, and strict typing before marking the story complete."
+    files:
+      - tests/test_access_policy.py
+      - tests/test_middleware_pipeline.py
+      - tests/test_agents.py
+      - tests/test_profiles.py
+      - tests/test_sessions.py
+      - tests/test_credentials.py
+      - tests/test_orchestration.py
+      - tests/test_e2e_scenarios.py
+    verify: >-
+      uv run --offline ruff format --check .
+      && uv run --offline ruff check .
+      && uv run --offline mypy src
+      && uv run --offline pytest tests/test_access_policy.py tests/test_middleware_pipeline.py
+      tests/test_agents.py tests/test_profiles.py tests/test_sessions.py tests/test_credentials.py
+      tests/test_orchestration.py tests/test_e2e_scenarios.py
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      parent_suite: "e04 Agent-Centric Foundation"
+      suite: "e04s02 Agent-Owned State and Access Boundary"
+      sub_suite: "Verification"
+      severity: blocker
+      epic: "Agent-Centric Foundation"
+      story: "Agent-Owned State and Access Boundary"
+      feature: "Security and compatibility gate"
+      tags: [e04, e04s02, verification, regression, security]

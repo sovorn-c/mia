@@ -1,0 +1,88 @@
+story_id: e05s03
+story_title: "Portable Notes Agent Template"
+spec: "e05s03-portable-notes-agent-template.md"
+status: passing
+requirement_delta: ADDED
+bcps: 5
+tasks:
+  - id: e05s03t01
+    title: "Lock Agent Template privacy and ownership contracts"
+    description: "Specify allowlisted template fields, Notes Plugin requirements, fresh identity, collision/missing-requirement failure, and exclusion of credentials, Sessions, memory, notes, defaults, and full-access consent."
+    status: passing
+    risk: P0
+    security: high
+    depends_on: []
+    verify: >-
+      uv run --offline pytest tests/test_agent_templates.py tests/test_agent_template_cli.py
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: ["Agent Template", "privacy", "contract", "Security Review"]
+
+  - id: e05s03t02
+    title: "Add the Agent Template contract and bundled Notes definition"
+    description: "Create a validated, serializable Agent Template boundary and one bundled Notes Agent Template containing only reusable Agent defaults and declared Plugin requirements."
+    status: passing
+    risk: P0
+    security: high
+    depends_on: [e05s03t01]
+    verify: >-
+      uv run --offline pytest tests/test_agent_templates.py -k
+      'model or bundled or notes_agent or serialize or allowlist or plugin_requirement'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: ["Agent Template", "Notes", "model", "Security Review"]
+
+  - id: e05s03t03
+    title: "Instantiate templates through existing Agent persistence"
+    description: "Validate installed Plugin requirements and target ID before creating a fresh Agent through AgentManager atomic persistence, leaving no partial files on failure."
+    status: passing
+    risk: P0
+    security: high
+    depends_on: [e05s03t02]
+    verify: >-
+      uv run --offline pytest tests/test_agent_templates.py tests/test_agents.py -k
+      'instantiate or create or atomic or collision or missing_plugin or independent or no_partial'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: ["Agent Template", "Agent", "persistence", "Security Review"]
+
+  - id: e05s03t04
+    title: "Expose template inspection and creation commands"
+    description: "Add thin CLI commands to list/show bundled Agent Templates and create a named Agent from Notes with actionable non-destructive errors."
+    status: passing
+    risk: P0
+    security: medium
+    depends_on: [e05s03t03]
+    verify: >-
+      uv run --offline pytest tests/test_agent_template_cli.py tests/test_cli_print_mode.py -k
+      'template and (list or show or create or notes or collision or missing)'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: ["Agent Template", "CLI", "integration", "Security Review"]
+
+  - id: e05s03t05
+    title: "Close template privacy and release quality gates"
+    description: "Run template, Plugin, Agent, runtime, access, Delegation, Session, CLI, coverage, build, and specification gates before completion."
+    status: passing
+    risk: P0
+    security: high
+    depends_on: [e05s03t03, e05s03t04]
+    verify: >-
+      uv run --offline ruff format --check .
+      && uv run --offline ruff check .
+      && uv run --offline mypy src
+      && uv run --offline pytest tests/test_agent_templates.py tests/test_agent_template_cli.py
+      tests/test_plugins.py tests/test_notes_plugin.py tests/test_plugin_cli.py tests/test_agents.py
+      tests/test_orchestration.py tests/test_access_policy.py tests/test_delegation.py
+      tests/test_sessions.py tests/test_cli_print_mode.py tests/test_cli_repl.py
+      && ./scripts/check-coverage.sh
+      && uv build --offline
+      && uv run --offline python -c "import pathlib,yaml; [yaml.safe_load(p.read_text()) for p in pathlib.Path('specs').rglob('*.yaml')]"
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: ["Agent Template", "Plugin", "release gate", "Security Review"]

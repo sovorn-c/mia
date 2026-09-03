@@ -6,6 +6,7 @@ files=(README.md AGENTS.md CLAUDE.md pyproject.toml)
 while IFS= read -r file; do
   files+=("$file")
 done < <(find src tests docs specs scripts -type f \
+  ! -path 'specs/epics/archive/*' \
   ! -path 'scripts/check-public-surface.sh' \
   ! -path 'scripts/check-wheel-surface.py' -print 2>/dev/null)
 
