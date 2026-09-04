@@ -364,7 +364,7 @@ async def test_run_request_first_iteration_acceptance_and_attribution(tmp_path) 
 
     stream = runner.run(request, provider=provider, cwd=tmp_path)
     # Generator created, but not iterated yet — no provider calls made yet
-    assert len(provider.sent_messages) == 0
+    assert len(provider.recorded_calls) == 0
 
     events: list[AgentEventEnvelope] = []
     async for env in stream:

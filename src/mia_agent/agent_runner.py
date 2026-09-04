@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from pathlib import Path
 
 from mia_agent.agents import AgentManager
@@ -20,7 +20,7 @@ from mia_agent.runtime_events import (
     error_envelope as _error_envelope,
 )
 from mia_agent.runtime_factory import AgentRuntimeFactory
-from mia_agent.runtime_models import AgentRuntime, RuntimeIdentity
+from mia_agent.runtime_models import AgentRuntime, RunRequest, RuntimeIdentity
 from mia_ai.providers.base import LLMProvider
 from mia_middleware.access import ApprovalCallback
 
@@ -99,6 +99,65 @@ class AgentRunner:
         )
         self.last_runtime = runtime
         return runtime
+
+    async def run(
+        self,
+        request: RunRequest,
+        *,
+        provider: LLMProvider | None = None,
+        approval_callback: ApprovalCallback | None = None,
+        cwd: Path | None = None,
+    ) -> AsyncGenerator[AgentEventEnvelope, None]:
+        """Execute one validated Agent Run using the canonical closeable stream."""
+        effective_cwd = request.cwd if request.cwd is not None else cwd
+        target_agent_id = request.agent_id or "mia"
+        identity = RuntimeIdentity(
+            run_id=request.run_id or f"run_{uuid.uuid4().hex}",
+            task_id=request.task_id or "root",
+            agent_id=target_agent_id,
+            session_id=request.session_id or f"session_{uuid.uuid4().hex[:12]}",
+        )
+        try:
+            agent = self.agent_manager.get_agent(target_agent_id)
+            identity = identity.model_copy(update={"agent_id": agent.agent_id})
+            if agent.agent_id == "research":
+                async for envelope in self._prompt_research(
+                    prompt_text=request.prompt_text,
+                    provider=provider,
+                    model_override=request.model_override,
+                    session_id=identity.session_id,
+                    run_id=identity.run_id,
+                    cwd=effective_cwd,
+                    compaction_threshold=request.compaction_threshold,
+                    context_window=request.context_window,
+                    approval_callback=approval_callback,
+                    full_access_confirmed=request.full_access_confirmed,
+                ):
+                    yield envelope
+                return
+
+            runtime = self.factory.build(
+                identity=identity,
+                provider=provider,
+                model_override=request.model_override,
+                cwd=effective_cwd,
+                compaction_threshold=request.compaction_threshold,
+                context_window=request.context_window,
+                approval_callback=approval_callback,
+                full_access_confirmed=request.full_access_confirmed,
+            )
+            self.last_runtime = runtime
+            async for event in runtime.harness.prompt(request.prompt_text):
+                yield _envelope(identity, event)
+        except asyncio.CancelledError:
+            if identity.agent_id == "research":
+                raise
+            yield _error_envelope(
+                _safe_error_identity(identity), "prompt", "prompt cancelled", cancelled=True
+            )
+            raise
+        except Exception as exc:
+            yield _error_envelope(_safe_error_identity(identity), "prompt", str(exc))
 
     async def prompt(
         self,
