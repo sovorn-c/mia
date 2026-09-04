@@ -1,7 +1,7 @@
 story_id: e09s03
 title: Non-Destructive Interrupted-Write and Corrupt-Data Recovery
 spec: e09s03-non-destructive-interrupted-write-and-corrupt-data-recovery.md
-status: passing
+status: done
 bcps: 3
 risk: P0
 delta: ADDED

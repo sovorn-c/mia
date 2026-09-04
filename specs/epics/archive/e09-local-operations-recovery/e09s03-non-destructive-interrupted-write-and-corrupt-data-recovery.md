@@ -8,7 +8,7 @@
 - **Risk:** P0
 - **Context:** Append-only Sessions, atomic local writes, corruption detection, recovery verification, and safe operator guidance
 - **BCPs:** 3
-- **Status:** passing
+- **Status:** done
 - **Requirement delta:** ADDED
 
 ## 2. User Story

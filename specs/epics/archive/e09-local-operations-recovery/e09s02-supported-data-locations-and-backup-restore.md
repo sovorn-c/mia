@@ -8,7 +8,7 @@
 - **Risk:** P0
 - **Context:** Agent-owned data layout, Plugin-owned data, diagnostics, credentials, archive integrity, and CLI operations
 - **BCPs:** 5
-- **Status:** passing
+- **Status:** done
 - **Requirement delta:** ADDED
 
 ## 2. User Story

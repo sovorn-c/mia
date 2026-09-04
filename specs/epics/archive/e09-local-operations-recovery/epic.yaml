@@ -75,4 +75,4 @@ stories:
     depends_on: [e09s01, e09s02]
     spec_file: e09s03-non-destructive-interrupted-write-and-corrupt-data-recovery.md
     tasks_file: e09s03-tasks.yaml
-next_skill: release-branch
+next_skill: survey-context

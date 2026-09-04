@@ -1,7 +1,7 @@
 story_id: e09s02
 title: Supported Data Locations and Backup/Restore
 spec: e09s02-supported-data-locations-and-backup-restore.md
-status: passing
+status: done
 bcps: 5
 risk: P0
 delta: ADDED

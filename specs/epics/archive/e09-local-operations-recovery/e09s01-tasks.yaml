@@ -1,7 +1,7 @@
 story_id: e09s01
 title: Attributed Local Diagnostics and Bounded Retention
 spec: e09s01-attributed-local-diagnostics-and-bounded-retention.md
-status: passing
+status: done
 bcps: 5
 risk: P0
 delta: ADDED

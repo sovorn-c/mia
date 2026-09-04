@@ -1,15 +1,15 @@
 workflow_mode: solo-git
 session:
-  active_flow: build
-  active_epic_id: e09
-  active_story_id: e09s03
+  active_flow: plan
+  active_epic_id: null
+  active_story_id: null
   target_version: 0.6.0
 handoff:
-  next_skill: release-branch
-  summary: Epic e09 Local Operations and Recovery is fully completed across all three vertical stories (e09s01, e09s02, e09s03). Attributed diagnostics and bounded retention, supported non-credential backup/restore, and deterministic read-only recovery verification are implemented and verified.
+  next_skill: survey-context
+  summary: Epic e09 Local Operations and Recovery was merged into local main and its reviewed capsule was archived. Release gates passed: 300 tests, Ruff, mypy, offline build, coverage, public-surface, wheel-surface, CLI, and diff checks. The next epic can now be planned.
   open_decisions: []
 git:
-  branch: e09-local-operations-recovery
+  branch: main
 environment:
   package_manager: uv 0.10.11
   python: 3.14.6

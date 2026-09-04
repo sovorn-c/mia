@@ -8,7 +8,7 @@
 - **Risk:** P0
 - **Context:** Local diagnostics, Tool audit, Run outcomes, Plugin lifecycle, CLI inspection, and retention
 - **BCPs:** 5
-- **Status:** passing
+- **Status:** done
 - **Requirement delta:** ADDED
 
 ## 2. User Story

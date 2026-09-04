@@ -189,8 +189,8 @@ epics:
   - id: e09
     slug: local-operations-recovery
     title: Local Operations and Recovery
-    status: planned
-    capsule_dir: specs/epics/e09-local-operations-recovery
+    status: completed
+    capsule_dir: specs/epics/archive/e09-local-operations-recovery
     outcome: Operators can diagnose Runs and Plugin lifecycles, protect local data, and recover safely from expected failures.
     boundaries:
       includes: >-
