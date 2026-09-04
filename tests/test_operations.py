@@ -7,7 +7,9 @@ from pathlib import Path
 from mia_agent.agents import AgentManager
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.operations import (
+    BackupManifest,
     DataLayout,
+    create_backup,
     enumerate_supported_files,
     get_data_locations,
     is_supported_backup_file,
@@ -209,4 +211,105 @@ def test_deterministic_enumeration_order(tmp_path: Path) -> None:
     files = enumerate_supported_files(manager)
     file_strs = [str(f) for f in files]
     assert file_strs == sorted(file_strs)
+
+
+def test_create_backup_creates_valid_archive_and_manifest(tmp_path: Path) -> None:
+    """Backup archives contain only supported non-credential data with a versioned manifest."""
+    import zipfile
+
+    agents_dir = tmp_path / "agents"
+    diagnostics_dir = tmp_path / "diagnostics"
+    cred_path = tmp_path / "credentials.json"
+    archive_path = tmp_path / "backup.zip"
+
+    secret_sentinel = "SUPER_SECRET_TOKEN_XYZ_DO_NOT_LEAK"
+    cred_store = FileCredentialStore(path=cred_path)
+    cred_store.set_api_key("anthropic", secret_sentinel)
+
+    manager = AgentManager(agents_dir=agents_dir, diagnostics_dir=diagnostics_dir)
+
+    # Valid supported files
+    agent_json = agents_dir / "mia" / "agent.json"
+    agent_json.parent.mkdir(parents=True, exist_ok=True)
+    agent_json.write_text('{"agent_id": "mia"}', encoding="utf-8")
+
+    session_file = agents_dir / "mia" / "sessions" / "s1.jsonl"
+    session_file.parent.mkdir(parents=True, exist_ok=True)
+    session_file.write_text('{"event": "turn"}\n', encoding="utf-8")
+
+    plugin_file = agents_dir / "mia" / "plugins" / "notes" / "note.txt"
+    plugin_file.parent.mkdir(parents=True, exist_ok=True)
+    plugin_file.write_text("user note", encoding="utf-8")
+
+    diag_file = diagnostics_dir / "diagnostics.jsonl"
+    diag_file.parent.mkdir(parents=True, exist_ok=True)
+    diag_file.write_text('{"source": "run"}\n', encoding="utf-8")
+
+    manifest = create_backup(manager, archive_path=archive_path, credentials_path=cred_path)
+
+    assert archive_path.exists()
+    assert isinstance(manifest, BackupManifest)
+    assert manifest.version == "1.0"
+    assert len(manifest.files) >= 4
+
+    manifest_paths = {f.path for f in manifest.files}
+    assert "agents/mia/agent.json" in manifest_paths
+    assert "agents/mia/sessions/s1.jsonl" in manifest_paths
+    assert "agents/mia/plugins/notes/note.txt" in manifest_paths
+    assert "diagnostics/diagnostics.jsonl" in manifest_paths
+
+    # Read archive
+    with zipfile.ZipFile(archive_path, "r") as zf:
+        namelist = zf.namelist()
+        assert "backup_manifest.json" in namelist
+        assert "agents/mia/agent.json" in namelist
+        assert "agents/mia/sessions/s1.jsonl" in namelist
+        assert "agents/mia/plugins/notes/note.txt" in namelist
+        assert "diagnostics/diagnostics.jsonl" in namelist
+
+        # Credential file must NOT be in archive
+        assert not any("credentials" in name.lower() for name in namelist)
+
+        # Raw content must not contain secrets
+        for name in namelist:
+            content = zf.read(name)
+            assert secret_sentinel.encode("utf-8") not in content
+
+
+def test_create_backup_preserves_source_files_on_failure(tmp_path: Path) -> None:
+    """Backup failure never modifies or deletes source data."""
+    agents_dir = tmp_path / "agents"
+    diagnostics_dir = tmp_path / "diagnostics"
+    manager = AgentManager(agents_dir=agents_dir, diagnostics_dir=diagnostics_dir)
+
+    agent_json = agents_dir / "mia" / "agent.json"
+    agent_json.parent.mkdir(parents=True, exist_ok=True)
+    agent_json.write_text('{"agent_id": "mia"}', encoding="utf-8")
+
+    # Invalid archive path (directory instead of file)
+    bad_archive_path = tmp_path / "a_dir"
+    bad_archive_path.mkdir()
+
+    with pytest.raises(Exception):
+        create_backup(manager, archive_path=bad_archive_path)
+
+    # Source files remain intact
+    assert agent_json.exists()
+    assert agent_json.read_text(encoding="utf-8") == '{"agent_id": "mia"}'
+
+
+def test_create_backup_rejects_overwrite_existing_destination(tmp_path: Path) -> None:
+    """Backup creation rejects overwriting an existing archive file unless overwrite=True."""
+    agents_dir = tmp_path / "agents"
+    diagnostics_dir = tmp_path / "diagnostics"
+    manager = AgentManager(agents_dir=agents_dir, diagnostics_dir=diagnostics_dir)
+
+    archive_path = tmp_path / "existing.zip"
+    archive_path.write_text("existing content", encoding="utf-8")
+
+    with pytest.raises(FileExistsError):
+        create_backup(manager, archive_path=archive_path, overwrite=False)
+
+    assert archive_path.read_text(encoding="utf-8") == "existing content"
+
 
