@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.6.0
-updated_at: '2026-09-04T16:53:24Z'
+updated_at: '2026-09-04T21:07:11Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-09-03T08:22:40Z'
@@ -154,7 +154,31 @@ epics:
     title: Governed Core Extension Host
     status: planned
     bcps: 21
-    stories: {}
+    stories:
+      e08s01:
+        title: Typed Plugin Contract, Trust, and Static Catalog
+        status: planned
+        bcps: 7
+        risk: P0
+        tasks_total: 5
+        tasks_passing: 0
+        tasks_failing: 5
+      e08s02:
+        title: Transactional Run Activation and Owned Plugin Lifecycle
+        status: planned
+        bcps: 8
+        risk: P0
+        tasks_total: 5
+        tasks_passing: 0
+        tasks_failing: 5
+      e08s03:
+        title: Core Boundary, Notes Migration, and Compatibility
+        status: planned
+        bcps: 6
+        risk: P0
+        tasks_total: 5
+        tasks_passing: 0
+        tasks_failing: 5
   e09:
     title: Local Operations and Recovery
     status: planned

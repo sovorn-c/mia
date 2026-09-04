@@ -1,15 +1,16 @@
 workflow_mode: solo-git
 session:
   active_flow: plan
-  active_epic_id: null
-  active_story_id: null
+  active_epic_id: e08
+  active_story_id: e08s01
   target_version: 0.6.0
 handoff:
-  next_skill: survey-context
-  summary: 'Production Runtime Integrity was merged into main and its completed capsule
-    was archived. Release gates passed: 207 tests, 88% overall and 96% business-boundary
-    coverage, clean Ruff/Mypy/build, public-surface and wheel checks, and independent
-    review. The next epic (e08 Governed Core Extension Host) can now be scoped.'
+  next_skill: kickoff-branch
+  summary: 'e08 Governed Core Extension Host is sliced and fully planned in three implementation-ready
+    stories: e08s01 typed contract/trust/static catalog, e08s02 transactional Run activation and
+    owned lifecycle, and e08s03 Core boundary/Notes compatibility. The e08 test plan and all story
+    task ledgers are present; task statuses remain failing until implementation verification. Start
+    the whole-epic build on branch e08-governed-core-extension-host.'
   open_decisions: []
 git:
   branch: main
