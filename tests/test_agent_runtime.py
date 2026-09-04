@@ -695,3 +695,241 @@ async def test_bare_abandonment_has_no_lifecycle_guarantee(tmp_path) -> None:
     async with aclosing(runner.run(req, provider=provider, cwd=tmp_path)) as stream:
         async for _env in stream:
             break
+
+
+def test_settings_precedence_request_overrides_agent_over_global(tmp_path: Path) -> None:
+    from mia_agent.agents import AgentManager
+    from mia_agent.auth.config import ConfigManager, MiaConfig
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_ai.providers.mock import MockProvider
+
+    agents_dir = tmp_path / "agents"
+    manager = AgentManager(agents_dir=agents_dir)
+    manager.create_agent(
+        "custom",
+        display_name="Custom",
+        model="agent-model",
+        context_window_tokens=60000,
+        compaction_threshold_ratio=0.3,
+    )
+
+    config_mgr = ConfigManager(config_path=tmp_path / "config.json")
+    config_mgr.save_config(
+        MiaConfig(
+            default_model="global-model",
+            context_window_tokens=50000,
+            compaction_threshold_ratio=0.4,
+        )
+    )
+
+    factory = AgentRuntimeFactory(agent_manager=manager, config_manager=config_mgr)
+
+    # 1. Request override wins
+    runtime1 = factory.build(
+        identity=RuntimeIdentity(run_id="r1", task_id="root", agent_id="custom", session_id="s1"),
+        provider=MockProvider(),
+        model_override="request-model",
+        context_window=70000,
+        compaction_threshold=0.2,
+        cwd=tmp_path,
+    )
+    assert runtime1.harness.model == "request-model"
+    assert runtime1.harness.compactor is not None
+    assert runtime1.harness.compactor.context_window_tokens == 70000
+    assert runtime1.harness.compactor.compaction_threshold_ratio == 0.2
+
+    # 2. Agent wins when request has None
+    runtime2 = factory.build(
+        identity=RuntimeIdentity(run_id="r2", task_id="root", agent_id="custom", session_id="s2"),
+        provider=MockProvider(),
+        cwd=tmp_path,
+    )
+    assert runtime2.harness.model == "agent-model"
+    assert runtime2.harness.compactor is not None
+    assert runtime2.harness.compactor.context_window_tokens == 60000
+    assert runtime2.harness.compactor.compaction_threshold_ratio == 0.3
+
+    # 3. Global config wins when agent has None
+    manager.create_agent(
+        "bare",
+        display_name="Bare",
+    )
+    runtime3 = factory.build(
+        identity=RuntimeIdentity(run_id="r3", task_id="root", agent_id="bare", session_id="s3"),
+        provider=MockProvider(),
+        cwd=tmp_path,
+    )
+    assert runtime3.harness.model == "global-model"
+    assert runtime3.harness.compactor is not None
+    assert runtime3.harness.compactor.context_window_tokens == 50000
+    assert runtime3.harness.compactor.compaction_threshold_ratio == 0.4
+
+
+def test_capability_override_cannot_broaden_agent_tools(tmp_path: Path) -> None:
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_ai.providers.mock import MockProvider
+
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    manager.create_agent("limited", display_name="Limited", tools=["read_file"])
+    factory = AgentRuntimeFactory(agent_manager=manager)
+
+    with pytest.raises(ValueError, match="broaden.*capabilities"):
+        factory.build(
+            identity=RuntimeIdentity(
+                run_id="r1", task_id="root", agent_id="limited", session_id="s1"
+            ),
+            provider=MockProvider(),
+            capabilities_override=["read_file", "bash"],
+            cwd=tmp_path,
+        )
+
+
+def test_access_policy_override_cannot_escalate_access(tmp_path: Path) -> None:
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_ai.providers.mock import MockProvider
+
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    manager.create_agent("readonly_agent", display_name="RO", access_policy="read-only")
+    factory = AgentRuntimeFactory(agent_manager=manager)
+
+    with pytest.raises(ValueError, match="escalate.*access"):
+        factory.build(
+            identity=RuntimeIdentity(
+                run_id="r1", task_id="root", agent_id="readonly_agent", session_id="s1"
+            ),
+            provider=MockProvider(),
+            access_policy_override="full-access",
+            cwd=tmp_path,
+        )
+
+
+@pytest.mark.asyncio
+async def test_session_admission_same_session_conflict_fails_fast_with_session_busy(
+    tmp_path: Path,
+) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_events import RunErrorEvent
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.base import LLMProvider
+    from mia_ai.types import ChatMessage, StreamChunk, ToolDefinition
+
+    started = asyncio.Event()
+    unblock = asyncio.Event()
+
+    class BlockingProvider(LLMProvider):
+        async def stream(
+            self,
+            *,
+            model: str,
+            messages: list[ChatMessage],
+            tools: list[ToolDefinition] | None = None,
+            system: str | None = None,
+            temperature: float = 0.7,
+            max_tokens: int | None = None,
+        ):
+            started.set()
+            await unblock.wait()
+            yield StreamChunk(type="text", text="done")
+            yield StreamChunk(type="finish")
+
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    runner = AgentRunner(agent_manager=manager)
+    req1 = RunRequest(prompt_text="turn 1", agent_id="mia", session_id="s_shared")
+    req2 = RunRequest(prompt_text="turn 2", agent_id="mia", session_id="s_shared")
+    from mia_ai.providers.mock import MockProvider
+
+    provider2 = MockProvider()
+    events1: list[object] = []
+    events2: list[object] = []
+
+    async def run1():
+        async for env in runner.run(req1, provider=BlockingProvider(), cwd=tmp_path):
+            events1.append(env)
+
+    async def run2():
+        async for env in runner.run(req2, provider=provider2, cwd=tmp_path):
+            events2.append(env)
+
+    task1 = asyncio.create_task(run1())
+    await started.wait()
+
+    # While run1 is active on (mia, s_shared), start run2
+    await run2()
+
+    assert len(events2) == 1
+    assert isinstance(events2[0].event, RunErrorEvent)
+    assert events2[0].event.code == "session_busy"
+    assert events2[0].event.stage == "admission"
+
+    # Unblock run1
+    unblock.set()
+    await task1
+
+    assert any(env.event.type == "turn_complete" for env in events1)
+
+
+@pytest.mark.asyncio
+async def test_session_admission_released_on_completion_cancellation_and_error(
+    tmp_path: Path,
+) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    runner = AgentRunner(agent_manager=manager)
+    provider = MockProvider()
+    provider.queue_text_response("first")
+    provider.queue_text_response("second")
+
+    req = RunRequest(prompt_text="first turn", agent_id="mia", session_id="s_admit")
+    events = []
+    async for env in runner.run(req, provider=provider, cwd=tmp_path):
+        events.append(env)
+    assert any(env.event.type == "turn_complete" for env in events)
+
+    # Immediately run again on the same session; it must succeed (admission was released)
+    req2 = RunRequest(prompt_text="second turn", agent_id="mia", session_id="s_admit")
+    events2 = []
+    async for env in runner.run(req2, provider=provider, cwd=tmp_path):
+        events2.append(env)
+    assert any(env.event.type == "turn_complete" for env in events2)
+
+
+@pytest.mark.asyncio
+async def test_session_admission_distinct_sessions_run_concurrently(tmp_path: Path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    runner = AgentRunner(agent_manager=manager)
+
+    provider1 = MockProvider()
+    provider1.queue_text_response("sess1 done")
+    provider2 = MockProvider()
+    provider2.queue_text_response("sess2 done")
+
+    req1 = RunRequest(prompt_text="hello 1", agent_id="mia", session_id="sess_1")
+    req2 = RunRequest(prompt_text="hello 2", agent_id="mia", session_id="sess_2")
+
+    events1 = []
+    events2 = []
+
+    async def r1():
+        async for env in runner.run(req1, provider=provider1, cwd=tmp_path):
+            events1.append(env)
+
+    async def r2():
+        async for env in runner.run(req2, provider=provider2, cwd=tmp_path):
+            events2.append(env)
+
+    await asyncio.gather(r1(), r2())
+
+    assert any(env.event.type == "turn_complete" for env in events1)
+    assert any(env.event.type == "turn_complete" for env in events2)

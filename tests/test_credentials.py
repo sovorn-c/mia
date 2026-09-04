@@ -92,3 +92,15 @@ def test_config_manager_resolution_hierarchy(tmp_path: Path) -> None:
         )
         assert key == "sk-ant-explicit"
         assert url == "https://custom.anthropic.com"
+
+
+def test_credentials_resolution_sanitizes_errors_without_exposing_keys(tmp_path: Path) -> None:
+    manager = ConfigManager(
+        config_path=tmp_path / "config.json",
+        credential_store=FileCredentialStore(path=tmp_path / "creds.json"),
+    )
+    with pytest.raises(ValueError) as excinfo:
+        manager.resolve_credentials(model="nonexistent-provider:nonexistent-model")
+    err_msg = str(excinfo.value)
+    assert "sk-" not in err_msg
+    assert "token" not in err_msg.lower()
