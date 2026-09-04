@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from mia_agent.agents import AgentManager
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.operations import (
@@ -290,7 +292,7 @@ def test_create_backup_preserves_source_files_on_failure(tmp_path: Path) -> None
     bad_archive_path = tmp_path / "a_dir"
     bad_archive_path.mkdir()
 
-    with pytest.raises(Exception):
+    with pytest.raises(IsADirectoryError):
         create_backup(manager, archive_path=bad_archive_path)
 
     # Source files remain intact
@@ -311,5 +313,3 @@ def test_create_backup_rejects_overwrite_existing_destination(tmp_path: Path) ->
         create_backup(manager, archive_path=archive_path, overwrite=False)
 
     assert archive_path.read_text(encoding="utf-8") == "existing content"
-
-
