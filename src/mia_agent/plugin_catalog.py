@@ -5,7 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from mia_agent.plugin_models import AgentTemplate, PluginManifest, PluginToolSpec
+from mia_agent.plugin_models import (
+    AgentTemplate,
+    PluginManifest,
+    PluginProvenance,
+    PluginToolSpec,
+    PluginTrust,
+)
 from mia_tools.base import BaseTool
 
 
@@ -41,8 +47,16 @@ def notes_manifest() -> PluginManifest:
     return PluginManifest(
         plugin_id="notes",
         version="1.0.0",
+        plugin_type="trusted-code",
         display_name="Notes",
         description="Private Agent-owned local notes.",
+        provenance=PluginProvenance(source="bundled"),
+        trust=PluginTrust(
+            trust_class="trusted-code",
+            status="trusted",
+            explicit=True,
+            message="Bundled Core Plugin",
+        ),
         templates=[
             AgentTemplate(
                 template_id="notes-agent",

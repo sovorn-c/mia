@@ -75,12 +75,12 @@ def test_declarative_plugin_manifest_with_static_skills_and_templates() -> None:
 
 def test_static_skill_validation() -> None:
     skill = StaticSkill(
-        skill_id="code-review",
+        skill_id="Code-Review",
         display_name="Code Reviewer",
         description="Review pull requests.",
         instructions="Analyze changes for defects.",
     )
-    assert skill.skill_id == "code_review"  # normalized
+    assert skill.skill_id == "code-review"  # normalized to lowercase
 
     with pytest.raises(ValueError, match="Skill text fields must not be blank"):
         StaticSkill(
@@ -121,13 +121,13 @@ def test_plugin_manifest_duplicate_skills_and_dependencies() -> None:
             skills=[skill1, skill2],
         )
 
-    with pytest.raises(ValueError, match="duplicate.*dependenc"):
+    with pytest.raises(ValueError, match="dependencies contain duplicates"):
         PluginManifest(
             plugin_id="dupe_deps",
             version="1.0.0",
             display_name="Dupe Deps",
             description="Has duplicate dependencies",
-            dependencies=["dep_a", "Dep-A"],
+            dependencies=["dep-a", "Dep-A"],
         )
 
 

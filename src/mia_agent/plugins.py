@@ -16,7 +16,11 @@ from mia_agent.plugin_models import (
     InstalledPlugin,
     PluginEffect,
     PluginManifest,
+    PluginProvenance,
     PluginToolSpec,
+    PluginTrust,
+    PluginTrustStatus,
+    StaticSkill,
     _validate_secret_free,
 )
 from mia_tools.base import BaseTool
@@ -194,6 +198,20 @@ class PluginManager:
         available = ", ".join(template.template_id for template in self.list_templates())
         raise ValueError(f"Agent Template '{key}' is unavailable. Available Templates: {available}")
 
+    def list_skills(self) -> list[StaticSkill]:
+        """List static Skills declared by available Plugins without executing code."""
+        skills = [skill for manifest in self.list_available() for skill in manifest.skills]
+        return sorted(skills, key=lambda skill: skill.skill_id)
+
+    def get_skill(self, skill_id: str) -> StaticSkill:
+        """Return one declared static Skill or an actionable unknown-ID error."""
+        key = normalize_plugin_id(skill_id)
+        for skill in self.list_skills():
+            if skill.skill_id == key:
+                return skill
+        available = ", ".join(skill.skill_id for skill in self.list_skills())
+        raise ValueError(f"Static Skill '{key}' is unavailable. Available Skills: {available}")
+
     def instantiate(self, template_id: str, agent_id: str) -> Agent:
         """Create a fresh Agent from a bundled Template after all preflight checks."""
         template = self.get_template(template_id)
@@ -293,6 +311,10 @@ __all__ = [
     "NotesPlugin",
     "PluginManager",
     "PluginManifest",
+    "PluginProvenance",
     "PluginToolSpec",
+    "PluginTrust",
+    "PluginTrustStatus",
+    "StaticSkill",
     "normalize_plugin_id",
 ]
