@@ -11,10 +11,13 @@ from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.operations import (
     BackupManifest,
     DataLayout,
+    RestoreOutcome,
     create_backup,
     enumerate_supported_files,
     get_data_locations,
     is_supported_backup_file,
+    restore_backup,
+    validate_archive,
 )
 
 
@@ -313,3 +316,150 @@ def test_create_backup_rejects_overwrite_existing_destination(tmp_path: Path) ->
         create_backup(manager, archive_path=archive_path, overwrite=False)
 
     assert archive_path.read_text(encoding="utf-8") == "existing content"
+
+
+def test_restore_valid_archive_succeeds(tmp_path: Path) -> None:
+    """Restore successfully unpacks valid archives byte-for-byte into fresh destinations."""
+    agents_dir = tmp_path / "src_agents"
+    diagnostics_dir = tmp_path / "src_diagnostics"
+    archive_path = tmp_path / "backup.zip"
+    dest_dir = tmp_path / "dest"
+
+    manager = AgentManager(agents_dir=agents_dir, diagnostics_dir=diagnostics_dir)
+
+    # Set up source files
+    agent_json = agents_dir / "mia" / "agent.json"
+    agent_json.parent.mkdir(parents=True, exist_ok=True)
+    agent_json.write_text('{"agent_id": "mia", "name": "Mia"}', encoding="utf-8")
+
+    session_file = agents_dir / "mia" / "sessions" / "session_1.jsonl"
+    session_file.parent.mkdir(parents=True, exist_ok=True)
+    session_content = '{"event": "start", "seq": 1}\n{"event": "turn", "seq": 2}\n'
+    session_file.write_text(session_content, encoding="utf-8")
+
+    plugin_file = agents_dir / "mia" / "plugins" / "notes" / "note_1.txt"
+    plugin_file.parent.mkdir(parents=True, exist_ok=True)
+    plugin_file.write_text("important note content", encoding="utf-8")
+
+    diag_file = diagnostics_dir / "diagnostics.jsonl"
+    diag_file.parent.mkdir(parents=True, exist_ok=True)
+    diag_file.write_text('{"source": "run", "outcome": "success"}\n', encoding="utf-8")
+
+    create_backup(manager, archive_path=archive_path)
+
+    # Restore into fresh destination
+    outcome = restore_backup(archive_path=archive_path, destination_dir=dest_dir)
+    assert isinstance(outcome, RestoreOutcome)
+    assert outcome.status == "restored"
+    assert outcome.files_restored >= 4
+    assert not outcome.errors
+
+    # Verify restored files match byte-for-byte
+    restored_agent_json = dest_dir / "agents" / "mia" / "agent.json"
+    assert restored_agent_json.exists()
+    assert restored_agent_json.read_bytes() == agent_json.read_bytes()
+
+    restored_session = dest_dir / "agents" / "mia" / "sessions" / "session_1.jsonl"
+    assert restored_session.exists()
+    assert restored_session.read_bytes() == session_file.read_bytes()
+
+    restored_plugin = dest_dir / "agents" / "mia" / "plugins" / "notes" / "note_1.txt"
+    assert restored_plugin.exists()
+    assert restored_plugin.read_bytes() == plugin_file.read_bytes()
+
+    restored_diag = dest_dir / "diagnostics" / "diagnostics.jsonl"
+    assert restored_diag.exists()
+    assert restored_diag.read_bytes() == diag_file.read_bytes()
+
+
+def test_restore_rejects_checksum_mismatch(tmp_path: Path) -> None:
+    """Tampered archive files with mismatched sha256 are rejected without destination commit."""
+    import zipfile
+
+    agents_dir = tmp_path / "agents"
+    diagnostics_dir = tmp_path / "diagnostics"
+    archive_path = tmp_path / "backup.zip"
+    dest_dir = tmp_path / "dest"
+
+    manager = AgentManager(agents_dir=agents_dir, diagnostics_dir=diagnostics_dir)
+    agent_json = agents_dir / "mia" / "agent.json"
+    agent_json.parent.mkdir(parents=True, exist_ok=True)
+    agent_json.write_text('{"agent_id": "mia"}', encoding="utf-8")
+
+    manifest = create_backup(manager, archive_path=archive_path)
+
+    # Tamper with archive: rewrite member with modified content
+    tampered_archive = tmp_path / "tampered.zip"
+    with zipfile.ZipFile(archive_path, "r") as zf_in, zipfile.ZipFile(tampered_archive, "w") as zf_out:
+        for item in zf_in.infolist():
+            if item.filename == "agents/mia/agent.json":
+                zf_out.writestr(item.filename, b'{"agent_id": "tampered"}')
+            else:
+                zf_out.writestr(item.filename, zf_in.read(item.filename))
+
+    outcome = restore_backup(archive_path=tampered_archive, destination_dir=dest_dir)
+    assert outcome.status == "rejected"
+    assert any("checksum" in err.lower() or "digest" in err.lower() or "mismatch" in err.lower() for err in outcome.errors)
+    assert not dest_dir.exists() or not any(dest_dir.iterdir())
+
+
+def test_restore_rejects_traversal_archive(tmp_path: Path) -> None:
+    """Archives containing path traversal or absolute member paths fail closed."""
+    import zipfile
+
+    bad_archive = tmp_path / "traversal.zip"
+    dest_dir = tmp_path / "dest"
+
+    manifest_json = '{"version": "1.0", "created_at": 0, "files": [{"path": "../evil.txt", "size": 4, "sha256": "bogus"}]}'
+    with zipfile.ZipFile(bad_archive, "w") as zf:
+        zf.writestr("backup_manifest.json", manifest_json)
+        zf.writestr("../evil.txt", b"evil")
+
+    outcome = restore_backup(archive_path=bad_archive, destination_dir=dest_dir)
+    assert outcome.status == "rejected"
+    assert any("traversal" in err.lower() or "path" in err.lower() for err in outcome.errors)
+    assert not (tmp_path / "evil.txt").exists()
+
+
+def test_restore_rejects_non_empty_destination_without_overwrite(tmp_path: Path) -> None:
+    """Restore rejects non-empty destinations unless overwrite=True."""
+    agents_dir = tmp_path / "agents"
+    diagnostics_dir = tmp_path / "diagnostics"
+    archive_path = tmp_path / "backup.zip"
+    dest_dir = tmp_path / "dest"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    existing_file = dest_dir / "existing.txt"
+    existing_file.write_text("keep me safe", encoding="utf-8")
+
+    manager = AgentManager(agents_dir=agents_dir, diagnostics_dir=diagnostics_dir)
+    agent_json = agents_dir / "mia" / "agent.json"
+    agent_json.parent.mkdir(parents=True, exist_ok=True)
+    agent_json.write_text('{"agent_id": "mia"}', encoding="utf-8")
+
+    create_backup(manager, archive_path=archive_path)
+
+    outcome = restore_backup(archive_path=archive_path, destination_dir=dest_dir, overwrite=False)
+    assert outcome.status == "rejected"
+    assert any("not empty" in err.lower() or "destination" in err.lower() for err in outcome.errors)
+    assert existing_file.exists()
+    assert existing_file.read_text(encoding="utf-8") == "keep me safe"
+
+
+def test_restore_dry_run_validates_without_writing(tmp_path: Path) -> None:
+    """Dry run validates archive integrity and returns success without touching destination."""
+    agents_dir = tmp_path / "agents"
+    diagnostics_dir = tmp_path / "diagnostics"
+    archive_path = tmp_path / "backup.zip"
+    dest_dir = tmp_path / "dest"
+
+    manager = AgentManager(agents_dir=agents_dir, diagnostics_dir=diagnostics_dir)
+    agent_json = agents_dir / "mia" / "agent.json"
+    agent_json.parent.mkdir(parents=True, exist_ok=True)
+    agent_json.write_text('{"agent_id": "mia"}', encoding="utf-8")
+
+    create_backup(manager, archive_path=archive_path)
+
+    outcome = restore_backup(archive_path=archive_path, destination_dir=dest_dir, dry_run=True)
+    assert outcome.status == "restored"
+    assert not dest_dir.exists()
+
