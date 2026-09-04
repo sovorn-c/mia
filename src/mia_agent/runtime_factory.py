@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Awaitable, Callable, Collection, Sequence
 from pathlib import Path
 from typing import Any
@@ -25,7 +26,7 @@ from mia_middleware.access import (
     FinalCoreToolValidator,
     tool_effect,
 )
-from mia_middleware.pipeline import ToolPipeline
+from mia_middleware.pipeline import ToolCallContext, ToolPipeline
 from mia_middleware.security import SecurityGuardMiddleware
 from mia_middleware.telemetry import AuditLogMiddleware, CostBudgetMiddleware
 from mia_tools.bash import BashTool
@@ -36,6 +37,36 @@ POLICY_RANK: dict[str, int] = {
     "approval-required": 1,
     "full-access": 2,
 }
+
+
+def _wrap_plugin_middleware(middleware: Any) -> Any:
+    if callable(middleware) and not (
+        hasattr(middleware, "pre_tool") or hasattr(middleware, "post_tool")
+    ):
+        try:
+            sig = inspect.signature(middleware)
+            if len(sig.parameters) >= 2 or any(
+                p.kind == inspect.Parameter.VAR_POSITIONAL for p in sig.parameters.values()
+            ):
+                return middleware
+        except (ValueError, TypeError):
+            return middleware
+
+    async def _wrapped(ctx: ToolCallContext, next_fn: Callable[[], Awaitable[Any]]) -> Any:
+        if hasattr(middleware, "pre_tool"):
+            res = middleware.pre_tool(ctx)
+            if inspect.isawaitable(res):
+                await res
+        result = await next_fn()
+        if hasattr(middleware, "post_tool"):
+            post_res = middleware.post_tool(ctx, result)
+            if inspect.isawaitable(post_res):
+                return await post_res
+            elif post_res is not None:
+                return post_res
+        return result
+
+    return _wrapped
 
 
 def _attributed_disposer(
@@ -256,6 +287,7 @@ class AgentRuntimeFactory:
                 if tool_effect(tool.name, {"effect": tool.effect}) == "non-mutating"
             ]
             agent = agent.model_copy(update={"tools": [tool.name for tool in tools]})
+        plugin_middleware = activation.tool_middleware if activation is not None else ()
         pipeline = self._build_pipeline(
             agent.middlewares,
             agent=agent,
@@ -265,6 +297,7 @@ class AgentRuntimeFactory:
             tool_effects={
                 tool.name: tool_effect(tool.name, {"effect": tool.effect}) for tool in tools
             },
+            plugin_middleware=plugin_middleware,
         )
         session_store = JsonlSessionStore(
             self.agent_manager.get_session_path(agent.agent_id, identity.session_id)
@@ -274,10 +307,27 @@ class AgentRuntimeFactory:
             identity, session_store, last_entry_id, namespace=namespace
         )
 
+        system_prompt = agent.instructions
+        if activation is not None and activation.context_contributors:
+            context_additions: list[str] = []
+            for contributor in activation.context_contributors:
+                try:
+                    res = contributor()
+                    if isinstance(res, str) and res.strip():
+                        context_additions.append(res.strip())
+                except Exception:
+                    pass
+            if context_additions:
+                system_prompt = (
+                    f"{system_prompt}\n\n" + "\n\n".join(context_additions)
+                    if system_prompt
+                    else "\n\n".join(context_additions)
+                )
+
         harness = AgentHarness(
             provider=provider,
             model=model_name,
-            system_prompt=agent.instructions,
+            system_prompt=system_prompt,
             tools=tools,
             pipeline=pipeline,
             max_steps_per_turn=settings.max_steps_per_turn,
@@ -327,6 +377,7 @@ class AgentRuntimeFactory:
         approval_callback: ApprovalCallback | None = None,
         full_access_confirmed: bool | None = None,
         tool_effects: dict[str, Any] | None = None,
+        plugin_middleware: Sequence[Any] = (),
     ) -> ToolPipeline:
         active: list[Any] = []
         final_validator = None
@@ -360,6 +411,8 @@ class AgentRuntimeFactory:
         active.append(SecurityGuardMiddleware())
         active.append(AuditLogMiddleware())
         active.append(CostBudgetMiddleware())
+        for pm in plugin_middleware:
+            active.append(_wrap_plugin_middleware(pm))
         return ToolPipeline(active, final_validator=final_validator)
 
     @staticmethod

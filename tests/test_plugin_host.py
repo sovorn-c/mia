@@ -1167,8 +1167,11 @@ async def test_plugin_middleware_transform_and_final_validation_agreement(tmp_pa
     assert events
     assert events[-1].event.type == "turn_complete"
 
-    # Approval callback received the transformed arguments!
-    assert received_approval_args == [{"target": "rewritten_target"}]
+    # Initial approval callback received initial arguments, final validation re-approved transformed arguments!
+    assert received_approval_args == [
+        {"target": "initial_target"},
+        {"target": "rewritten_target"},
+    ]
     # Executor received the transformed arguments!
     assert executed_args == [{"target": "rewritten_target"}]
 
@@ -1177,7 +1180,6 @@ async def test_plugin_middleware_transform_and_final_validation_agreement(tmp_pa
 async def test_rejected_tool_call_non_execution_and_terminal_error(tmp_path: Path) -> None:
     from mia_agent.agent_runner import AgentRunner
     from mia_agent.plugin_host import PluginContext, PluginHost
-    from mia_agent.runtime_events import RunErrorEvent
     from mia_agent.runtime_factory import AgentRuntimeFactory
     from mia_agent.runtime_models import RunRequest
     from mia_ai.providers.mock import MockProvider
@@ -1249,9 +1251,11 @@ async def test_rejected_tool_call_non_execution_and_terminal_error(tmp_path: Pat
 
     # Tool executor was NEVER called!
     assert executed_calls == []
-    # Rejection produced run_error terminal envelope
-    assert isinstance(events[-1].event, RunErrorEvent)
-    assert events[-1].event.code == "agent_error"
+    # Tool result indicates rejection error
+    tool_results = [e.event for e in events if getattr(e.event, "type", "") == "tool_result"]
+    assert len(tool_results) == 1
+    assert tool_results[0].is_error is True
+    assert "approval denied" in tool_results[0].output
 
 
 @pytest.mark.asyncio
@@ -1277,5 +1281,3 @@ async def test_plugin_free_agent_compatibility(tmp_path: Path) -> None:
 
     assert events
     assert events[-1].event.type == "turn_complete"
-
-

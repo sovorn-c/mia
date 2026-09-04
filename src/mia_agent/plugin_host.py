@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import inspect
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -88,10 +89,20 @@ class PluginContext:
             # Enforce attribution
             object.__setattr__(contribution, "plugin_id", self.plugin_id)
             self._tools.append(contribution)
-        elif callable(contribution) and not hasattr(contribution, "name"):
-            self._context_contributors.append(contribution)
         elif hasattr(contribution, "pre_tool") or hasattr(contribution, "post_tool"):
             self._tool_middleware.append(contribution)
+        elif callable(contribution) and not hasattr(contribution, "name"):
+            try:
+                sig = inspect.signature(contribution)
+                params = list(sig.parameters.values())
+                if len(params) >= 2 or any(
+                    p.kind == inspect.Parameter.VAR_POSITIONAL for p in params
+                ):
+                    self._tool_middleware.append(contribution)
+                else:
+                    self._context_contributors.append(contribution)
+            except (ValueError, TypeError):
+                self._context_contributors.append(contribution)
         else:
             self._tools.append(contribution)
 
