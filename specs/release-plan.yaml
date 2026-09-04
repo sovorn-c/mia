@@ -114,7 +114,7 @@ epics:
   - id: e06
     slug: zero-legacy-agent-core
     title: Agent Core Clean Break
-    status: passing
+    status: completed
     capsule_dir: specs/epics/archive/e06-zero-legacy-agent-core
     outcome: Every supported frontend and package surface presents one Agent-native execution model.
     boundaries:
@@ -132,8 +132,8 @@ epics:
   - id: e07
     slug: production-runtime-integrity
     title: Production Runtime Integrity
-    status: planned
-    capsule_dir: specs/epics/e07-production-runtime-integrity
+    status: completed
+    capsule_dir: specs/epics/archive/e07-production-runtime-integrity
     outcome: All callers receive one validated, deterministic, safeguarded, and truthful Agent Run contract.
     boundaries:
       includes: >-

@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.6.0
-updated_at: '2026-09-04T15:21:44Z'
+updated_at: '2026-09-04T16:53:24Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-09-03T08:22:40Z'
@@ -123,12 +123,12 @@ epics:
         tasks_failing: 0
   e07:
     title: Production Runtime Integrity
-    status: passing
+    status: completed
     bcps: 21
     stories:
       e07s01:
         title: Canonical Closeable Agent Run Stream
-        status: passing
+        status: done
         bcps: 8
         risk: P0
         tasks_total: 6
@@ -136,7 +136,7 @@ epics:
         tasks_failing: 0
       e07s02:
         title: Safeguarded Runtime Settings and Session Admission
-        status: passing
+        status: done
         bcps: 7
         risk: P0
         tasks_total: 6
@@ -144,7 +144,7 @@ epics:
         tasks_failing: 0
       e07s03:
         title: Final Core Tool Validation and Plugin Boundary
-        status: passing
+        status: done
         bcps: 6
         risk: P0
         tasks_total: 5

@@ -1,15 +1,18 @@
 workflow_mode: solo-git
 session:
-  active_flow: build
-  active_epic_id: e07
+  active_flow: plan
+  active_epic_id: null
   active_story_id: null
   target_version: 0.6.0
 handoff:
-  next_skill: verify-work
-  summary: 'All three stories of epic e07 Production Runtime Integrity are complete and passing with review findings resolved: e07s01 (Canonical Closeable Agent Run Stream), e07s02 (Safeguarded Runtime Settings and Session Admission), and e07s03 (Final Core Tool Validation and Plugin Boundary). Lifecycle execution order aligned to atomic finalization, cleanup, admission release, and terminal delivery with ordering regression tests. All 207 tests pass, code is strictly typed with mypy, formatted with ruff, and offline build succeeds.'
+  next_skill: survey-context
+  summary: 'Production Runtime Integrity was merged into main and its completed capsule
+    was archived. Release gates passed: 207 tests, 88% overall and 96% business-boundary
+    coverage, clean Ruff/Mypy/build, public-surface and wheel checks, and independent
+    review. The next epic (e08 Governed Core Extension Host) can now be scoped.'
   open_decisions: []
 git:
-  branch: e07-production-runtime-integrity
+  branch: main
 environment:
   package_manager: uv 0.10.11
   python: 3.14.6
@@ -41,9 +44,9 @@ metrics:
       total_seconds: 342.0
       avg_seconds: 342.0
     release-branch:
-      calls: 1
-      total_seconds: 49.0
-      avg_seconds: 49.0
+      calls: 2
+      total_seconds: 266.0
+      avg_seconds: 133.0
     survey-context:
       calls: 2
       total_seconds: 187.0
