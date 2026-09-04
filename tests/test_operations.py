@@ -17,7 +17,6 @@ from mia_agent.operations import (
     get_data_locations,
     is_supported_backup_file,
     restore_backup,
-    validate_archive,
 )
 
 
@@ -386,11 +385,14 @@ def test_restore_rejects_checksum_mismatch(tmp_path: Path) -> None:
     agent_json.parent.mkdir(parents=True, exist_ok=True)
     agent_json.write_text('{"agent_id": "mia"}', encoding="utf-8")
 
-    manifest = create_backup(manager, archive_path=archive_path)
+    create_backup(manager, archive_path=archive_path)
 
     # Tamper with archive: rewrite member with modified content
     tampered_archive = tmp_path / "tampered.zip"
-    with zipfile.ZipFile(archive_path, "r") as zf_in, zipfile.ZipFile(tampered_archive, "w") as zf_out:
+    with (
+        zipfile.ZipFile(archive_path, "r") as zf_in,
+        zipfile.ZipFile(tampered_archive, "w") as zf_out,
+    ):
         for item in zf_in.infolist():
             if item.filename == "agents/mia/agent.json":
                 zf_out.writestr(item.filename, b'{"agent_id": "tampered"}')
@@ -399,7 +401,10 @@ def test_restore_rejects_checksum_mismatch(tmp_path: Path) -> None:
 
     outcome = restore_backup(archive_path=tampered_archive, destination_dir=dest_dir)
     assert outcome.status == "rejected"
-    assert any("checksum" in err.lower() or "digest" in err.lower() or "mismatch" in err.lower() for err in outcome.errors)
+    assert any(
+        "checksum" in err.lower() or "digest" in err.lower() or "mismatch" in err.lower()
+        for err in outcome.errors
+    )
     assert not dest_dir.exists() or not any(dest_dir.iterdir())
 
 
@@ -462,4 +467,3 @@ def test_restore_dry_run_validates_without_writing(tmp_path: Path) -> None:
     outcome = restore_backup(archive_path=archive_path, destination_dir=dest_dir, dry_run=True)
     assert outcome.status == "restored"
     assert not dest_dir.exists()
-

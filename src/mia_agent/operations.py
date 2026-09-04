@@ -5,9 +5,11 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import os
+import shutil
 import time
 import zipfile
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -51,6 +53,15 @@ class BackupManifest(BaseModel):
     created_at: float = Field(default_factory=time.time)
     files: list[ManifestFileEntry] = Field(default_factory=list)
     total_bytes: int = 0
+
+
+class RestoreOutcome(BaseModel):
+    """Result of validating or executing an archive restore operation."""
+
+    status: Literal["restored", "rejected", "failed"]
+    files_restored: int = 0
+    total_bytes: int = 0
+    errors: list[str] = Field(default_factory=list)
 
 
 def get_data_locations(
@@ -263,3 +274,171 @@ def create_backup(
                 tmp_archive.unlink()
 
     return manifest
+
+
+def validate_archive(archive_path: Path) -> tuple[bool, BackupManifest | None, list[str]]:
+    """Validate archive integrity, member paths, version, and digest consistency."""
+    errors: list[str] = []
+    if not archive_path.exists():
+        return False, None, [f"Archive does not exist: {archive_path}"]
+    if not archive_path.is_file():
+        return False, None, [f"Archive is not a file: {archive_path}"]
+
+    try:
+        with zipfile.ZipFile(archive_path, "r") as zf:
+            namelist = zf.namelist()
+            if MANIFEST_FILENAME not in namelist:
+                return False, None, [f"Archive missing required manifest '{MANIFEST_FILENAME}'"]
+
+            try:
+                manifest_data = zf.read(MANIFEST_FILENAME).decode("utf-8")
+                manifest = BackupManifest.model_validate_json(manifest_data)
+            except Exception as exc:
+                return False, None, [f"Malformed backup manifest: {exc}"]
+
+            if manifest.version != BACKUP_ARCHIVE_VERSION:
+                return (
+                    False,
+                    manifest,
+                    [
+                        f"Unsupported archive version '{manifest.version}'; expected '{BACKUP_ARCHIVE_VERSION}'"
+                    ],
+                )
+
+            # Path traversal and security checks
+            seen_names: set[str] = set()
+            for name in namelist:
+                if name in seen_names:
+                    errors.append(f"Duplicate archive member: {name}")
+                seen_names.add(name)
+
+                if name == MANIFEST_FILENAME:
+                    continue
+
+                if name.startswith("/") or "\\" in name or ".." in name.split("/"):
+                    errors.append(f"Illegal path traversal in archive member: {name}")
+                    continue
+
+                parts = name.strip("/").split("/")
+                if parts[0] not in {"agents", "diagnostics"}:
+                    errors.append(f"Unsupported top-level archive directory: {parts[0]}")
+
+            # Manifest entry checks
+            manifest_paths = {entry.path for entry in manifest.files}
+            archive_non_manifest = {n for n in namelist if n != MANIFEST_FILENAME}
+
+            missing_in_archive = manifest_paths - archive_non_manifest
+            if missing_in_archive:
+                errors.append(f"Archive missing declared files: {sorted(missing_in_archive)}")
+
+            undeclared_in_manifest = archive_non_manifest - manifest_paths
+            if undeclared_in_manifest:
+                errors.append(
+                    f"Archive contains undeclared files: {sorted(undeclared_in_manifest)}"
+                )
+
+            # Check checksums and sizes for each entry
+            for entry in manifest.files:
+                if entry.path not in archive_non_manifest:
+                    continue
+                try:
+                    content = zf.read(entry.path)
+                    if len(content) != entry.size:
+                        errors.append(
+                            f"Size mismatch for {entry.path}: expected {entry.size}, got {len(content)}"
+                        )
+                    content_sha = hashlib.sha256(content).hexdigest()
+                    if content_sha != entry.sha256:
+                        errors.append(
+                            f"Checksum mismatch for {entry.path}: expected {entry.sha256}, got {content_sha}"
+                        )
+                except Exception as exc:
+                    errors.append(f"Error reading {entry.path}: {exc}")
+
+            if errors:
+                return False, manifest, errors
+            return True, manifest, []
+    except zipfile.BadZipFile as exc:
+        return False, None, [f"Invalid or corrupted zip archive: {exc}"]
+    except Exception as exc:
+        return False, None, [f"Archive inspection error: {exc}"]
+
+
+def restore_backup(
+    archive_path: Path,
+    destination_dir: Path,
+    overwrite: bool = False,
+    dry_run: bool = False,
+) -> RestoreOutcome:
+    """Validate and restore a backup archive non-destructively."""
+    valid, manifest, errors = validate_archive(archive_path)
+    if not valid or manifest is None:
+        return RestoreOutcome(status="rejected", errors=errors)
+
+    if destination_dir.exists():
+        try:
+            has_contents = any(destination_dir.iterdir())
+        except OSError as exc:
+            return RestoreOutcome(
+                status="rejected",
+                errors=[f"Cannot inspect destination directory: {exc}"],
+            )
+
+        if has_contents and not overwrite:
+            return RestoreOutcome(
+                status="rejected",
+                errors=[f"Destination directory is not empty: {destination_dir}"],
+            )
+
+    if dry_run:
+        return RestoreOutcome(
+            status="restored",
+            files_restored=len(manifest.files),
+            total_bytes=manifest.total_bytes,
+        )
+
+    # Staged restoration
+    staging_dir = (
+        destination_dir.parent / f".mia_restore_staging_{os.getpid()}_{int(time.time() * 1000)}"
+    )
+    try:
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        staging_dir.chmod(0o700)
+
+        with zipfile.ZipFile(archive_path, "r") as zf:
+            for entry in manifest.files:
+                target_file = (staging_dir / entry.path).resolve()
+                if not target_file.is_relative_to(staging_dir.resolve()):
+                    return RestoreOutcome(
+                        status="rejected",
+                        errors=[f"Illegal path traversal detected: {entry.path}"],
+                    )
+                target_file.parent.mkdir(parents=True, exist_ok=True)
+                target_file.write_bytes(zf.read(entry.path))
+                target_file.chmod(0o600)
+
+        # Atomic commit
+        destination_dir.parent.mkdir(parents=True, exist_ok=True)
+        if not destination_dir.exists():
+            staging_dir.rename(destination_dir)
+        else:
+            for item in staging_dir.iterdir():
+                dest_item = destination_dir / item.name
+                if dest_item.exists():
+                    if dest_item.is_dir():
+                        shutil.rmtree(dest_item)
+                    else:
+                        dest_item.unlink()
+                item.rename(dest_item)
+            staging_dir.rmdir()
+
+        return RestoreOutcome(
+            status="restored",
+            files_restored=len(manifest.files),
+            total_bytes=manifest.total_bytes,
+        )
+    except Exception as exc:
+        return RestoreOutcome(status="failed", errors=[f"Failed to restore archive: {exc}"])
+    finally:
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir, ignore_errors=True)
