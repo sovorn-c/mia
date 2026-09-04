@@ -413,3 +413,127 @@ async def test_agent_runner_run_executes_research_sequencing(tmp_path) -> None:
     assert coordinator_events[-1].event.type == "turn_complete"
 
 
+@pytest.mark.asyncio
+async def test_terminal_truth_exactly_one_terminal_envelope_normal_consumption(tmp_path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+
+    provider = MockProvider()
+    provider.queue_text_response("completed")
+    runner = AgentRunner(agent_manager=AgentManager(agents_dir=tmp_path / "agents"))
+    request = RunRequest(prompt_text="hello", agent_id="mia")
+
+    events = [e async for e in runner.run(request, provider=provider, cwd=tmp_path)]
+    assert events
+    assert events[-1].event.type == "turn_complete"
+    # Verify no other terminal event exists earlier in the stream
+    terminals = [e for e in events if e.event.type in ("turn_complete", "run_error")]
+    assert len(terminals) == 1
+
+
+@pytest.mark.asyncio
+async def test_terminal_truth_missing_terminal_becomes_run_error(tmp_path) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.events import AssistantChunkEvent
+    from mia_agent.runtime_events import RunErrorEvent
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import AgentRuntime, RunRequest
+
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    # Mock harness that yields chunks but finishes without TurnCompleteEvent
+    async def empty_prompt(prompt_text: str):
+        yield AssistantChunkEvent(delta_text="unfinished work")
+
+    mock_harness = MagicMock()
+    mock_harness.prompt = empty_prompt
+
+    factory = MagicMock(spec=AgentRuntimeFactory)
+    mock_runtime = MagicMock(spec=AgentRuntime)
+    mock_runtime.harness = mock_harness
+    factory.build.return_value = mock_runtime
+
+    runner = AgentRunner(factory=factory, agent_manager=manager)
+    request = RunRequest(prompt_text="incomplete prompt", agent_id="mia")
+
+    events = [e async for e in runner.run(request, cwd=tmp_path)]
+    assert events
+    last_event = events[-1].event
+    assert isinstance(last_event, RunErrorEvent)
+    assert last_event.code == "missing_terminal"
+    terminals = [e for e in events if e.event.type in ("turn_complete", "run_error")]
+    assert len(terminals) == 1
+
+
+@pytest.mark.asyncio
+async def test_terminal_truth_agent_error_normalized_to_run_error(tmp_path) -> None:
+    from unittest.mock import MagicMock
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.events import AgentErrorEvent
+    from mia_agent.runtime_events import RunErrorEvent
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import AgentRuntime, RunRequest
+
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+
+    async def error_prompt(prompt_text: str):
+        yield AgentErrorEvent(error="agent failed unexpectedly")
+
+    mock_harness = MagicMock()
+    mock_harness.prompt = error_prompt
+
+    factory = MagicMock(spec=AgentRuntimeFactory)
+    mock_runtime = MagicMock(spec=AgentRuntime)
+    mock_runtime.harness = mock_harness
+    factory.build.return_value = mock_runtime
+
+    runner = AgentRunner(factory=factory, agent_manager=manager)
+    request = RunRequest(prompt_text="failing prompt", agent_id="mia")
+
+    events = [e async for e in runner.run(request, cwd=tmp_path)]
+    assert events
+    last_event = events[-1].event
+    assert isinstance(last_event, RunErrorEvent)
+    assert last_event.code == "agent_error"
+    assert "agent failed unexpectedly" in last_event.error
+    # Ensure no raw AgentErrorEvent leaked into envelopes
+    assert not any(e.event.type == "agent_error" for e in events)
+
+
+@pytest.mark.asyncio
+async def test_terminal_truth_duplicate_terminal_suppressed(tmp_path) -> None:
+    from unittest.mock import MagicMock
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.events import AssistantChunkEvent, TurnCompleteEvent
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import AgentRuntime, RunRequest
+
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+
+    async def duplicate_terminal_prompt(prompt_text: str):
+        yield TurnCompleteEvent(total_steps=1, stop_reason="stop")
+        yield AssistantChunkEvent(delta_text="rogue event after completion")
+        yield TurnCompleteEvent(total_steps=2, stop_reason="stop")
+
+    mock_harness = MagicMock()
+    mock_harness.prompt = duplicate_terminal_prompt
+
+    factory = MagicMock(spec=AgentRuntimeFactory)
+    mock_runtime = MagicMock(spec=AgentRuntime)
+    mock_runtime.harness = mock_harness
+    factory.build.return_value = mock_runtime
+
+    runner = AgentRunner(factory=factory, agent_manager=manager)
+    request = RunRequest(prompt_text="test duplicate terminal", agent_id="mia")
+
+    events = [e async for e in runner.run(request, cwd=tmp_path)]
+    assert len(events) == 1
+    assert events[0].event.type == "turn_complete"
+
+
+
