@@ -435,7 +435,8 @@ async def test_terminal_truth_exactly_one_terminal_envelope_normal_consumption(t
 
 @pytest.mark.asyncio
 async def test_terminal_truth_missing_terminal_becomes_run_error(tmp_path) -> None:
-    from unittest.mock import AsyncMock, MagicMock
+    from unittest.mock import MagicMock
+
     from mia_agent.agent_runner import AgentRunner
     from mia_agent.agents import AgentManager
     from mia_agent.events import AssistantChunkEvent
@@ -444,6 +445,7 @@ async def test_terminal_truth_missing_terminal_becomes_run_error(tmp_path) -> No
     from mia_agent.runtime_models import AgentRuntime, RunRequest
 
     manager = AgentManager(agents_dir=tmp_path / "agents")
+
     # Mock harness that yields chunks but finishes without TurnCompleteEvent
     async def empty_prompt(prompt_text: str):
         yield AssistantChunkEvent(delta_text="unfinished work")
@@ -471,6 +473,7 @@ async def test_terminal_truth_missing_terminal_becomes_run_error(tmp_path) -> No
 @pytest.mark.asyncio
 async def test_terminal_truth_agent_error_normalized_to_run_error(tmp_path) -> None:
     from unittest.mock import MagicMock
+
     from mia_agent.agent_runner import AgentRunner
     from mia_agent.agents import AgentManager
     from mia_agent.events import AgentErrorEvent
@@ -507,6 +510,7 @@ async def test_terminal_truth_agent_error_normalized_to_run_error(tmp_path) -> N
 @pytest.mark.asyncio
 async def test_terminal_truth_duplicate_terminal_suppressed(tmp_path) -> None:
     from unittest.mock import MagicMock
+
     from mia_agent.agent_runner import AgentRunner
     from mia_agent.agents import AgentManager
     from mia_agent.events import AssistantChunkEvent, TurnCompleteEvent
@@ -534,6 +538,3 @@ async def test_terminal_truth_duplicate_terminal_suppressed(tmp_path) -> None:
     events = [e async for e in runner.run(request, cwd=tmp_path)]
     assert len(events) == 1
     assert events[0].event.type == "turn_complete"
-
-
-

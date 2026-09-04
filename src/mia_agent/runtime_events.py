@@ -19,6 +19,7 @@ class RunErrorEvent(BaseModel):
     type: Literal["run_error"] = "run_error"
     stage: str
     error: str
+    code: str = "runtime_error"
     cancelled: bool = False
 
 
@@ -44,13 +45,16 @@ def error_envelope(
     stage: str,
     error: str,
     *,
+    code: str = "runtime_error",
     cancelled: bool = False,
 ) -> AgentEventEnvelope:
+    effective_code = "cancelled" if (cancelled and code == "runtime_error") else code
     return AgentEventEnvelope(
         **identity.model_dump(),
         event=RunErrorEvent(
             stage=stage,
             error=str(sanitize_arguments(error)),
+            code=effective_code,
             cancelled=cancelled,
         ),
     )

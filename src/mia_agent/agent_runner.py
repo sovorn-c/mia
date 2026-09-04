@@ -9,9 +9,10 @@ from pathlib import Path
 
 from mia_agent.agents import AgentManager
 from mia_agent.auth.config import ConfigManager
-from mia_agent.events import AgentErrorEvent, AssistantChunkEvent
+from mia_agent.events import AgentErrorEvent, AssistantChunkEvent, TurnCompleteEvent
 from mia_agent.runtime_events import (
     AgentEventEnvelope,
+    RunErrorEvent,
 )
 from mia_agent.runtime_events import (
     envelope as _envelope,
@@ -53,6 +54,30 @@ def _safe_error_identity(identity: RuntimeIdentity) -> RuntimeIdentity:
             ),
         }
     )
+
+
+class _RunLifecycle:
+    """Core-owned atomic idempotent finalizer and terminal guard for one Run."""
+
+    def __init__(self, identity: RuntimeIdentity) -> None:
+        self.identity = identity
+        self.finalized: bool = False
+        self.outcome: str | None = None
+        self.terminal_envelope: AgentEventEnvelope | None = None
+        self.terminal_delivered: bool = False
+
+    def finalize(
+        self,
+        outcome: str,
+        envelope: AgentEventEnvelope | None = None,
+    ) -> bool:
+        """Atomically finalize exactly once."""
+        if self.finalized:
+            return False
+        self.finalized = True
+        self.outcome = outcome
+        self.terminal_envelope = envelope
+        return True
 
 
 class AgentRunner:
@@ -117,21 +142,20 @@ class AgentRunner:
             agent_id=target_agent_id,
             session_id=request.session_id or f"session_{uuid.uuid4().hex[:12]}",
         )
+        lifecycle = _RunLifecycle(identity)
+
         try:
             agent = self.agent_manager.get_agent(target_agent_id)
             identity = identity.model_copy(update={"agent_id": agent.agent_id})
+            lifecycle.identity = identity
+
             if agent.agent_id == "research":
-                async for envelope in self._prompt_research(
-                    prompt_text=request.prompt_text,
+                async for envelope in self._run_research(
+                    request=request,
+                    lifecycle=lifecycle,
                     provider=provider,
-                    model_override=request.model_override,
-                    session_id=identity.session_id,
-                    run_id=identity.run_id,
                     cwd=effective_cwd,
-                    compaction_threshold=request.compaction_threshold,
-                    context_window=request.context_window,
                     approval_callback=approval_callback,
-                    full_access_confirmed=request.full_access_confirmed,
                 ):
                     yield envelope
                 return
@@ -147,17 +171,75 @@ class AgentRunner:
                 full_access_confirmed=request.full_access_confirmed,
             )
             self.last_runtime = runtime
+
             async for event in runtime.harness.prompt(request.prompt_text):
-                yield _envelope(identity, event)
+                if lifecycle.terminal_delivered:
+                    break
+
+                if isinstance(event, TurnCompleteEvent):
+                    env = _envelope(identity, event)
+                    if lifecycle.finalize("success", env):
+                        lifecycle.terminal_delivered = True
+                        yield env
+                    break
+                elif isinstance(event, AgentErrorEvent):
+                    err_env = _error_envelope(
+                        _safe_error_identity(identity),
+                        stage="agent",
+                        error=event.error,
+                        code="agent_error",
+                    )
+                    if lifecycle.finalize("agent_error", err_env):
+                        lifecycle.terminal_delivered = True
+                        yield err_env
+                    break
+                elif isinstance(event, RunErrorEvent):
+                    err_env = AgentEventEnvelope(**identity.model_dump(), event=event)
+                    if lifecycle.finalize(event.code, err_env):
+                        lifecycle.terminal_delivered = True
+                        yield err_env
+                    break
+                else:
+                    yield _envelope(identity, event)
+
+            if not lifecycle.finalized:
+                missing_env = _error_envelope(
+                    _safe_error_identity(identity),
+                    stage="runtime",
+                    error="missing terminal event from agent harness",
+                    code="missing_terminal",
+                )
+                if lifecycle.finalize("missing_terminal", missing_env):
+                    lifecycle.terminal_delivered = True
+                    yield missing_env
+
         except asyncio.CancelledError:
-            if identity.agent_id == "research":
+            if not lifecycle.finalized:
+                lifecycle.finalize("cancelled")
                 raise
-            yield _error_envelope(
-                _safe_error_identity(identity), "prompt", "prompt cancelled", cancelled=True
-            )
-            raise
+            else:
+                if not lifecycle.terminal_delivered and lifecycle.terminal_envelope is not None:
+                    lifecycle.terminal_delivered = True
+                    yield lifecycle.terminal_envelope
+                return
+        except GeneratorExit:
+            if not lifecycle.finalized:
+                lifecycle.finalize("cancelled")
+            return
         except Exception as exc:
-            yield _error_envelope(_safe_error_identity(identity), "prompt", str(exc))
+            if not lifecycle.finalized:
+                err_text = str(exc)
+                code = "agent_not_found" if "not found" in err_text.lower() else "provider_error"
+                stage = "agent" if code == "agent_not_found" else "provider"
+                err_env = _error_envelope(
+                    _safe_error_identity(identity),
+                    stage=stage,
+                    error=err_text,
+                    code=code,
+                )
+                if lifecycle.finalize(code, err_env):
+                    lifecycle.terminal_delivered = True
+                    yield err_env
 
     async def prompt(
         self,
@@ -310,3 +392,157 @@ class AgentRunner:
             yield _error_envelope(
                 _safe_error_identity(coordinator_identity), "coordinator", str(exc)
             )
+
+    async def _run_research(
+        self,
+        *,
+        request: RunRequest,
+        lifecycle: _RunLifecycle,
+        provider: LLMProvider | None,
+        cwd: Path | None,
+        approval_callback: ApprovalCallback | None,
+    ) -> AsyncGenerator[AgentEventEnvelope, None]:
+        specialist_identity = RuntimeIdentity(
+            run_id=f"run_{uuid.uuid4().hex}",
+            task_id="specialist",
+            agent_id="architect",
+            session_id=f"{lifecycle.identity.session_id}_specialist",
+            parent_session_id=lifecycle.identity.session_id,
+        )
+        findings: list[str] = []
+        try:
+            specialist = self.factory.build(
+                identity=specialist_identity,
+                provider=provider,
+                model_override=request.model_override,
+                cwd=cwd,
+                compaction_threshold=request.compaction_threshold,
+                context_window=request.context_window,
+                approval_callback=approval_callback,
+                full_access_confirmed=request.full_access_confirmed,
+            )
+            async for event in specialist.harness.prompt(request.prompt_text):
+                if isinstance(event, AssistantChunkEvent) and event.delta_text:
+                    findings.append(event.delta_text)
+                if isinstance(event, AgentErrorEvent):
+                    err_env = _error_envelope(
+                        _safe_error_identity(specialist_identity),
+                        stage="specialist",
+                        error=event.error,
+                        code="agent_error",
+                    )
+                    if lifecycle.finalize("agent_error", err_env):
+                        lifecycle.terminal_delivered = True
+                        yield err_env
+                    return
+                elif isinstance(event, RunErrorEvent):
+                    err_env = AgentEventEnvelope(**specialist_identity.model_dump(), event=event)
+                    if lifecycle.finalize(event.code, err_env):
+                        lifecycle.terminal_delivered = True
+                        yield err_env
+                    return
+                elif isinstance(event, TurnCompleteEvent):
+                    yield _envelope(specialist_identity, event)
+                else:
+                    yield _envelope(specialist_identity, event)
+        except asyncio.CancelledError:
+            if not lifecycle.finalized:
+                lifecycle.finalize("cancelled")
+            raise
+        except GeneratorExit:
+            if not lifecycle.finalized:
+                lifecycle.finalize("cancelled")
+            return
+        except Exception as exc:
+            err_env = _error_envelope(
+                _safe_error_identity(specialist_identity),
+                stage="specialist",
+                error=str(exc),
+                code="provider_error",
+            )
+            if lifecycle.finalize("provider_error", err_env):
+                lifecycle.terminal_delivered = True
+                yield err_env
+            return
+
+        coordinator_identity = RuntimeIdentity(
+            run_id=lifecycle.identity.run_id,
+            task_id="root",
+            agent_id="research",
+            session_id=lifecycle.identity.session_id,
+        )
+        handoff = (
+            f"{request.prompt_text}\n\n[Architect specialist result — reference only]\n"
+            f"{''.join(findings)}\n[End architect specialist result]"
+        )
+        try:
+            coordinator = self.factory.build(
+                identity=coordinator_identity,
+                provider=provider,
+                model_override=request.model_override,
+                cwd=cwd,
+                compaction_threshold=request.compaction_threshold,
+                context_window=request.context_window,
+                approval_callback=approval_callback,
+                full_access_confirmed=request.full_access_confirmed,
+            )
+            self.last_runtime = coordinator
+            async for event in coordinator.harness.prompt(handoff):
+                if lifecycle.terminal_delivered:
+                    break
+                if isinstance(event, TurnCompleteEvent):
+                    env = _envelope(coordinator_identity, event)
+                    if lifecycle.finalize("success", env):
+                        lifecycle.terminal_delivered = True
+                        yield env
+                    break
+                elif isinstance(event, AgentErrorEvent):
+                    err_env = _error_envelope(
+                        _safe_error_identity(coordinator_identity),
+                        stage="coordinator",
+                        error=event.error,
+                        code="agent_error",
+                    )
+                    if lifecycle.finalize("agent_error", err_env):
+                        lifecycle.terminal_delivered = True
+                        yield err_env
+                    break
+                elif isinstance(event, RunErrorEvent):
+                    err_env = AgentEventEnvelope(**coordinator_identity.model_dump(), event=event)
+                    if lifecycle.finalize(event.code, err_env):
+                        lifecycle.terminal_delivered = True
+                        yield err_env
+                    break
+                else:
+                    yield _envelope(coordinator_identity, event)
+
+            if not lifecycle.finalized:
+                missing_env = _error_envelope(
+                    _safe_error_identity(coordinator_identity),
+                    stage="runtime",
+                    error="missing terminal event from agent harness",
+                    code="missing_terminal",
+                )
+                if lifecycle.finalize("missing_terminal", missing_env):
+                    lifecycle.terminal_delivered = True
+                    yield missing_env
+
+        except asyncio.CancelledError:
+            if not lifecycle.finalized:
+                lifecycle.finalize("cancelled")
+            raise
+        except GeneratorExit:
+            if not lifecycle.finalized:
+                lifecycle.finalize("cancelled")
+            return
+        except Exception as exc:
+            if not lifecycle.finalized:
+                err_env = _error_envelope(
+                    _safe_error_identity(coordinator_identity),
+                    stage="coordinator",
+                    error=str(exc),
+                    code="provider_error",
+                )
+                if lifecycle.finalize("provider_error", err_env):
+                    lifecycle.terminal_delivered = True
+                    yield err_env
