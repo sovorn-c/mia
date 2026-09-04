@@ -91,13 +91,17 @@ def test_cli_data_restore_dry_run_and_execution(tmp_path: Path) -> None:
     create_backup(manager, archive_path=archive_path)
 
     # Dry run
-    res_dry = runner.invoke(app, ["data", "restore", str(archive_path), "--destination", str(dest_dir), "--dry-run"])
+    res_dry = runner.invoke(
+        app, ["data", "restore", str(archive_path), "--destination", str(dest_dir), "--dry-run"]
+    )
     assert res_dry.exit_code == 0
     assert "dry run" in res_dry.stdout.lower() or "valid" in res_dry.stdout.lower()
     assert not dest_dir.exists()
 
     # Actual restore
-    res_real = runner.invoke(app, ["data", "restore", str(archive_path), "--destination", str(dest_dir)])
+    res_real = runner.invoke(
+        app, ["data", "restore", str(archive_path), "--destination", str(dest_dir)]
+    )
     assert res_real.exit_code == 0
     assert "restored" in res_real.stdout.lower() or "success" in res_real.stdout.lower()
     assert (dest_dir / "agents" / "mia" / "agent.json").exists()
@@ -111,4 +115,8 @@ def test_cli_data_restore_invalid_archive_fails(tmp_path: Path) -> None:
 
     res = runner.invoke(app, ["data", "restore", str(bad_archive), "--destination", str(dest_dir)])
     assert res.exit_code != 0
-    assert "error" in res.stdout.lower() or "invalid" in res.stdout.lower() or "corrupt" in res.stdout.lower()
+    assert (
+        "error" in res.stdout.lower()
+        or "invalid" in res.stdout.lower()
+        or "corrupt" in res.stdout.lower()
+    )
