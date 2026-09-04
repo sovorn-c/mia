@@ -2,14 +2,11 @@ workflow_mode: solo-git
 session:
   active_flow: build
   active_epic_id: e09
-  active_story_id: e09s01
+  active_story_id: e09s03
   target_version: 0.6.0
 handoff:
-  next_skill: bp-build
-  summary: e09 Local Operations and Recovery is fully planned in dependency order.
-    Three implementation-ready vertical stories cover attributed diagnostics and bounded
-    retention, supported non-credential backup/restore, and non-destructive interrupted-write/corrupt-data
-    recovery. The next step is one whole-epic bp-build on branch e09-local-operations-recovery.
+  next_skill: release-branch
+  summary: Epic e09 Local Operations and Recovery is fully completed across all three vertical stories (e09s01, e09s02, e09s03). Attributed diagnostics and bounded retention, supported non-credential backup/restore, and deterministic read-only recovery verification are implemented and verified.
   open_decisions: []
 git:
   branch: e09-local-operations-recovery

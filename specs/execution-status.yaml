@@ -183,7 +183,7 @@ epics:
         tasks_failing: 0
   e09:
     title: Local Operations and Recovery
-    status: in-progress
+    status: completed
     bcps: 13
     stories:
       e09s01:
@@ -204,12 +204,12 @@ epics:
         tasks_failing: 0
       e09s03:
         title: Non-Destructive Interrupted-Write and Corrupt-Data Recovery
-        status: planned
+        status: completed
         bcps: 3
         risk: P0
         tasks_total: 4
-        tasks_passing: 0
-        tasks_failing: 4
+        tasks_passing: 4
+        tasks_failing: 0
   e10:
     title: Accessible Product Experience and Documentation
     status: planned
