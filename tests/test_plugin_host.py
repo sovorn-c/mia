@@ -1039,8 +1039,8 @@ async def test_activation_disposal_timeout_diagnosed_and_quarantined_preserving_
 
     orig_cleanup = runner._run_cooperative_cleanup
 
-    async def fast_cleanup(runtime, identity, timeout=0.01):
-        return await orig_cleanup(runtime, identity, timeout=0.01)
+    async def fast_cleanup(runtime, identity, timeout=0.01, **kwargs: Any):
+        return await orig_cleanup(runtime, identity, timeout=0.01, **kwargs)
 
     runner._run_cooperative_cleanup = fast_cleanup  # type: ignore[method-assign]
 
@@ -1346,3 +1346,228 @@ async def test_observer_failure_produces_sanitized_diagnostic_and_preserves_term
         assert d.plugin_id == "faulty_plugin"
         assert "sk-" not in d.error
         assert "[REDACTED]" in d.error
+
+
+def test_static_catalog_inspection_does_not_execute_installed_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from mia_agent.plugin_host import PluginContext, PluginHost
+    from mia_agent.plugins import MIA_PLUGIN_ENTRY_POINT_GROUP
+
+    load_counter = {"count": 0}
+
+    class FakeDist:
+        name = "mia-ext-counter"
+        version = "1.0.0"
+
+    class FakeEntryPoint:
+        name = "counter_plugin"
+        value = "mia_ext_counter:plugin"
+        group = MIA_PLUGIN_ENTRY_POINT_GROUP
+        dist = FakeDist()
+
+        def load(self) -> object:
+            load_counter["count"] += 1
+
+            class MockPlugin:
+                @property
+                def manifest(self) -> PluginManifest:
+                    return PluginManifest(
+                        plugin_id="counter_plugin",
+                        version="1.0.0",
+                        plugin_type="trusted-code",
+                        display_name="Counter Plugin",
+                        description="Plugin with call counter",
+                    )
+
+                async def activate(self, ctx: PluginContext) -> None:
+                    pass
+
+            return MockPlugin()
+
+    monkeypatch.setattr(
+        "mia_agent.plugins.discover_entry_points",
+        lambda: [FakeEntryPoint()],
+    )
+
+    agents = make_agent_manager(tmp_path)
+    alpha = agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+
+    # Static inspection: list_available and get_manifest MUST NOT call ep.load()
+    available = plugins.list_available()
+    assert any(m.plugin_id == "counter_plugin" for m in available)
+    manifest = plugins.get_manifest("counter_plugin")
+    assert manifest.plugin_id == "counter_plugin"
+    assert manifest.provenance is not None
+    assert manifest.provenance.source == "installed"
+    assert load_counter["count"] == 0
+
+    # Installing and trusting also must not execute code
+    plugins.install("counter_plugin")
+    plugins.trust_plugin("counter_plugin")
+    plugins.enable(alpha.agent_id, "counter_plugin")
+    assert load_counter["count"] == 0
+
+    # Activation DOES call load()
+    host = PluginHost()
+    plan = host.plan(agents.get_agent("alpha"), plugins)
+    assert load_counter["count"] == 0
+
+    import asyncio
+
+    asyncio.run(host.activate(plan, agent=agents.get_agent("alpha"), plugin_manager=plugins))
+    assert load_counter["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_activation_disposers_cleaned_when_factory_build_fails(tmp_path: Path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.plugin_host import PluginContext, PluginHost
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+
+    disposed = []
+
+    class EffectPlugin:
+        @property
+        def manifest(self) -> PluginManifest:
+            return PluginManifest(
+                plugin_id="effect_plugin",
+                version="1.0.0",
+                display_name="Effect Plugin",
+                description="Acquires effect with disposer",
+            )
+
+        async def activate(self, ctx: PluginContext) -> None:
+            await ctx.effect(
+                acquire=lambda: "resource_acquired",
+                cleanup=lambda: disposed.append("cleaned_up"),
+            )
+
+    agents = make_agent_manager(tmp_path)
+    alpha = agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+
+    ep = EffectPlugin()
+    plugins._catalog["effect_plugin"] = ep.manifest
+    plugins.install("effect_plugin")
+    plugins.trust_plugin("effect_plugin")
+    plugins.enable(alpha.agent_id, "effect_plugin")
+
+    host = PluginHost()
+    host.register_implementation("effect_plugin", ep)
+
+    factory = AgentRuntimeFactory(agent_manager=agents, plugin_manager=plugins, plugin_host=host)
+
+    # Monkeypatch factory.build to simulate failure after activation succeeds
+    def faulty_build(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("Simulated build failure")
+
+    factory.build = faulty_build  # type: ignore[method-assign]
+
+    runner = AgentRunner(agent_manager=agents, factory=factory)
+    req = RunRequest(prompt_text="test prompt", agent_id="alpha")
+
+    events = [env async for env in runner.run(req, provider=MockProvider(), cwd=tmp_path)]
+
+    # Disposer must have been executed
+    assert disposed == ["cleaned_up"]
+    # Terminal event must be delivered
+    assert len(events) >= 1
+    assert events[-1].event.type == "run_error"
+    assert "Simulated build failure" in str(events[-1].event.error)
+
+
+def test_immutable_run_snapshot_and_configuration(tmp_path: Path) -> None:
+    from types import MappingProxyType
+
+    from mia_agent.plugin_host import ActivationPlan, PluginActivation, PluginContext
+
+    manifest = PluginManifest(
+        plugin_id="test_immut",
+        version="1.0.0",
+        display_name="Immut Plugin",
+        description="Testing immutability",
+    )
+    plan = ActivationPlan(
+        agent_id="test",
+        plugins=("test_immut",),
+        manifests={"test_immut": manifest},
+    )
+    assert isinstance(plan.manifests, MappingProxyType)
+    with pytest.raises(TypeError):
+        plan.manifests["test_immut"] = manifest  # type: ignore[index]
+
+    activation = PluginActivation(agent_id="test")
+    assert isinstance(activation.observers, MappingProxyType)
+    with pytest.raises(TypeError):
+        activation.observers["run_started"] = ()  # type: ignore[index]
+
+    ctx = PluginContext(
+        plugin_id="test_immut",
+        agent_id="test",
+        config={"key": "val", "nested": {"a": 1}},
+        data_dir=tmp_path,
+        manifest=manifest,
+    )
+    assert isinstance(ctx.config, MappingProxyType)
+    with pytest.raises(TypeError):
+        ctx.config["key"] = "new_val"  # type: ignore[index]
+    with pytest.raises(TypeError):
+        ctx.config["nested"]["a"] = 2  # type: ignore[index]
+
+
+@pytest.mark.asyncio
+async def test_async_context_contributor_appends_to_system_prompt(tmp_path: Path) -> None:
+    from mia_agent.plugin_host import PluginContext, PluginHost
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import RuntimeIdentity
+    from mia_ai.providers.mock import MockProvider
+
+    class AsyncContextPlugin:
+        @property
+        def manifest(self) -> PluginManifest:
+            return PluginManifest(
+                plugin_id="async_ctx_plugin",
+                version="1.0.0",
+                display_name="Async Ctx Plugin",
+                description="Contributes async context",
+            )
+
+        async def activate(self, ctx: PluginContext) -> None:
+            async def get_async_context() -> str:
+                return "Contributed Async Context Data"
+
+            ctx.register(get_async_context)
+
+    agents = make_agent_manager(tmp_path)
+    alpha = agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+
+    acp = AsyncContextPlugin()
+    plugins._catalog["async_ctx_plugin"] = acp.manifest
+    plugins.install("async_ctx_plugin")
+    plugins.trust_plugin("async_ctx_plugin")
+    plugins.enable(alpha.agent_id, "async_ctx_plugin")
+
+    host = PluginHost()
+    host.register_implementation("async_ctx_plugin", acp)
+
+    factory = AgentRuntimeFactory(agent_manager=agents, plugin_manager=plugins, plugin_host=host)
+    plan = host.plan(agents.get_agent("alpha"), plugins)
+    activation = await host.activate(plan, agent=agents.get_agent("alpha"), plugin_manager=plugins)
+
+    runtime = factory.build(
+        identity=RuntimeIdentity(
+            run_id="test_run",
+            task_id="test_task",
+            agent_id="alpha",
+            session_id="test_session",
+        ),
+        provider=MockProvider(),
+        activation=activation,
+    )
+
+    assert "Contributed Async Context Data" in runtime.harness.system_prompt

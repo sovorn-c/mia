@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import inspect
 from collections.abc import Awaitable, Callable, Collection, Sequence
 from pathlib import Path
@@ -77,6 +79,21 @@ def _attributed_disposer(
 
     _wrapper.plugin_id = plugin_id  # type: ignore[attr-defined]
     return _wrapper
+
+
+def _resolve_awaitable(awaitable: Awaitable[Any]) -> Any:
+    """Resolve an awaitable in either sync or running event loop context."""
+
+    async def _await(target: Awaitable[Any]) -> Any:
+        return await target
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(_await(awaitable))
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        return executor.submit(lambda: asyncio.run(_await(awaitable))).result()
 
 
 class AgentRuntimeFactory:
@@ -313,6 +330,8 @@ class AgentRuntimeFactory:
             for contributor in activation.context_contributors:
                 try:
                     res = contributor()
+                    if inspect.isawaitable(res):
+                        res = _resolve_awaitable(res)
                     if isinstance(res, str) and res.strip():
                         context_additions.append(res.strip())
                 except Exception:

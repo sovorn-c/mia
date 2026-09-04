@@ -7,6 +7,7 @@ import inspect
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Literal, Protocol, TypeVar, runtime_checkable
 
 from mia_agent.agents.model import Agent, normalize_plugin_id
@@ -33,13 +34,27 @@ ContextContributor = Callable[[], str | Awaitable[str]]
 PluginContribution = Any
 
 
+def _freeze_mapping(m: Mapping[str, Any]) -> MappingProxyType[str, Any]:
+    frozen: dict[str, Any] = {}
+    for k, v in m.items():
+        if isinstance(v, Mapping):
+            frozen[k] = _freeze_mapping(v)
+        else:
+            frozen[k] = v
+    return MappingProxyType(frozen)
+
+
 @dataclass(frozen=True, slots=True)
 class ActivationPlan:
     """Validated, complete enabled Plugin plan in deterministic activation order."""
 
     agent_id: str
     plugins: tuple[str, ...]
-    manifests: Mapping[str, PluginManifest] = field(default_factory=dict)
+    manifests: Mapping[str, PluginManifest] = field(default_factory=lambda: MappingProxyType({}))
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.manifests, MappingProxyType):
+            object.__setattr__(self, "manifests", MappingProxyType(dict(self.manifests)))
 
 
 class PluginContext:
@@ -58,7 +73,7 @@ class PluginContext:
         self.agent_id = agent_id
         # Secret-free immutable mapping
         _validate_secret_free(dict(config), f"plugin_config.{self.plugin_id}")
-        self.config: Mapping[str, Any] = dict(config)
+        self.config: Mapping[str, Any] = _freeze_mapping(config)
         self.data_dir = data_dir
         self._manifest = manifest
 
@@ -152,14 +167,27 @@ class PluginActivation:
     tools: tuple[BaseTool, ...] = ()
     context_contributors: tuple[ContextContributor, ...] = ()
     observers: Mapping[RunObserverPhase, tuple[RunObserver, ...]] = field(
-        default_factory=lambda: {
-            "run_started": (),
-            "event_emitted": (),
-            "run_finished": (),
-        }
+        default_factory=lambda: MappingProxyType(
+            {
+                "run_started": (),
+                "event_emitted": (),
+                "run_finished": (),
+            }
+        )
     )
     tool_middleware: tuple[Any, ...] = ()
     disposers: tuple[Callable[[], Any], ...] = ()
+    _cleanup_done: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.observers, MappingProxyType):
+            object.__setattr__(
+                self,
+                "observers",
+                MappingProxyType(
+                    {phase: tuple(self.observers.get(phase, ())) for phase in VALID_OBSERVER_PHASES}
+                ),
+            )
 
 
 def _attributed_disposer(fn: Callable[[], Any], plugin_id: str) -> Callable[[], Any]:
@@ -301,6 +329,19 @@ class PluginHost:
                 await self._rollback(all_disposers)
                 raise ValueError(f"Plugin '{norm_id}' has no implementation available")
 
+            if hasattr(impl, "manifest"):
+                impl_manifest = impl.manifest
+                if callable(impl_manifest):
+                    impl_manifest = impl_manifest()
+                if isinstance(impl_manifest, PluginManifest):
+                    manifest = impl_manifest.model_copy(
+                        update={
+                            "plugin_id": norm_id,
+                            "provenance": manifest.provenance,
+                            "trust": manifest.trust,
+                        }
+                    )
+
             config = getattr(agent, "plugin_config", {}).get(norm_id, {})
             if agent_manager is not None:
                 data_dir = agent_manager.agent_home(agent.agent_id) / "plugins" / norm_id
@@ -373,7 +414,9 @@ class PluginHost:
             agent_id=agent.agent_id,
             tools=tuple(staged_tools),
             context_contributors=tuple(staged_context_contributors),
-            observers={phase: tuple(staged_observers[phase]) for phase in VALID_OBSERVER_PHASES},
+            observers=MappingProxyType(
+                {phase: tuple(staged_observers[phase]) for phase in VALID_OBSERVER_PHASES}
+            ),
             tool_middleware=tuple(staged_middleware),
             disposers=final_disposers,
         )

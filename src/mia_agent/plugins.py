@@ -11,6 +11,7 @@ from mia_agent.agents.model import Agent, normalize_plugin_id
 from mia_agent.agents.storage import atomic_write_json
 from mia_agent.plugin_catalog import NotesPlugin
 from mia_agent.plugin_models import (
+    _VERSION_RE,
     CORE_PLUGIN_API_VERSION,
     AgentTemplate,
     InstalledPlugin,
@@ -128,15 +129,34 @@ class PluginManager:
 
         for ep in discovered_eps:
             norm_id = normalize_plugin_id(getattr(ep, "name", ""))
-            if norm_id in catalog:
+            if not norm_id or norm_id in catalog:
                 continue
             try:
-                plugin_obj = ep.load()
-                manifest_obj = getattr(plugin_obj, "manifest", plugin_obj)
-                if callable(manifest_obj):
-                    manifest_obj = manifest_obj()
-                if not isinstance(manifest_obj, PluginManifest):
-                    continue
+                manifest_attr = getattr(ep, "manifest", None)
+                if isinstance(manifest_attr, PluginManifest):
+                    manifest_obj = manifest_attr
+                else:
+                    dist = getattr(ep, "dist", None)
+                    pkg_name = getattr(dist, "name", None) if dist else None
+                    pkg_ver = getattr(dist, "version", None) if dist else None
+                    version = (
+                        pkg_ver
+                        if pkg_ver and _VERSION_RE.fullmatch(str(pkg_ver).strip())
+                        else "0.1.0"
+                    )
+                    display_name = norm_id.replace("_", " ").replace("-", " ").title()
+                    description = (
+                        f"Installed Plugin '{norm_id}' from package '{pkg_name}'."
+                        if pkg_name
+                        else f"Installed Plugin '{norm_id}'."
+                    )
+                    manifest_obj = PluginManifest(
+                        plugin_id=norm_id,
+                        version=version,
+                        plugin_type="trusted-code",
+                        display_name=display_name,
+                        description=description,
+                    )
                 dist = getattr(ep, "dist", None)
                 pkg_name = getattr(dist, "name", None) if dist else None
                 pkg_ver = getattr(dist, "version", None) if dist else None
