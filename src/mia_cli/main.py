@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 from pathlib import Path
 from typing import Annotated
 
@@ -33,12 +34,14 @@ sessions_app = typer.Typer(help="Inspect and manage saved session trees.")
 plugin_app = typer.Typer(help="Install and manage bundled Plugins.")
 template_app = typer.Typer(help="Inspect and instantiate Agent Templates.")
 diagnostics_app = typer.Typer(help="Inspect local operational diagnostics.")
+data_app = typer.Typer(help="Inspect local data locations, create backups, and restore data.")
 
 app.add_typer(agent_app, name="agent")
 app.add_typer(sessions_app, name="sessions")
 app.add_typer(plugin_app, name="plugin")
 app.add_typer(template_app, name="template")
 app.add_typer(diagnostics_app, name="diagnostics")
+app.add_typer(data_app, name="data")
 
 console = Console()
 
@@ -561,6 +564,109 @@ def diagnostics_list(
         plugin=plugin,
         limit=limit,
     )
+
+
+@data_app.command("locations")
+def data_locations() -> None:
+    """Inspect Core-owned local data categories, ownership, and sensitivity."""
+    manager = AgentManager()
+    layout = manager.get_data_layout()
+
+    table = Table(title="Local Data Locations", show_lines=True)
+    table.add_column("Category", style="bold cyan", no_wrap=True)
+    table.add_column("Ownership", style="bold", no_wrap=True)
+    table.add_column("Sensitive", no_wrap=True)
+    table.add_column("Backup", no_wrap=True)
+    table.add_column("Path", overflow="fold")
+
+    for loc in layout.locations:
+        sens_str = "[red]yes[/red]" if loc.sensitive else "[green]no[/green]"
+        backup_str = (
+            "[green]included[/green]" if loc.included_in_backup else "[yellow]excluded[/yellow]"
+        )
+        table.add_row(
+            loc.category,
+            loc.ownership,
+            sens_str,
+            backup_str,
+            str(loc.path),
+        )
+    console.print(table)
+
+
+@data_app.command("backup")
+def data_backup(
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Target archive path (.zip)"),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Overwrite existing backup archive"),
+    ] = False,
+) -> None:
+    """Create an integrity-checked, versioned backup of supported local data."""
+    manager = AgentManager()
+    target_path = output or Path.cwd() / f"mia-backup-{int(time.time())}.zip"
+
+    if target_path.exists() and not overwrite:
+        console.print(f"[red]Backup destination already exists: {target_path}[/red]")
+        raise typer.Exit(code=1)
+
+    from mia_agent.operations import create_backup
+
+    try:
+        manifest = create_backup(manager, archive_path=target_path, overwrite=overwrite)
+        console.print(
+            f"[green]Backup created successfully at [bold]{target_path}[/bold] "
+            f"({len(manifest.files)} files, {manifest.total_bytes} bytes).[/green]"
+        )
+    except Exception as exc:
+        console.print(f"[red]Error creating backup: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+
+@data_app.command("restore")
+def data_restore(
+    archive: Annotated[Path, typer.Argument(help="Path to backup archive to restore")],
+    destination: Annotated[
+        Path,
+        typer.Option("--destination", "-d", help="Destination directory to restore into"),
+    ],
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Overwrite existing files in destination"),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Validate archive integrity without writing"),
+    ] = False,
+) -> None:
+    """Validate and restore a backup archive into a selected destination."""
+    from mia_agent.operations import restore_backup
+
+    outcome = restore_backup(
+        archive_path=archive,
+        destination_dir=destination,
+        overwrite=overwrite,
+        dry_run=dry_run,
+    )
+
+    if outcome.status == "rejected":
+        console.print("[red]Restore rejected:[/red]")
+        for err in outcome.errors:
+            console.print(f"  [red]- {err}[/red]")
+        raise typer.Exit(code=1)
+    elif outcome.status == "failed":
+        console.print("[red]Restore failed:[/red]")
+        for err in outcome.errors:
+            console.print(f"  [red]- {err}[/red]")
+        raise typer.Exit(code=1)
+    else:
+        mode_str = "Dry-run validation succeeded" if dry_run else "Restored successfully"
+        console.print(
+            f"[green]{mode_str}: {outcome.files_restored} files ({outcome.total_bytes} bytes).[/green]"
+        )
 
 
 @app.command(name="tui")
