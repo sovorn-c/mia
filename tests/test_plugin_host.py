@@ -499,3 +499,109 @@ def test_plugin_free_agent_plan_and_activation_compatibility(tmp_path: Path) -> 
     plan = host.plan(agents.get_agent(alpha.agent_id), plugins)
     assert plan.plugins == ()
 
+
+@pytest.mark.asyncio
+async def test_plugin_context_operations_and_invariants(tmp_path: Path) -> None:
+    from mia_agent.plugin_host import PluginContext
+    from mia_tools.base import BaseTool
+
+    class DummyTool(BaseTool):
+        name = "custom_tool"
+        description = "Custom tool"
+        parameters = {}
+        effect = "side-effecting"
+
+        async def execute(self, *args: Any, **kwargs: Any) -> Any:
+            return "done"
+
+    manifest = PluginManifest(
+        plugin_id="my_plugin",
+        version="1.0.0",
+        display_name="My Plugin",
+        description="Test context",
+        tool_specs=[
+            PluginToolSpec(
+                name="custom_tool",
+                description="Custom tool",
+                effect="side-effecting",
+            )
+        ],
+    )
+
+    ctx = PluginContext(
+        plugin_id="my_plugin",
+        agent_id="agent_1",
+        config={"setting": "val"},
+        data_dir=tmp_path / "data",
+        manifest=manifest,
+    )
+
+    # 1. Register matching tool
+    tool = DummyTool()
+    ctx.register(tool)
+    assert getattr(tool, "plugin_id") == "my_plugin"
+    assert len(ctx._tools) == 1
+
+    # 2. Register undeclared tool fails
+    class UndeclaredTool(BaseTool):
+        name = "unknown_tool"
+        description = "Unknown"
+        parameters = {}
+        effect = "non-mutating"
+
+        async def execute(self, *args: Any, **kwargs: Any) -> Any:
+            return "done"
+
+    with pytest.raises(ValueError, match="undeclared Tool"):
+        ctx.register(UndeclaredTool())
+
+    # 3. Register tool with wrong effect fails
+    class BadEffectTool(BaseTool):
+        name = "custom_tool"
+        description = "Custom tool"
+        parameters = {}
+        effect = "non-mutating"  # Manifest declares side-effecting!
+
+        async def execute(self, *args: Any, **kwargs: Any) -> Any:
+            return "done"
+
+    with pytest.raises(ValueError, match="undeclared effect"):
+        ctx.register(BadEffectTool())
+
+    # 4. Observe with valid phases
+    called_phases: list[str] = []
+
+    def my_observer(event: Any) -> None:
+        called_phases.append("called")
+
+    ctx.observe("run_started", my_observer)
+    ctx.observe("event_emitted", my_observer)
+    ctx.observe("run_finished", my_observer)
+    assert len(ctx._observers["run_started"]) == 1
+
+    # Invalid phase fails
+    with pytest.raises(ValueError, match="Invalid observer phase"):
+        ctx.observe("unknown_phase", my_observer)  # type: ignore[arg-type]
+
+    # Non-callable fails
+    with pytest.raises(TypeError):
+        ctx.observe("run_started", "not_a_callable")  # type: ignore[arg-type]
+
+    # 5. Effects record disposers
+    disposed = []
+    await ctx.effect(lambda: disposed.append("clean_1"))
+    assert len(ctx._disposers) == 1
+
+    val = await ctx.effect(lambda: "resource_res", cleanup=lambda: disposed.append("clean_2"))
+    assert val == "resource_res"
+    assert len(ctx._disposers) == 2
+
+    # 6. Does not expose mutable core objects
+    assert not hasattr(ctx, "session_store")
+    assert not hasattr(ctx, "agent")
+    assert not hasattr(ctx, "provider")
+    assert not hasattr(ctx, "runner")
+    assert not hasattr(ctx, "harness")
+    assert not hasattr(ctx, "middleware_pipeline")
+
+
