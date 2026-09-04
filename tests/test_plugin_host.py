@@ -368,3 +368,134 @@ def test_installed_code_requires_explicit_trust_before_enablement(
     plugins.revoke_plugin_trust("code_tools")
     assert not plugins.is_trusted("code_tools")
     assert plugins.get_manifest("code_tools").trust.status == "untrusted"
+
+
+@pytest.mark.asyncio
+async def test_plan_activation_validates_complete_set_without_callbacks(tmp_path: Path) -> None:
+    from mia_agent.plugin_host import ActivationPlan, PluginHost
+
+    class MockA:
+        def __init__(self) -> None:
+            self.activated = False
+
+        @property
+        def manifest(self) -> PluginManifest:
+            return PluginManifest(
+                plugin_id="plugin_a",
+                version="1.0.0",
+                display_name="Plugin A",
+                description="Dep A",
+                tool_specs=[
+                    PluginToolSpec(name="tool_a", description="Tool A", effect="non-mutating")
+                ],
+            )
+
+        async def activate(self, context: object) -> None:
+            self.activated = True
+
+    class MockB:
+        def __init__(self) -> None:
+            self.activated = False
+
+        @property
+        def manifest(self) -> PluginManifest:
+            return PluginManifest(
+                plugin_id="plugin_b",
+                version="1.0.0",
+                display_name="Plugin B",
+                description="Dep B depends on A",
+                dependencies=["plugin_a"],
+                tool_specs=[
+                    PluginToolSpec(name="tool_b", description="Tool B", effect="non-mutating")
+                ],
+            )
+
+        async def activate(self, context: object) -> None:
+            self.activated = True
+
+    agents = make_agent_manager(tmp_path)
+    alpha = agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+
+    mock_a = MockA()
+    mock_b = MockB()
+    plugins._catalog["plugin_a"] = mock_a.manifest
+    plugins._catalog["plugin_b"] = mock_b.manifest
+    plugins.install("plugin_a")
+    plugins.install("plugin_b")
+    plugins.trust_plugin("plugin_a")
+    plugins.trust_plugin("plugin_b")
+    plugins.enable(alpha.agent_id, "plugin_b")
+    plugins.enable(alpha.agent_id, "plugin_a")
+
+    host = PluginHost()
+    plan = host.plan(agents.get_agent(alpha.agent_id), plugins)
+    assert isinstance(plan, ActivationPlan)
+    # Order must be dependency first: plugin_a before plugin_b!
+    assert plan.plugins == ("plugin_a", "plugin_b")
+
+    # Planning MUST NOT call activate callbacks
+    assert mock_a.activated is False
+    assert mock_b.activated is False
+
+
+def test_plan_activation_fails_closed_on_missing_or_cycle_dependency(tmp_path: Path) -> None:
+    from mia_agent.plugin_host import PluginHost
+
+    agents = make_agent_manager(tmp_path)
+    alpha = agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+
+    manifest_b = PluginManifest(
+        plugin_id="plugin_b",
+        version="1.0.0",
+        display_name="Plugin B",
+        description="B requires A",
+        dependencies=["plugin_a"],
+    )
+    plugins._catalog["plugin_b"] = manifest_b
+    plugins.install("plugin_b")
+    plugins.trust_plugin("plugin_b")
+    plugins.enable(alpha.agent_id, "plugin_b")
+
+    host = PluginHost()
+    # Missing dependency plugin_a
+    with pytest.raises(ValueError, match="dependency"):
+        host.plan(agents.get_agent(alpha.agent_id), plugins)
+
+
+def test_plan_activation_tie_breaks_independent_plugins_by_normalized_id(tmp_path: Path) -> None:
+    from mia_agent.plugin_host import PluginHost
+
+    agents = make_agent_manager(tmp_path)
+    alpha = agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+
+    for pid in ["zebra", "alpha_plugin", "beta"]:
+        m = PluginManifest(
+            plugin_id=pid,
+            version="1.0.0",
+            display_name=pid,
+            description=pid,
+        )
+        plugins._catalog[pid] = m
+        plugins.install(pid)
+        plugins.trust_plugin(pid)
+        plugins.enable(alpha.agent_id, pid)
+
+    host = PluginHost()
+    plan = host.plan(agents.get_agent(alpha.agent_id), plugins)
+    assert plan.plugins == ("alpha_plugin", "beta", "zebra")
+
+
+def test_plugin_free_agent_plan_and_activation_compatibility(tmp_path: Path) -> None:
+    from mia_agent.plugin_host import PluginHost
+
+    agents = make_agent_manager(tmp_path)
+    alpha = agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+
+    host = PluginHost()
+    plan = host.plan(agents.get_agent(alpha.agent_id), plugins)
+    assert plan.plugins == ()
+
