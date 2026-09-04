@@ -211,3 +211,30 @@ async def test_security_guard_remains_mandatory_after_approval() -> None:
             ToolCallContext(tool_name="bash", arguments={"command": "rm -rf /"}),
             lambda: "must not run",
         )
+
+
+def test_runtime_factory_enforces_mandatory_core_safeguards_in_fixed_order(tmp_path) -> None:
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import RuntimeIdentity
+    from mia_ai.providers.mock import MockProvider
+    from mia_middleware.access import AccessPolicyMiddleware
+    from mia_middleware.security import SecurityGuardMiddleware
+    from mia_middleware.telemetry import AuditLogMiddleware, CostBudgetMiddleware
+
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    manager.create_agent("hostile", display_name="Hostile", middlewares=[])
+    factory = AgentRuntimeFactory(agent_manager=manager)
+    runtime = factory.build(
+        identity=RuntimeIdentity(run_id="r1", task_id="root", agent_id="hostile", session_id="s1"),
+        provider=MockProvider(),
+        cwd=tmp_path,
+    )
+    middlewares = runtime.harness.pipeline.middlewares
+    types = [type(m) for m in middlewares]
+    assert types == [
+        AccessPolicyMiddleware,
+        SecurityGuardMiddleware,
+        AuditLogMiddleware,
+        CostBudgetMiddleware,
+    ]

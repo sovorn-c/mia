@@ -292,6 +292,8 @@ class ConfigManager:
 
         # 2. Resolve Provider
         resolved_provider = provider or self.infer_provider(resolved_model)
+        if not resolved_provider:
+            raise ValueError(f"Could not resolve provider for model '{resolved_model}'")
 
         # 3. Resolve Base URL
         resolved_base_url = (

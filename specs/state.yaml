@@ -2,10 +2,10 @@ workflow_mode: solo-git
 session:
   active_flow: build
   active_epic_id: e07
-  active_story_id: e07s01
+  active_story_id: e07s03
   target_version: 0.6.0
 handoff:
-  next_skill: kickoff-branch
+  next_skill: develop-tdd
   summary: 'bp-plan selected e07 Production Runtime Integrity as the next dependency-eligible
     epic and planned all three stories in manifest order: e07s01 Canonical Closeable
     Agent Run Stream (8 BCP, P0), e07s02 Safeguarded Runtime Settings and Session
@@ -38,7 +38,7 @@ handoff:
     blocker or concern. e07 planning completed with no blockers.'
   open_decisions: []
 git:
-  branch: main
+  branch: e07-production-runtime-integrity
 environment:
   package_manager: uv 0.10.11
   python: 3.14.6
@@ -59,7 +59,7 @@ metrics:
       calls: 5
       total_seconds: 10063.0
       avg_seconds: 2012.6
-      _start: '2026-09-02T05:35:22Z'
+      _start: '2026-09-04T15:25:22Z'
     verify-work:
       calls: 3
       total_seconds: 1103.0

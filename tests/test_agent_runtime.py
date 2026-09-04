@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -832,8 +833,8 @@ async def test_session_admission_same_session_conflict_fails_fast_with_session_b
         ):
             started.set()
             await unblock.wait()
-            yield StreamChunk(type="text", text="done")
-            yield StreamChunk(type="finish")
+            yield StreamChunk(type="text_delta", delta="done")
+            yield StreamChunk(type="finish", finish_reason="stop")
 
     manager = AgentManager(agents_dir=tmp_path / "agents")
     runner = AgentRunner(agent_manager=manager)

@@ -10,7 +10,7 @@ from mia_agent.agents import Agent, AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.harness import AgentHarness
 from mia_agent.plugins import PluginManager
-from mia_agent.runtime_models import AgentRuntime, RuntimeIdentity
+from mia_agent.runtime_models import AgentRuntime, EffectiveSettings, RuntimeIdentity
 from mia_agent.session.compactor import ContextCompactor
 from mia_agent.session.entries import CustomEntry
 from mia_agent.session.jsonl import JsonlSessionStore
@@ -24,6 +24,12 @@ from mia_middleware.security import SecurityGuardMiddleware
 from mia_middleware.telemetry import AuditLogMiddleware, CostBudgetMiddleware
 from mia_tools.bash import BashTool
 from mia_tools.fs import EditFileTool, ReadFileTool, WriteFileTool
+
+POLICY_RANK: dict[str, int] = {
+    "read-only": 0,
+    "approval-required": 1,
+    "full-access": 2,
+}
 
 
 class AgentRuntimeFactory:
@@ -41,6 +47,97 @@ class AgentRuntimeFactory:
         self.config_manager = config_manager or ConfigManager()
         self.delegation_service = delegation_service
         self.plugin_manager = plugin_manager or PluginManager(agent_manager=self.agent_manager)
+
+    def resolve_effective_settings(
+        self,
+        agent: Agent,
+        *,
+        model_override: str | None = None,
+        compaction_threshold: float | None = None,
+        context_window: int | None = None,
+        access_policy_override: str | None = None,
+        capabilities_override: Collection[str] | None = None,
+        full_access_confirmed: bool | None = None,
+        has_custom_provider: bool = False,
+    ) -> EffectiveSettings:
+        """Resolve and validate effective runtime settings with documented precedence."""
+        config = self.config_manager.config
+
+        # 1. Access policy narrowing check
+        if access_policy_override is not None:
+            if access_policy_override not in POLICY_RANK:
+                raise ValueError(f"Unknown access policy: '{access_policy_override}'")
+            current_rank = POLICY_RANK.get(agent.access_policy, 1)
+            override_rank = POLICY_RANK[access_policy_override]
+            if override_rank > current_rank:
+                raise ValueError(
+                    f"Cannot escalate Agent access policy from '{agent.access_policy}' to '{access_policy_override}'"
+                )
+            effective_policy = access_policy_override
+        else:
+            effective_policy = agent.access_policy
+
+        # 2. Capabilities narrowing check
+        effective_capabilities: tuple[str, ...] | None
+        if capabilities_override is not None:
+            if agent.tools is not None:
+                override_set = set(capabilities_override)
+                agent_tools_set = set(agent.tools)
+                if not override_set.issubset(agent_tools_set):
+                    extra = override_set - agent_tools_set
+                    raise ValueError(
+                        f"Cannot broaden Agent capabilities: extra tools {sorted(extra)} not allowed for Agent '{agent.agent_id}'"
+                    )
+            effective_capabilities = tuple(capabilities_override)
+        else:
+            effective_capabilities = tuple(agent.tools) if agent.tools is not None else None
+
+        # 3. Model precedence
+        target_model = (
+            model_override
+            or agent.model
+            or config.default_model
+            or ("" if has_custom_provider else "claude-3-5-sonnet")
+        )
+
+        # 4. Context window precedence
+        window_tokens = (
+            context_window
+            if context_window is not None
+            else (
+                agent.context_window_tokens
+                if agent.context_window_tokens is not None
+                else config.context_window_tokens
+            )
+        )
+
+        # 5. Compaction threshold precedence
+        compaction_ratio = (
+            compaction_threshold
+            if compaction_threshold is not None
+            else (
+                agent.compaction_threshold_ratio
+                if agent.compaction_threshold_ratio is not None
+                else config.compaction_threshold_ratio
+            )
+        )
+
+        # 6. Full access confirmed
+        effective_full_access = (
+            agent.full_access_confirmed
+            if full_access_confirmed is None
+            else (agent.full_access_confirmed and full_access_confirmed)
+        )
+
+        return EffectiveSettings(
+            model=target_model,
+            context_window=window_tokens,
+            compaction_threshold=compaction_ratio,
+            max_steps_per_turn=agent.max_steps_per_turn,
+            access_policy=effective_policy,
+            capabilities=effective_capabilities,
+            full_access_confirmed=effective_full_access,
+        )
 
     def build(
         self,
@@ -62,20 +159,34 @@ class AgentRuntimeFactory:
         agent = self.agent_manager.get_agent(identity.agent_id)
         namespace = "agent"
 
-        if access_policy_override is not None or capabilities_override is not None:
-            updates: dict[str, Any] = {}
-            if access_policy_override is not None:
-                updates["access_policy"] = access_policy_override
-            if capabilities_override is not None:
-                updates["tools"] = list(capabilities_override)
-            agent = agent.model_copy(update=updates)
+        settings = self.resolve_effective_settings(
+            agent,
+            model_override=model_override,
+            compaction_threshold=compaction_threshold,
+            context_window=context_window,
+            access_policy_override=access_policy_override,
+            capabilities_override=capabilities_override,
+            full_access_confirmed=full_access_confirmed,
+            has_custom_provider=(provider is not None),
+        )
+
+        agent = agent.model_copy(
+            update={
+                "access_policy": settings.access_policy,
+                "tools": list(settings.capabilities) if settings.capabilities is not None else None,
+                "full_access_confirmed": settings.full_access_confirmed,
+                "compaction_threshold_ratio": settings.compaction_threshold,
+                "context_window_tokens": settings.context_window,
+                "model": settings.model,
+            }
+        )
 
         plugin_tools = self.plugin_manager.resolve_tools(agent)
         plugin_names = [tool.name for tool in plugin_tools]
         if agent.tools is not None and capabilities_override is None:
             agent = agent.model_copy(update={"tools": [*agent.tools, *plugin_names]})
         work_dir = cwd or Path.cwd()
-        target_model = model_override or agent.model or ("" if provider else "claude-3-5-sonnet")
+        target_model = settings.model
 
         if provider is None:
             provider_name, model_name, api_key, base_url = self.config_manager.resolve_credentials(
@@ -122,11 +233,7 @@ class AgentRuntimeFactory:
             agent=agent,
             identity=identity,
             approval_callback=approval_callback,
-            full_access_confirmed=(
-                agent.full_access_confirmed
-                if full_access_confirmed is None
-                else full_access_confirmed
-            ),
+            full_access_confirmed=settings.full_access_confirmed,
             tool_effects={
                 tool.name: tool_effect(tool.name, {"effect": tool.effect}) for tool in tools
             },
@@ -139,38 +246,19 @@ class AgentRuntimeFactory:
             identity, session_store, last_entry_id, namespace=namespace
         )
 
-        config = self.config_manager.config
-        compaction_ratio = (
-            compaction_threshold
-            if compaction_threshold is not None
-            else (
-                agent.compaction_threshold_ratio
-                if agent.compaction_threshold_ratio is not None
-                else config.compaction_threshold_ratio
-            )
-        )
-        window_tokens = (
-            context_window
-            if context_window is not None
-            else (
-                agent.context_window_tokens
-                if agent.context_window_tokens is not None
-                else config.context_window_tokens
-            )
-        )
         harness = AgentHarness(
             provider=provider,
             model=model_name,
             system_prompt=agent.instructions,
             tools=tools,
             pipeline=pipeline,
-            max_steps_per_turn=agent.max_steps_per_turn,
+            max_steps_per_turn=settings.max_steps_per_turn,
             session_id=identity.session_id,
             messages=initial_messages,
             session_store=session_store,
             compactor=ContextCompactor(
-                context_window_tokens=window_tokens,
-                compaction_threshold_ratio=compaction_ratio,
+                context_window_tokens=settings.context_window,
+                compaction_threshold_ratio=settings.compaction_threshold,
             ),
             last_entry_id=last_entry_id,
             tool_context_metadata={
@@ -185,6 +273,7 @@ class AgentRuntimeFactory:
             identity=identity,
             session_store=session_store,
             agent=agent,
+            effective_settings=settings,
         )
 
     @staticmethod
@@ -216,12 +305,9 @@ class AgentRuntimeFactory:
                     tool_effects=tool_effects,
                 )
             )
-        if "security_guard" in middlewares:
-            active.append(SecurityGuardMiddleware())
-        if "audit_log" in middlewares:
-            active.append(AuditLogMiddleware())
-        if "cost_budget" in middlewares:
-            active.append(CostBudgetMiddleware())
+        active.append(SecurityGuardMiddleware())
+        active.append(AuditLogMiddleware())
+        active.append(CostBudgetMiddleware())
         return ToolPipeline(active)
 
     @staticmethod

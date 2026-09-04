@@ -116,6 +116,34 @@ class RunRequest(BaseModel):
         return value
 
 
+class EffectiveSettings(BaseModel):
+    """Immutable snapshot of resolved runtime settings for one Agent Run."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    model: str
+    context_window: int
+    compaction_threshold: float
+    max_steps_per_turn: int
+    access_policy: str
+    capabilities: tuple[str, ...] | None = None
+    full_access_confirmed: bool = False
+
+    @field_validator("context_window")
+    @classmethod
+    def validate_context_window(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("context_window must be a positive integer")
+        return value
+
+    @field_validator("compaction_threshold")
+    @classmethod
+    def validate_compaction_threshold(cls, value: float) -> float:
+        if value <= 0.0 or value > 1.0:
+            raise ValueError("compaction_threshold must be in the range (0.0, 1.0]")
+        return value
+
+
 @dataclass(frozen=True, slots=True)
 class AgentRuntime:
     """Constructed executor and persistence handles for one Agent Run."""
@@ -124,6 +152,7 @@ class AgentRuntime:
     identity: RuntimeIdentity
     session_store: JsonlSessionStore
     agent: Agent
+    effective_settings: EffectiveSettings | None = None
 
 
-__all__ = ["AgentRuntime", "RunRequest", "RuntimeIdentity"]
+__all__ = ["AgentRuntime", "EffectiveSettings", "RunRequest", "RuntimeIdentity"]

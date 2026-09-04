@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore, OAuthCredential
 

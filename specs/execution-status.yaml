@@ -128,20 +128,20 @@ epics:
     stories:
       e07s01:
         title: Canonical Closeable Agent Run Stream
-        status: planned
+        status: passing
         bcps: 8
         risk: P0
         tasks_total: 6
-        tasks_passing: 0
-        tasks_failing: 6
+        tasks_passing: 6
+        tasks_failing: 0
       e07s02:
         title: Safeguarded Runtime Settings and Session Admission
-        status: planned
+        status: passing
         bcps: 7
         risk: P0
         tasks_total: 6
-        tasks_passing: 0
-        tasks_failing: 6
+        tasks_passing: 6
+        tasks_failing: 0
       e07s03:
         title: Final Core Tool Validation and Plugin Boundary
         status: planned

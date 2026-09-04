@@ -22,6 +22,7 @@ from mia_agent.runtime_events import (
 )
 from mia_agent.runtime_factory import AgentRuntimeFactory
 from mia_agent.runtime_models import AgentRuntime, RunRequest, RuntimeIdentity
+from mia_agent.session import SessionAdmission
 from mia_ai.providers.base import LLMProvider
 from mia_middleware.access import ApprovalCallback
 
@@ -148,7 +149,31 @@ class AgentRunner:
             agent = self.agent_manager.get_agent(target_agent_id)
             identity = identity.model_copy(update={"agent_id": agent.agent_id})
             lifecycle.identity = identity
+        except Exception as exc:
+            err_env = _error_envelope(
+                _safe_error_identity(identity),
+                stage="agent",
+                error=str(exc),
+                code="agent_not_found",
+            )
+            if lifecycle.finalize("agent_not_found", err_env):
+                lifecycle.terminal_delivered = True
+                yield err_env
+            return
 
+        if not SessionAdmission.acquire(identity.agent_id, identity.session_id):
+            err_env = _error_envelope(
+                _safe_error_identity(identity),
+                stage="admission",
+                error=f"Session '{identity.session_id}' is already active for Agent '{identity.agent_id}'",
+                code="session_busy",
+            )
+            if lifecycle.finalize("session_busy", err_env):
+                lifecycle.terminal_delivered = True
+                yield err_env
+            return
+
+        try:
             if agent.agent_id == "research":
                 async for envelope in self._run_research(
                     request=request,
@@ -229,8 +254,20 @@ class AgentRunner:
         except Exception as exc:
             if not lifecycle.finalized:
                 err_text = str(exc)
-                code = "agent_not_found" if "not found" in err_text.lower() else "provider_error"
-                stage = "agent" if code == "agent_not_found" else "provider"
+                code = (
+                    "invalid_configuration"
+                    if "cannot" in err_text.lower()
+                    or "broaden" in err_text.lower()
+                    or "escalate" in err_text.lower()
+                    else (
+                        "agent_not_found" if "not found" in err_text.lower() else "provider_error"
+                    )
+                )
+                stage = (
+                    "configuration"
+                    if code == "invalid_configuration"
+                    else ("agent" if code == "agent_not_found" else "provider")
+                )
                 err_env = _error_envelope(
                     _safe_error_identity(identity),
                     stage=stage,
@@ -240,6 +277,8 @@ class AgentRunner:
                 if lifecycle.finalize(code, err_env):
                     lifecycle.terminal_delivered = True
                     yield err_env
+        finally:
+            SessionAdmission.release(identity.agent_id, identity.session_id)
 
     async def prompt(
         self,

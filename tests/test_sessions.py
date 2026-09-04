@@ -241,11 +241,12 @@ async def test_harness_persists_session_and_resumes(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_session_admission_prevents_concurrent_append_corruption(tmp_path: Path) -> None:
     import asyncio
+
     from mia_agent.agent_runner import AgentRunner
     from mia_agent.agents import AgentManager
     from mia_agent.runtime_models import RunRequest
     from mia_ai.providers.base import LLMProvider
-    from mia_ai.types import ChatMessage, StreamChunk, ToolDefinition
+    from mia_ai.types import StreamChunk, ToolDefinition
 
     started = asyncio.Event()
     unblock = asyncio.Event()
