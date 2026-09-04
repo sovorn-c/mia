@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -286,3 +287,196 @@ async def test_read_only_agent_only_receives_non_mutating_notes_tools(tmp_path: 
         "note_list",
         "note_read",
     ]
+
+
+def test_plugin_tools_staged_complete_set_fails_closed(tmp_path: Path) -> None:
+    agents = make_agent_manager(tmp_path)
+    # Agent with notes and an uninstalled or broken plugin
+    alpha = agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+    plugins.install("notes")
+    # Directly set plugins list on agent to include a nonexistent plugin
+    broken_agent = alpha.model_copy(update={"plugins": ["notes", "missing_plugin"]})
+    agents.save_agent(broken_agent)
+
+    factory = AgentRuntimeFactory(
+        agent_manager=agents,
+        plugin_manager=plugins,
+        config_manager=ConfigManager(
+            config_path=tmp_path / "config.json",
+            credential_store=FileCredentialStore(path=tmp_path / "credentials.json"),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="missing_plugin"):
+        factory.build(
+            identity=RuntimeIdentity(
+                agent_id="alpha",
+                run_id="r1",
+                task_id="root",
+                session_id="s1",
+            ),
+            provider=MockProvider(),
+            cwd=tmp_path,
+        )
+
+
+def test_plugin_free_agent_compatibility_intact(tmp_path: Path) -> None:
+    agents = make_agent_manager(tmp_path)
+    agents.create_agent("plain", tools=["read_file", "write_file"])
+    factory = AgentRuntimeFactory(
+        agent_manager=agents,
+        config_manager=ConfigManager(
+            config_path=tmp_path / "config.json",
+            credential_store=FileCredentialStore(path=tmp_path / "credentials.json"),
+        ),
+    )
+    runtime = factory.build(
+        identity=RuntimeIdentity(
+            agent_id="plain",
+            run_id="r1",
+            task_id="root",
+            session_id="s1",
+        ),
+        provider=MockProvider(),
+        cwd=tmp_path,
+    )
+    # Plain agent should only have its declared tools
+    tool_names = [tool.name for tool in runtime.harness.tools]
+    assert tool_names == ["read_file", "write_file"]
+    for tool in runtime.harness.tools:
+        assert getattr(tool, "plugin_id", None) is None
+
+
+@pytest.mark.asyncio
+async def test_cooperative_cleanup_disposer_failure_emits_diagnostic_preserving_success(
+    tmp_path: Path,
+) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.events import TurnCompleteEvent
+    from mia_agent.runtime_events import PluginDiagnosticEvent
+    from mia_agent.runtime_models import RunRequest
+
+    agents = make_agent_manager(tmp_path)
+    agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+    plugins.install("notes")
+    plugins.enable("alpha", "notes")
+
+    provider = MockProvider()
+    provider.queue_text_response("Done without issues")
+
+    def failing_disposer() -> None:
+        raise RuntimeError("database connection failed during teardown")
+
+    failing_disposer.plugin_id = "notes"  # type: ignore[attr-defined]
+
+    factory = AgentRuntimeFactory(
+        agent_manager=agents,
+        plugin_manager=plugins,
+        config_manager=ConfigManager(
+            config_path=tmp_path / "config.json",
+            credential_store=FileCredentialStore(path=tmp_path / "credentials.json"),
+        ),
+    )
+    # Monkey-patch build to include failing disposer
+    orig_build = factory.build
+
+    def build_with_disposer(*args: Any, **kwargs: Any) -> Any:
+        kwargs["disposers"] = [failing_disposer]
+        return orig_build(*args, **kwargs)
+
+    factory.build = build_with_disposer  # type: ignore[method-assign]
+
+    runner = AgentRunner(
+        agent_manager=agents,
+        config_manager=ConfigManager(
+            config_path=tmp_path / "config.json",
+            credential_store=FileCredentialStore(path=tmp_path / "credentials.json"),
+        ),
+        factory=factory,
+    )
+
+    envelopes = [
+        env
+        async for env in runner.run(
+            RunRequest(prompt_text="do work", agent_id="alpha"),
+            provider=provider,
+            cwd=tmp_path,
+        )
+    ]
+
+    # Diagnostic event must be emitted
+    diag_env = next(env for env in envelopes if isinstance(env.event, PluginDiagnosticEvent))
+    assert diag_env.event.plugin_id == "notes"
+    assert diag_env.event.phase == "cleanup"
+    assert "database connection failed" in (diag_env.event.error or "")
+
+    # Terminal event must remain TurnCompleteEvent with domain success preserved
+    terminal_env = envelopes[-1]
+    assert isinstance(terminal_env.event, TurnCompleteEvent)
+    assert terminal_env.event.stop_reason == "stop"
+
+
+@pytest.mark.asyncio
+async def test_cooperative_cleanup_timeout_quarantines_plugin(tmp_path: Path) -> None:
+    import asyncio
+
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.runtime_events import PluginDiagnosticEvent
+
+    PluginManager.clear_quarantine()
+    try:
+        agents = make_agent_manager(tmp_path)
+        agents.create_agent("alpha", tools=[])
+        plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+        plugins.install("notes")
+        plugins.enable("alpha", "notes")
+
+        provider = MockProvider()
+        provider.queue_text_response("Done")
+
+        async def hanging_disposer() -> None:
+            await asyncio.sleep(10.0)
+
+        hanging_disposer.plugin_id = "notes"  # type: ignore[attr-defined]
+
+        factory = AgentRuntimeFactory(
+            agent_manager=agents,
+            plugin_manager=plugins,
+            config_manager=ConfigManager(
+                config_path=tmp_path / "config.json",
+                credential_store=FileCredentialStore(path=tmp_path / "credentials.json"),
+            ),
+        )
+
+        runner = AgentRunner(
+            agent_manager=agents,
+            config_manager=ConfigManager(
+                config_path=tmp_path / "config.json",
+                credential_store=FileCredentialStore(path=tmp_path / "credentials.json"),
+            ),
+            factory=factory,
+        )
+
+        # Execute cleanup directly with very small timeout to trigger TimeoutError
+        identity = RuntimeIdentity(agent_id="alpha", run_id="r1", task_id="root", session_id="s1")
+        runtime = factory.build(
+            identity=identity, provider=provider, cwd=tmp_path, disposers=[hanging_disposer]
+        )
+
+        diagnostics = await runner._run_cooperative_cleanup(runtime, identity, timeout=0.01)
+        assert len(diagnostics) == 1
+        diag_event = diagnostics[0].event
+        assert isinstance(diag_event, PluginDiagnosticEvent)
+        assert diag_event.plugin_id == "notes"
+        assert "timed out" in diag_event.message
+
+        # Plugin is now quarantined
+        assert PluginManager.is_quarantined("notes")
+
+        # Later runtime build fails closed due to quarantine
+        with pytest.raises(ValueError, match="quarantined"):
+            factory.build(identity=identity, provider=provider, cwd=tmp_path)
+    finally:
+        PluginManager.clear_quarantine()

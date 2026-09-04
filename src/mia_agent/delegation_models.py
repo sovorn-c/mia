@@ -29,6 +29,7 @@ class TaskRequest(BaseModel):
     )
     parent_run_id: str = "root"
     parent_session_id: str = "root"
+    child_session_id: str | None = None
     timeout: float = 60.0
     depth: int = 0
 

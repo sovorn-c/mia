@@ -25,8 +25,26 @@ if TYPE_CHECKING:
     from mia_agent.agents.manager import AgentManager
 
 
+_QUARANTINED_PLUGINS: set[str] = set()
+
+
 class PluginManager:
     """Manage the small bundled catalog and explicit local installation state."""
+
+    @classmethod
+    def quarantine_plugin(cls, plugin_id: str) -> None:
+        """Quarantine a plugin until process restart due to cleanup timeout or critical failure."""
+        _QUARANTINED_PLUGINS.add(normalize_plugin_id(plugin_id))
+
+    @classmethod
+    def is_quarantined(cls, plugin_id: str) -> bool:
+        """Check if a plugin is quarantined."""
+        return normalize_plugin_id(plugin_id) in _QUARANTINED_PLUGINS
+
+    @classmethod
+    def clear_quarantine(cls) -> None:
+        """Reset quarantined plugins (primarily for test isolation)."""
+        _QUARANTINED_PLUGINS.clear()
 
     def __init__(
         self,
@@ -220,12 +238,24 @@ class PluginManager:
     def resolve_tools(self, agent: Agent) -> list[BaseTool]:
         """Build every enabled Plugin Tool against the resolved Agent boundary."""
         tools: list[BaseTool] = []
-        for plugin_id in agent.plugins:
-            tools.extend(self._resolve_plugin_tools(agent, plugin_id))
+        seen_names: set[str] = set()
+        for plugin_id in sorted(set(agent.plugins)):
+            resolved = self._resolve_plugin_tools(agent, plugin_id)
+            for tool in resolved:
+                if tool.name in seen_names:
+                    raise ValueError(
+                        f"Plugin contribution collision: duplicate Tool name '{tool.name}'"
+                    )
+                seen_names.add(tool.name)
+            tools.extend(resolved)
         return tools
 
     def _resolve_plugin_tools(self, agent: Agent, plugin_id: str) -> list[BaseTool]:
         manifest = self.get_manifest(plugin_id)
+        if self.is_quarantined(manifest.plugin_id):
+            raise ValueError(
+                f"Plugin '{manifest.plugin_id}' is quarantined due to previous cleanup timeout"
+            )
         self._installed_record(manifest)
         plugin = NotesPlugin() if manifest.plugin_id == "notes" else None
         if plugin is None:

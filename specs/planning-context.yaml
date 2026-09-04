@@ -1,44 +1,72 @@
-# specs/planning-context.yaml — active context for e06
-feature_name: Agent Core Clean Break
+# specs/planning-context.yaml — v0.6.0 production release blueprint
+feature_name: Mia Agent Core Production Release
 problem_statement: >-
-  Mia's active source, interfaces, tests, and living documentation must present one clear Agent model
-  and one trusted execution path.
+  Mia's delivered Agent capabilities need one complete production release plan that closes runtime-integrity,
+  governed-extensibility, operations, accessibility, documentation, and distribution gaps without expanding
+  into a hosted platform or replaceable Core framework.
 actors:
-  - Public Mia users selecting and running named Agents
-  - Contributors working on Agent, Skill, Tool, Plugin, Delegation, Run, and Session code
-  - Maintainers protecting access, attribution, persistence, and package boundaries
-  - Textual users relying on the retained frontend
+  - Users installing and running the default or named local Agents
+  - Specialist users operating Sessions, Plugins, Templates, and bounded Delegation
+  - Plugin developers adding declared Agent capabilities without editing Mia Core
+  - Operators diagnosing local Runs and Plugin lifecycles and protecting or recovering Agent-owned data
+  - Maintainers verifying, packaging, publishing, and superseding the Python distribution and Plugin API
 solution_summary: >-
-  AgentRunner and AgentRuntimeFactory are the only active runtime path. The Textual frontend remains a
-  shallow Agent-native adapter, and retired project artifacts are removed while user files remain untouched.
+  Preserve delivered e01-e06 behavior and complete e07-e11: production runtime integrity, a governed Core
+  extension host, local operations and recovery, accessible product and Plugin documentation, and
+  release/distribution assurance. AgentRunner.run with one immutable RunRequest and one terminally truthful
+  event stream remains the sole execution Interface. Plugins extend that path through one narrow registration
+  context and transactional Core-owned lifecycle; they do not replace it through the supported host API.
+  Static Skills and Agent Templates remain inspectable without Run activation, and trusted Python is not sandboxed.
 constraints:
-  - Keep mia tui and Textual; do not redesign the UI or add new TUI features.
-  - Do not migrate, rewrite, or delete user files outside the repository.
-  - Preserve Agent, Plugin, Delegation, Session, access, provider, filesystem, and redaction behavior.
-  - Use strict Mypy, Ruff, offline tests, coverage, YAML validation, and wheel checks.
-  - Keep research sequencing private to AgentRunner; expose no public graph object.
-  - Do not create a second runtime root, generic compatibility layer, or re-export shim.
+  - Preserve AgentRunner to AgentRuntimeFactory to AgentHarness as the only execution path.
+  - Preserve stable e01-e06 story IDs and artifacts.
+  - Keep Sessions append-only and credentials outside Agent-owned, Plugin, and diagnostic data.
+  - Keep permanent access, security, audit, execution-limit, sanitation, and terminal-truth controls around every visible Tool and Plugin hook.
+  - Keep Plugin discovery, trust, dependency order, activation, attribution, and cooperative cleanup decisions owned by Mia Core through the supported host contract; make no hard bound or sandbox claim for event-loop-blocking same-process code.
+  - Keep CLI, REPL, Textual, Plugin, Template, Delegation, and supported provider behavior.
+  - Add no runtime dependency without separate evidence.
+  - Do not modify user data outside isolated verification homes.
+  - Stop blueprinting at epic outcomes; story and task planning belongs to /bp-plan.
 out_of_scope:
-  - TUI visual redesign, new widgets, and new interaction model
-  - New Skills, Plugins, providers, channels, scheduling, or collaboration semantics
-  - Automatic migration or deletion of user data
-  - New multi-Agent runtime infrastructure or unrestricted messaging
+  - Hosted service, web app, remote control plane, or server deployment
+  - Operating-system or process sandbox guarantees for trusted Python Plugins
+  - Remote telemetry, dashboards, or exporter ecosystem
+  - Scheduler, background Run manager, queue, or autonomous swarm
+  - Additional providers, Plugin contribution types, channels, or collaboration semantics
+  - Generic service or dependency-injection container, Core replacement, or arbitrary event bus
+  - Plugin commands or frontend components, provider Plugins, Tool overrides, or mutable Session hooks
+  - Remote Plugin catalogs, automatic package/dependency installation, hot reload, or unrestricted project-local code
+  - Automatic destructive migration or repair of user files
+  - Full frontend visual redesign or localization
 success_criteria:
-  - Canonical Agent runtime and frontend paths pass focused and full quality gates.
-  - Runtime identities and events contain Agent, Run, Task, and Session attribution.
-  - AgentManager resolves built-in and native persisted Agents with Agent-owned Sessions.
-  - Retired source packages, commands, aliases, and project artifacts are absent.
-  - Textual remains declared, launchable, tested, and packaged.
+  - Every approved release outcome maps to one primary epic.
+  - e07 proves one validated, safeguarded, deterministic closeable Run stream with exactly one Core-finalized outcome for normal consumption, cancellation, and awaited closure; bare abandonment is unsupported.
+  - e08 proves an installed trusted Plugin can extend an Agent without editing Core or replacing permanent invariants through the supported API, with same-process authority stated honestly.
+  - e09 proves useful secret-free Run, Tool, and Plugin diagnostics and non-destructive data recovery.
+  - e10, after e09, proves accessible essential terminal operation and complete user, operator, and Plugin documentation.
+  - e11 proves reproducible gates, Plugin API compatibility, clean installation, artifact integrity, authorized publication, and supersession.
+  - No required gate fails and no critical/high security finding or undocumented production exception remains.
 key_decisions:
-  - decision: Keep Textual as a shallow frontend backed by AgentManager and AgentRunner.
-    rationale: Preserve the supported interface without creating another runtime composition root.
-  - decision: Remove obsolete project surfaces instead of adding a migration framework.
-    rationale: Git history preserves repository artifacts, and user files are not touched.
-  - decision: Retain private research sequencing inside AgentRunner.
-    rationale: Existing behavior remains useful without adding a public orchestration abstraction.
+  - decision: Use AgentRunner.run with one immutable RunRequest and one ordered event stream.
+    rationale: It is the smallest Interface that centralizes terminal truth for all current frontend Adapters.
+  - decision: Fail fast when one Agent-owned Session already has an active Run.
+    rationale: Deterministic history is required; a scheduler or queue is not.
+  - decision: Use inspectable manifest Skills/Templates plus a narrow Run registration context for explicitly trusted installed code.
+    rationale: >-
+      Pi-like ergonomics plus DSH/Cordis lifecycle ownership enable extension without exposing mutable Core
+      services; the static-only alternative would still require Core edits and a generic service graph is premature.
+  - decision: Keep operations local and package Mia as a Python distribution.
+    rationale: Remote telemetry, Plugin catalogs, package installation, and hosted deployment are outside v0.6.0.
+  - decision: Preserve e01-e06, implement runtime integrity as e07 and governed extensions as e08, then renumber later planned epics to e09-e11.
+    rationale: Stable delivered work remains intact while the constitutional extension seam precedes its operations, documentation, and release gates.
 artifacts:
   scope: specs/product/SCOPE_LATEST.yaml
-  epic: specs/epics/archive/e06-zero-legacy-agent-core/epic.yaml
   impact: specs/IMPACT_LATEST.md
   release_plan: specs/release-plan.yaml
-next_skill: survey-context
+  architecture: specs/tech-architecture/REFACTOR_LATEST.md
+  interface_design: specs/tech-architecture/DESIGN_PLAN_LATEST.md
+  run_interface_adr: specs/adr/0002-canonical-run-request-stream.md
+  extension_interface_adr: specs/adr/0003-governed-core-extension-host.md
+  audit: specs/PLAN-AUDIT_LATEST.md
+  execution_status: specs/execution-status.yaml
+next_skill: bp-plan

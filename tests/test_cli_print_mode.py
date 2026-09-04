@@ -130,3 +130,37 @@ def test_rich_stream_renderer_output() -> None:
     renderer.on_event(TurnCompleteEvent(total_steps=1, total_cost_usd=0.0001, stop_reason="stop"))
 
     assert renderer.turn_count == 1
+
+
+def test_cli_run_agent_loop_uses_run_request_and_closeable_stream() -> None:
+    import asyncio
+
+    from mia_agent.runtime_events import AgentEventEnvelope
+    from mia_agent.runtime_models import RunRequest
+    from mia_cli.main import _run_agent_loop
+
+    received_requests: list[RunRequest] = []
+    closed = False
+
+    async def mock_run(req: RunRequest, **kwargs: object):
+        nonlocal closed
+        received_requests.append(req)
+        try:
+            yield AgentEventEnvelope(
+                run_id="r1",
+                task_id="root",
+                agent_id="mia",
+                session_id="s1",
+                event=TurnCompleteEvent(total_steps=1, total_cost_usd=0.0, stop_reason="stop"),
+            )
+        finally:
+            closed = True
+
+    with patch("mia_cli.main.AgentRunner.run", side_effect=mock_run):
+        ok = asyncio.run(_run_agent_loop("Hello CLI", agent_name="mia"))
+
+    assert ok is True
+    assert len(received_requests) == 1
+    assert received_requests[0].prompt_text == "Hello CLI"
+    assert received_requests[0].agent_id == "mia"
+    assert closed is True

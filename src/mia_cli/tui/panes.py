@@ -17,7 +17,7 @@ from mia_agent.events import (
     TurnCompleteEvent,
     TurnStartEvent,
 )
-from mia_agent.runtime_events import RunErrorEvent
+from mia_agent.runtime_events import PluginDiagnosticEvent, RunErrorEvent
 from mia_cli.tui.widgets.message_card import AssistantMessageCard, UserMessageCard
 from mia_cli.tui.widgets.thinking_drawer import ThoughtDrawer
 from mia_cli.tui.widgets.tool_card import ToolCallCard
@@ -41,7 +41,7 @@ class AgentTranscriptView(VerticalScroll):
         self.mount(card)
         self.scroll_end(animate=False)
 
-    def handle_agent_event(self, event: AgentEvent | RunErrorEvent) -> None:
+    def handle_agent_event(self, event: AgentEvent | RunErrorEvent | PluginDiagnosticEvent) -> None:
         """Process one canonical Agent event."""
         if isinstance(event, TurnStartEvent):
             self._current_assistant_card = None
@@ -147,7 +147,9 @@ class AgentPaneContainer(Vertical):
 
         self._transcripts[agent_id].display = True
 
-    def dispatch_event(self, agent_id: str, event: AgentEvent | RunErrorEvent) -> None:
+    def dispatch_event(
+        self, agent_id: str, event: AgentEvent | RunErrorEvent | PluginDiagnosticEvent
+    ) -> None:
         """Forward an event to the target Agent transcript."""
         if agent_id not in self._transcripts:
             new_view = AgentTranscriptView(agent_id=agent_id, id=f"transcript-view-{agent_id}")

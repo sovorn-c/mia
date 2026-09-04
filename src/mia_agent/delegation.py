@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -17,6 +18,7 @@ from mia_agent.delegation_models import (
 from mia_agent.events import AgentErrorEvent, AssistantChunkEvent, TurnCompleteEvent
 from mia_agent.runtime_factory import AgentRuntimeFactory
 from mia_agent.runtime_models import AgentRuntime, RuntimeIdentity
+from mia_agent.session import SessionAdmission
 from mia_agent.session.entries import CustomEntry
 from mia_ai.providers.base import LLMProvider
 from mia_middleware.access import compose_effective_access, sanitize_arguments
@@ -60,51 +62,52 @@ class DelegationService:
             caller.tools,
             recipient.tools,
         )
+        child_session = (
+            request.child_session_id
+            if request.child_session_id is not None
+            else f"session_{uuid.uuid4().hex[:12]}"
+        )
         child_identity = RuntimeIdentity(
             run_id=f"run_{uuid.uuid4().hex}",
             task_id=request.task_id,
             agent_id=recipient.agent_id,
-            session_id=f"session_{uuid.uuid4().hex[:12]}",
+            session_id=child_session,
             parent_session_id=request.parent_session_id,
         )
 
-        try:
-            runtime = self.factory.build(
-                identity=child_identity,
-                provider=self.provider,
-                access_policy_override=effective.access_level,
-                capabilities_override=effective.capabilities,
-                full_access_confirmed=(
-                    caller.full_access_confirmed and recipient.full_access_confirmed
-                ),
-                delegation_depth=1,
-            )
-        except Exception as exc:
+        if not SessionAdmission.acquire(child_identity.agent_id, child_identity.session_id):
             result = self._result(
                 request,
                 child_identity,
                 "failed",
-                error=f"child runtime could not start: {exc}",
+                error=f"Session '{child_identity.session_id}' is already active for Agent '{child_identity.agent_id}'",
             )
             return self._persist_result(runtime=None, result=result)
 
         try:
-            result = await self._run_child(request, runtime)
-        except asyncio.CancelledError:
-            result = self._result(
-                request,
-                child_identity,
-                "cancelled",
-                error="child Task was cancelled",
-            )
-            self._persist_result(runtime=runtime, result=result)
-            current = asyncio.current_task()
-            if current is not None and current.cancelling():
-                raise
-            return result
-        except TimeoutError:
-            current = asyncio.current_task()
-            if current is not None and current.cancelling():
+            try:
+                runtime = self.factory.build(
+                    identity=child_identity,
+                    provider=self.provider,
+                    access_policy_override=effective.access_level,
+                    capabilities_override=effective.capabilities,
+                    full_access_confirmed=(
+                        caller.full_access_confirmed and recipient.full_access_confirmed
+                    ),
+                    delegation_depth=1,
+                )
+            except Exception as exc:
+                result = self._result(
+                    request,
+                    child_identity,
+                    "failed",
+                    error=f"child runtime could not start: {exc}",
+                )
+                return self._persist_result(runtime=None, result=result)
+
+            try:
+                result = await self._run_child(request, runtime)
+            except asyncio.CancelledError:
                 result = self._result(
                     request,
                     child_identity,
@@ -112,21 +115,37 @@ class DelegationService:
                     error="child Task was cancelled",
                 )
                 self._persist_result(runtime=runtime, result=result)
-                raise asyncio.CancelledError from None
-            result = self._result(
-                request,
-                child_identity,
-                "timed-out",
-                error=f"child Task exceeded {request.timeout:g}s timeout",
-            )
-        except Exception as exc:
-            result = self._result(
-                request,
-                child_identity,
-                "failed",
-                error=f"child Task failed: {exc}",
-            )
-        return self._persist_result(runtime=runtime, result=result)
+                current = asyncio.current_task()
+                if current is not None and current.cancelling():
+                    raise
+                return result
+            except TimeoutError:
+                current = asyncio.current_task()
+                if current is not None and current.cancelling():
+                    result = self._result(
+                        request,
+                        child_identity,
+                        "cancelled",
+                        error="child Task was cancelled",
+                    )
+                    self._persist_result(runtime=runtime, result=result)
+                    raise asyncio.CancelledError from None
+                result = self._result(
+                    request,
+                    child_identity,
+                    "timed-out",
+                    error=f"child Task exceeded {request.timeout:g}s timeout",
+                )
+            except Exception as exc:
+                result = self._result(
+                    request,
+                    child_identity,
+                    "failed",
+                    error=f"child Task failed: {exc}",
+                )
+            return self._persist_result(runtime=runtime, result=result)
+        finally:
+            SessionAdmission.release(child_identity.agent_id, child_identity.session_id)
 
     def for_caller(
         self,
@@ -175,13 +194,14 @@ class DelegationService:
         terminal: str | None = None
         terminal_error: str | None = None
         async with asyncio.timeout(request.timeout):
-            async for event in runtime.harness.prompt(request.prompt):
-                if isinstance(event, AssistantChunkEvent) and event.delta_text:
-                    response.append(event.delta_text)
-                elif isinstance(event, AgentErrorEvent):
-                    terminal_error = event.error
-                elif isinstance(event, TurnCompleteEvent):
-                    terminal = event.stop_reason
+            async with contextlib.aclosing(runtime.harness.prompt(request.prompt)) as stream:
+                async for event in stream:
+                    if isinstance(event, AssistantChunkEvent) and event.delta_text:
+                        response.append(event.delta_text)
+                    elif isinstance(event, AgentErrorEvent):
+                        terminal_error = event.error
+                    elif isinstance(event, TurnCompleteEvent):
+                        terminal = event.stop_reason
 
         content = "".join(response).strip()
         if terminal_error:

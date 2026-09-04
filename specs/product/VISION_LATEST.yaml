@@ -37,7 +37,7 @@ canonical_terms:
   Agent: Durable identity with configuration, state, capabilities, and an address for Tasks.
   Skill: Reusable instruction, knowledge, or procedure.
   Tool: Callable capability exposed through Mia Core.
-  Plugin: Installable executable extension.
+  Plugin: Installable declarative or trusted-code extension governed by Mia Core.
   Task: Bounded work assigned to an Agent.
   Delegation: One Agent assigning a Task to another through Mia Core.
   Run: One execution of an Agent.
@@ -55,7 +55,9 @@ product_principles:
   - name: Delegation before graph design
     rule: An Agent assigns bounded Tasks through a core protocol.
   - name: Plugins extend through contracts
-    rule: Agents explicitly enable Plugins; Plugins cannot bypass core policy.
+    rule: >-
+      Agents explicitly enable Plugins; the supported Plugin API cannot replace core policy,
+      while trusted Python process authority is stated honestly.
   - name: User-controlled trust
     rule: Access is read-only, approval-required, or full-access with explicit consent.
   - name: Honest capability
@@ -79,17 +81,31 @@ capability_model:
   skill: "Reusable instruction, knowledge, or procedure that guides an Agent."
   tool: "Callable action mediated by Mia Core."
   plugin:
-    definition: "Installable executable extension code contributing declared Tools or Templates."
+    definition: >-
+      Installable declarative or trusted-code extension contributing only declared capability types
+      through the governed Core host.
     lifecycle:
-      - Install the Plugin into Mia.
-      - Enable and configure it per persisted Agent.
-      - Keep contributed Tools inside the normal access and middleware path.
+      - Discover and inspect a bundled or already installed Plugin without running its activation callback.
+      - Assign effective provenance and trust through Mia Core; a Plugin cannot self-promote.
+      - Explicitly trust executable code, then enable and configure the Plugin per persisted Agent.
+      - Plan and activate the complete enabled set transactionally for one immutable Run snapshot.
+      - Dispose Plugin effects deterministically without deleting durable Plugin data.
+      - Keep contributed Tools and middleware inside permanent Core controls.
+      - Keep static Skills and Agent Templates inspectable without executing a Run activation callback.
+    initial_contributions:
+      catalog:
+        - Agent Templates
+        - Static Skills
+      runtime:
+        - Tools and bounded additive context
+        - Notification-only Run observers
+        - Optional Tool middleware inside the final Core validation gate
     never_owns:
       - Agent identity or Task routing
-      - Credential secrecy
-      - Access and approval enforcement
-      - Session integrity
-      - Event attribution or truthful outcomes
+      - Credential secrecy or provider resolution
+      - Access, approval, permanent safeguards, or terminal truth
+      - Session integrity or mutable history
+      - Event attribution, Plugin trust, or Plugin lifecycle policy through the supported Plugin API
 
 collaboration:
   primary_primitive: Agent-to-Agent Delegation
@@ -115,8 +131,10 @@ users:
     interaction: Configure identity, Skills, Tools, Plugins, state, and access.
     concepts_needed: [Agent, Skill, Tool, Plugin]
   - group: Plugin developers
-    interaction: Implement executable capabilities behind declared core contracts.
-    concepts_needed: [Plugin, Tool, Runtime events]
+    interaction: >-
+      Add declared capabilities through the narrow Plugin registration context without editing Mia Core,
+      while accepting explicit trust, attribution, compatibility, and cleanup rules.
+    concepts_needed: [Plugin, Tool, Skill, Runtime events]
 
 access_model:
   principle: "Capability scope, access policy, isolation, and permanent integrity safeguards are separate controls."
@@ -129,8 +147,9 @@ access_model:
       behavior: Run enabled capabilities without per-action approval after explicit opt-in; permanent safeguards remain.
   permanent_integrity_rules:
     - Never leak credentials through output, logs, events, or delegated Tasks.
-    - Validate Plugin and Tool inputs at trust boundaries.
-    - Keep execution and delegated outcomes attributable.
+    - Validate Plugin declarations, trust, contributions, and Tool inputs at trust boundaries.
+    - Revalidate Plugin-transformed Tool arguments before approval and execution.
+    - Keep execution, Plugin lifecycle, and delegated outcomes attributable.
     - Never report failed, rejected, cancelled, or timed-out work as successful.
     - Never let a Plugin or Delegation silently increase access.
 
@@ -142,7 +161,7 @@ core_boundary:
     - Sessions and context continuity
     - Tool invocation and middleware
     - Access-policy enforcement
-    - Plugin loading and contribution contracts
+    - Plugin discovery, effective trust, dependency order, activation, attribution, cleanup, and contribution contracts
   agent_owns_or_selects:
     - Identity and role behavior
     - Private configuration and state
@@ -154,11 +173,14 @@ current_reality:
   status: >-
     The implementation provides named built-in and persisted Agents, Agent-owned Sessions, enforced
     access policy, bounded Delegation, Plugin lifecycle, Notes Tools, Agent Templates, Agent-first CLI/REPL,
-    and a shallow Textual frontend.
+    and a shallow Textual frontend. Its current Plugin implementation is a bundled catalog; the governed
+    developer extension host is approved v0.6.0 work, not yet delivered.
   supported_tools: [read_file, write_file, edit_file, bash, note_create, note_list, note_read]
   known_limits:
     - The local filesystem and process boundary is not an operating-system sandbox.
     - Plugin catalog and provider support are intentionally small.
+    - Trusted Python Plugin code is not an operating-system or process sandbox.
+    - v0.6.0 does not include remote Plugin catalogs, automatic dependency installation, generic Core services, Plugin commands/UI, or provider replacement.
     - Textual is a shallow adapter, not a separate runtime.
 
 settled_decisions:
@@ -169,13 +191,17 @@ settled_decisions:
   - id: VISION-03
     decision: "Access supports read-only, approval-required, and full-access; full-access requires explicit consent."
   - id: VISION-04
-    decision: "Notes Plugin and Notes Agent Template prove the bounded extension contract."
+    decision: "Notes Plugin and Notes Agent Template migrate as the compatibility proof for the governed extension host."
   - id: VISION-05
     decision: "Textual remains installed and `mia tui` remains supported."
+  - id: VISION-06
+    decision: >-
+      Plugin authors receive a small Pi-like registration context with DSH-inspired dependency-ready
+      activation, owned effects, rollback, and Core-owned cleanup deadlines; Mia Core services remain non-replaceable.
 
 open_decisions:
-  - id: VISION-06
-    question: "Which additional Skills, Plugins, providers, or channels should receive a separate bounded scope?"
+  - id: VISION-07
+    question: "Which additional Plugin contribution types, providers, or channels should receive a separate bounded scope?"
 
 verification:
   command: >

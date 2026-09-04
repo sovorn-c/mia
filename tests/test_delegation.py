@@ -417,3 +417,88 @@ def test_task_result_rejects_unknown_outcome_and_secret_values() -> None:
         error="provider failed",
     )
     assert "sk-secret" not in json.dumps(result.model_dump())
+
+
+@pytest.mark.asyncio
+async def test_delegated_run_fails_fast_on_session_conflict(tmp_path: Path) -> None:
+    from mia_agent.session import SessionAdmission
+
+    manager = make_manager(tmp_path)
+    manager.create_agent(
+        "caller", display_name="Caller", tools=[], delegation_targets=["recipient"]
+    )
+    manager.create_agent("recipient", display_name="Recipient", tools=[])
+    provider = MockProvider()
+
+    from mia_agent.delegation import DelegationService
+
+    service = DelegationService(
+        agent_manager=manager,
+        factory=make_factory(tmp_path, manager),
+        provider=provider,
+    )
+
+    conflict_session = "active_child_session"
+    assert SessionAdmission.acquire("recipient", conflict_session)
+    try:
+        result = await service.delegate(
+            TaskRequest(
+                caller_agent_id="caller",
+                recipient_agent_id="recipient",
+                prompt="work",
+                child_session_id=conflict_session,
+            )
+        )
+        assert result.outcome == "failed"
+        assert "is already active" in (result.error or "")
+        assert provider.recorded_calls == []
+    finally:
+        SessionAdmission.release("recipient", conflict_session)
+
+
+@pytest.mark.asyncio
+async def test_delegated_runs_with_distinct_sessions_are_concurrent(tmp_path: Path) -> None:
+    manager = make_manager(tmp_path)
+    manager.create_agent(
+        "caller", display_name="Caller", tools=[], delegation_targets=["recipient"]
+    )
+    manager.create_agent("recipient", display_name="Recipient", tools=[])
+
+    provider = MockProvider()
+    provider.queue_text_response("reply 1")
+    provider.queue_text_response("reply 2")
+
+    from mia_agent.delegation import DelegationService
+
+    service = DelegationService(
+        agent_manager=manager,
+        factory=make_factory(tmp_path, manager),
+        provider=provider,
+    )
+
+    t1 = asyncio.create_task(
+        service.delegate(
+            TaskRequest(
+                caller_agent_id="caller",
+                recipient_agent_id="recipient",
+                prompt="work 1",
+                child_session_id="child_sess_1",
+            )
+        )
+    )
+    t2 = asyncio.create_task(
+        service.delegate(
+            TaskRequest(
+                caller_agent_id="caller",
+                recipient_agent_id="recipient",
+                prompt="work 2",
+                child_session_id="child_sess_2",
+            )
+        )
+    )
+
+    res1, res2 = await asyncio.gather(t1, t2)
+    assert res1.outcome == "succeeded"
+    assert res2.outcome == "succeeded"
+    assert res1.child_session_id == "child_sess_1"
+    assert res2.child_session_id == "child_sess_2"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncGenerator, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -200,7 +200,7 @@ class AgentHarness:
             )
         return await self._execute_tool_core(tool_name, args)
 
-    async def prompt(self, user_text: str) -> AsyncIterator[AgentEvent]:
+    async def prompt(self, user_text: str) -> AsyncGenerator[AgentEvent, None]:
         """Run a full turn for the given user prompt."""
         self._turn_counter += 1
         yield TurnStartEvent(turn_index=self._turn_counter, user_prompt=user_text)

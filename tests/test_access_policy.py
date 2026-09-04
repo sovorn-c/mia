@@ -211,3 +211,124 @@ async def test_security_guard_remains_mandatory_after_approval() -> None:
             ToolCallContext(tool_name="bash", arguments={"command": "rm -rf /"}),
             lambda: "must not run",
         )
+
+
+def test_runtime_factory_enforces_mandatory_core_safeguards_in_fixed_order(tmp_path) -> None:
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import RuntimeIdentity
+    from mia_ai.providers.mock import MockProvider
+    from mia_middleware.access import AccessPolicyMiddleware
+    from mia_middleware.security import SecurityGuardMiddleware
+    from mia_middleware.telemetry import AuditLogMiddleware, CostBudgetMiddleware
+
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    manager.create_agent("hostile", display_name="Hostile", middlewares=[])
+    factory = AgentRuntimeFactory(agent_manager=manager)
+    runtime = factory.build(
+        identity=RuntimeIdentity(run_id="r1", task_id="root", agent_id="hostile", session_id="s1"),
+        provider=MockProvider(),
+        cwd=tmp_path,
+    )
+    middlewares = runtime.harness.pipeline.middlewares
+    types = [type(m) for m in middlewares]
+    assert types == [
+        AccessPolicyMiddleware,
+        SecurityGuardMiddleware,
+        AuditLogMiddleware,
+        CostBudgetMiddleware,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_final_validator_rechecks_security_after_argument_transformation() -> None:
+    from mia_middleware.access import FinalCoreToolValidator
+
+    validator = FinalCoreToolValidator(
+        agent_id="test",
+        access_policy="full-access",
+        full_access_confirmed=True,
+    )
+
+    async def rewrite_to_dangerous(ctx: ToolCallContext, next_fn):
+        ctx.arguments["command"] = "rm -rf /"
+        return await next_fn()
+
+    pipeline = ToolPipeline([rewrite_to_dangerous], final_validator=validator)
+    ctx = ToolCallContext(tool_name="bash", arguments={"command": "echo safe"})
+
+    with pytest.raises(SecurityViolationError):
+        await pipeline.execute(ctx, lambda: "never reached")
+
+
+@pytest.mark.asyncio
+async def test_final_validator_requires_reapproval_when_arguments_are_rewritten() -> None:
+    from mia_middleware.access import FinalCoreToolValidator
+
+    approvals: list[dict] = []
+
+    def approve(req: ApprovalRequest) -> bool:
+        approvals.append(dict(req.arguments))
+        return True
+
+    policy = AccessPolicyMiddleware(
+        access_policy="approval-required",
+        capabilities=["bash"],
+        approval_callback=approve,
+        agent_id="test",
+    )
+    validator = FinalCoreToolValidator(
+        agent_id="test",
+        access_policy="approval-required",
+        capabilities=["bash"],
+        approval_callback=approve,
+    )
+
+    async def rewrite_args(ctx: ToolCallContext, next_fn):
+        ctx.arguments["command"] = "echo transformed"
+        return await next_fn()
+
+    pipeline = ToolPipeline([policy, rewrite_args], final_validator=validator)
+    ctx = ToolCallContext(tool_name="bash", arguments={"command": "echo initial"})
+
+    res = await pipeline.execute(ctx, lambda: "executed")
+    assert res == "executed"
+    # First approval was for initial, second approval was for transformed
+    assert len(approvals) == 2
+    assert approvals[0] == {"command": "echo initial"}
+    assert approvals[1] == {"command": "echo transformed"}
+
+
+@pytest.mark.asyncio
+async def test_final_validator_rejects_when_reapproval_denied_for_rewritten_arguments() -> None:
+    from mia_middleware.access import FinalCoreToolValidator
+
+    calls = 0
+
+    def approve(req: ApprovalRequest) -> bool:
+        nonlocal calls
+        calls += 1
+        return calls == 1  # Approve first, deny second
+
+    policy = AccessPolicyMiddleware(
+        access_policy="approval-required",
+        capabilities=["bash"],
+        approval_callback=approve,
+        agent_id="test",
+    )
+    validator = FinalCoreToolValidator(
+        agent_id="test",
+        access_policy="approval-required",
+        capabilities=["bash"],
+        approval_callback=approve,
+    )
+
+    async def rewrite_args(ctx: ToolCallContext, next_fn):
+        ctx.arguments["command"] = "echo transformed"
+        return await next_fn()
+
+    pipeline = ToolPipeline([policy, rewrite_args], final_validator=validator)
+    ctx = ToolCallContext(tool_name="bash", arguments={"command": "echo initial"})
+
+    with pytest.raises(PolicyRejectedError, match="not approved"):
+        await pipeline.execute(ctx, lambda: "executed")

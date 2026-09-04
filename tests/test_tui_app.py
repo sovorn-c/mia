@@ -135,3 +135,41 @@ async def test_tui_renders_canonical_stream_events(tmp_path: Path) -> None:
         assert app.query(ThoughtDrawer)
         assert app.query(ToolCallCard)
         assert app.query(ToolCallCard)[0].is_done is True
+
+
+@pytest.mark.asyncio
+async def test_tui_uses_run_request_and_closeable_stream(tmp_path: Path) -> None:
+    from mia_agent.events import TurnCompleteEvent
+    from mia_agent.runtime_events import AgentEventEnvelope
+    from mia_agent.runtime_models import RunRequest
+
+    received_requests: list[RunRequest] = []
+    closed = False
+
+    async def mock_run(req: RunRequest, **kwargs: object):
+        nonlocal closed
+        received_requests.append(req)
+        try:
+            yield AgentEventEnvelope(
+                run_id="r1",
+                task_id="root",
+                agent_id="mia",
+                session_id="s1",
+                event=TurnCompleteEvent(total_steps=1, total_cost_usd=0.0, stop_reason="stop"),
+            )
+        finally:
+            closed = True
+
+    app = MiaApp(
+        agent_manager=AgentManager(agents_dir=tmp_path / "agents"),
+        model_name="mock-model",
+        cwd=tmp_path,
+    )
+    app.agent_runner.run = mock_run  # type: ignore[method-assign]
+    async with app.run_test():
+        worker = app.run_agent_turn_worker("mia", "Test TUI prompt")
+        await worker.wait()
+    assert len(received_requests) == 1
+    assert received_requests[0].prompt_text == "Test TUI prompt"
+    assert received_requests[0].agent_id == "mia"
+    assert closed is True

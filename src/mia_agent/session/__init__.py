@@ -1,5 +1,6 @@
 """Session persistence, tree history, and context compaction for Mia."""
 
+from mia_agent.session.admission import SessionAdmission
 from mia_agent.session.compactor import (
     ContextCompactor,
     estimate_chat_message_tokens,
@@ -26,6 +27,7 @@ __all__ = [
     "CustomEntry",
     "SessionEntry",
     "JsonlSessionStore",
+    "SessionAdmission",
     "SessionJsonlError",
     "SessionTree",
     "SessionTreeError",

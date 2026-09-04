@@ -19,7 +19,20 @@ class RunErrorEvent(BaseModel):
     type: Literal["run_error"] = "run_error"
     stage: str
     error: str
+    code: str = "runtime_error"
     cancelled: bool = False
+
+
+class PluginDiagnosticEvent(BaseModel):
+    """Sanitized diagnostic for Plugin observer or cleanup lifecycle events."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    type: Literal["plugin_diagnostic"] = "plugin_diagnostic"
+    plugin_id: str
+    phase: str
+    message: str
+    error: str | None = None
 
 
 class AgentEventEnvelope(BaseModel):
@@ -32,10 +45,12 @@ class AgentEventEnvelope(BaseModel):
     agent_id: str
     session_id: str
     parent_session_id: str | None = None
-    event: AgentEvent | RunErrorEvent
+    event: AgentEvent | RunErrorEvent | PluginDiagnosticEvent
 
 
-def envelope(identity: RuntimeIdentity, event: AgentEvent) -> AgentEventEnvelope:
+def envelope(
+    identity: RuntimeIdentity, event: AgentEvent | RunErrorEvent | PluginDiagnosticEvent
+) -> AgentEventEnvelope:
     return AgentEventEnvelope(**identity.model_dump(), event=event)
 
 
@@ -44,16 +59,25 @@ def error_envelope(
     stage: str,
     error: str,
     *,
+    code: str = "runtime_error",
     cancelled: bool = False,
 ) -> AgentEventEnvelope:
+    effective_code = "cancelled" if (cancelled and code == "runtime_error") else code
     return AgentEventEnvelope(
         **identity.model_dump(),
         event=RunErrorEvent(
             stage=stage,
             error=str(sanitize_arguments(error)),
+            code=effective_code,
             cancelled=cancelled,
         ),
     )
 
 
-__all__ = ["AgentEventEnvelope", "RunErrorEvent", "envelope", "error_envelope"]
+__all__ = [
+    "AgentEventEnvelope",
+    "PluginDiagnosticEvent",
+    "RunErrorEvent",
+    "envelope",
+    "error_envelope",
+]

@@ -773,3 +773,68 @@ def test_rich_stream_status_transitions() -> None:
     # Turn Complete
     renderer.on_event(TurnCompleteEvent(total_steps=1, total_cost_usd=0.001))
     assert renderer._active_status is None
+
+
+@pytest.mark.asyncio
+async def test_repl_handles_cancellation_truthfully(tmp_path: Path) -> None:
+    from mia_ai.providers.base import LLMProvider
+    from mia_ai.types import ChatMessage, StreamChunk, ToolDefinition
+
+    started = asyncio.Event()
+
+    class BlockingProvider(LLMProvider):
+        async def stream(
+            self,
+            *,
+            model: str,
+            messages: list[ChatMessage],
+            tools: list[ToolDefinition] | None = None,
+            system: str | None = None,
+            temperature: float = 0.7,
+            max_tokens: int | None = None,
+        ):
+            started.set()
+            await asyncio.Event().wait()
+            yield StreamChunk(type="finish")
+
+    repl = MiaREPL(cwd=tmp_path, custom_provider=BlockingProvider())
+    repl.console = Console(record=True, width=120)
+
+    task = asyncio.create_task(repl.execute_turn("block me"))
+    await asyncio.wait_for(started.wait(), timeout=1.0)
+    task.cancel()
+
+    await task
+    output = repl.console.export_text()
+    assert "Turn halted by user (Ctrl+C)" in output
+
+
+@pytest.mark.asyncio
+async def test_repl_uses_run_request_and_closeable_stream(tmp_path: Path) -> None:
+    from mia_agent.events import TurnCompleteEvent
+    from mia_agent.runtime_events import AgentEventEnvelope
+    from mia_agent.runtime_models import RunRequest
+
+    received_requests: list[RunRequest] = []
+    closed = False
+
+    async def mock_run(req: RunRequest, **kwargs: object):
+        nonlocal closed
+        received_requests.append(req)
+        try:
+            yield AgentEventEnvelope(
+                run_id="r1",
+                task_id="root",
+                agent_id="mia",
+                session_id="s1",
+                event=TurnCompleteEvent(total_steps=1, total_cost_usd=0.0, stop_reason="stop"),
+            )
+        finally:
+            closed = True
+
+    repl = MiaREPL(cwd=tmp_path)
+    repl.agent_runner.run = mock_run  # type: ignore[method-assign]
+    await repl.execute_turn("Test prompt")
+    assert len(received_requests) == 1
+    assert received_requests[0].prompt_text == "Test prompt"
+    assert closed is True

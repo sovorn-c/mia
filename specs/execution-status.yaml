@@ -1,28 +1,90 @@
-# specs/execution-status.yaml — delivery status
+# specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.6.0
-updated_at: '2026-09-03T08:22:40Z'
+updated_at: '2026-09-04T15:21:44Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-09-03T08:22:40Z'
-  rationale: 'The traceability helper is not present; story verification evidence and the full quality gate are recorded manually.'
+  rationale: The traceability helper is not present; story verification evidence and the full quality
+    gate are recorded manually.
   heuristic_ratio: null
   downgrade_applied: false
 epics:
   e01:
-    title: Minimal Stream REPL and Authentication
+    title: Minimalist Pi/Tau-Style Stream REPL & Robust Auth
     status: completed
-    stories: {}
+    stories:
+      e01s01:
+        title: Rock-Solid Terminal Input & Dual-Mode Picker (Arrow & Number)
+        status: completed
+        bcps: 3
+        tasks_total: 2
+        tasks_passing: 0
+        tasks_failing: 0
+      e01s02:
+        title: Resilient Provider Key Probe & Connection Diagnostics
+        status: completed
+        bcps: 4
+        tasks_total: 2
+        tasks_passing: 0
+        tasks_failing: 0
+      e01s03:
+        title: Pi-Style Scoped Model Switcher & 12 Slash Commands Suite
+        status: completed
+        bcps: 5
+        tasks_total: 2
+        tasks_passing: 0
+        tasks_failing: 0
+      e01s04:
+        title: Minimalist Stream Rendering & Live Tool Diffs
+        status: completed
+        bcps: 4
+        tasks_total: 2
+        tasks_passing: 0
+        tasks_failing: 0
   e02:
-    title: Stream-First REPL Polish
+    title: 'Stream-First REPL Polish: prompt_toolkit, Minimalist Stream, & Inspection'
     status: completed
     stories:
       e02s04:
-        title: Context discovery and terminal controls
+        title: Pi/Tau Keybindings (Ctrl+C clear, Ctrl+D exit, /stop) & Context Auto-Discovery
         status: completed
         bcps: 4
         tasks_total: 2
         tasks_passing: 2
         tasks_failing: 0
+      e02s01:
+        title: prompt_toolkit Integration, Floating Slash Autocomplete & Pinned Status Footer
+        status: completed
+        bcps: 5
+        tasks_total: 3
+        tasks_passing: 3
+        tasks_failing: 0
+      e02s02:
+        title: Minimalist Working Stream & carrot_bounce Animation
+        status: completed
+        bcps: 5
+        tasks_total: 2
+        tasks_passing: 2
+        tasks_failing: 0
+      e02s03:
+        title: Post-Turn Inspection (Ctrl+O) & JSONL Session Tree Navigator (Esc / /tree)
+        status: completed
+        bcps: 4
+        tasks_total: 2
+        tasks_passing: 2
+        tasks_failing: 0
+  e03:
+    title: Native Orchestration Runtime
+    status: completed
+    stories: {}
+  e04:
+    title: Agent-Centric Foundation
+    status: passing
+    stories: {}
+  e05:
+    title: Plugin and Agent Template Foundation
+    status: passing
+    stories: {}
   e06:
     title: Agent Core Clean Break
     status: passing
@@ -59,3 +121,52 @@ epics:
         tasks_total: 4
         tasks_passing: 4
         tasks_failing: 0
+  e07:
+    title: Production Runtime Integrity
+    status: passing
+    bcps: 21
+    stories:
+      e07s01:
+        title: Canonical Closeable Agent Run Stream
+        status: passing
+        bcps: 8
+        risk: P0
+        tasks_total: 6
+        tasks_passing: 6
+        tasks_failing: 0
+      e07s02:
+        title: Safeguarded Runtime Settings and Session Admission
+        status: passing
+        bcps: 7
+        risk: P0
+        tasks_total: 6
+        tasks_passing: 6
+        tasks_failing: 0
+      e07s03:
+        title: Final Core Tool Validation and Plugin Boundary
+        status: passing
+        bcps: 6
+        risk: P0
+        tasks_total: 5
+        tasks_passing: 5
+        tasks_failing: 0
+  e08:
+    title: Governed Core Extension Host
+    status: planned
+    bcps: 21
+    stories: {}
+  e09:
+    title: Local Operations and Recovery
+    status: planned
+    bcps: 13
+    stories: {}
+  e10:
+    title: Accessible Product Experience and Documentation
+    status: planned
+    bcps: 13
+    stories: {}
+  e11:
+    title: Release and Distribution Assurance
+    status: planned
+    bcps: 13
+    stories: {}

@@ -236,3 +236,69 @@ async def test_harness_persists_session_and_resumes(tmp_path: Path) -> None:
     assert len(resumed_messages) == 2
     assert resumed_messages[0].content == "Hello Mia"
     assert resumed_messages[1].content == "I am ready to help."
+
+
+@pytest.mark.asyncio
+async def test_session_admission_prevents_concurrent_append_corruption(tmp_path: Path) -> None:
+    import asyncio
+
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.base import LLMProvider
+    from mia_ai.types import StreamChunk, ToolDefinition
+
+    started = asyncio.Event()
+    unblock = asyncio.Event()
+
+    class PausingProvider(LLMProvider):
+        async def stream(
+            self,
+            *,
+            model: str,
+            messages: list[ChatMessage],
+            tools: list[ToolDefinition] | None = None,
+            system: str | None = None,
+            temperature: float = 0.7,
+            max_tokens: int | None = None,
+        ):
+            started.set()
+            await unblock.wait()
+            yield StreamChunk(type="text", text="done")
+            yield StreamChunk(type="finish")
+
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    runner = AgentRunner(agent_manager=manager)
+    session_id = "admit_corrupt_check"
+
+    req1 = RunRequest(prompt_text="turn 1", agent_id="mia", session_id=session_id)
+    req2 = RunRequest(prompt_text="turn 2", agent_id="mia", session_id=session_id)
+
+    async def r1():
+        async for _ in runner.run(req1, provider=PausingProvider(), cwd=tmp_path):
+            pass
+
+    from mia_ai.providers.mock import MockProvider
+
+    provider2 = MockProvider()
+
+    async def r2():
+        async for _ in runner.run(req2, provider=provider2, cwd=tmp_path):
+            pass
+
+    t1 = asyncio.create_task(r1())
+    await started.wait()
+    await r2()  # Should fail fast with session_busy
+    unblock.set()
+    await t1
+
+    session_path = manager.get_session_path("mia", session_id)
+    store = JsonlSessionStore(session_path)
+    entries = store.load_entries()
+    # Should only have valid entries from run 1, no duplicate/corrupt user prompts from run 2
+    user_msgs = [
+        e.message.content
+        for e in entries
+        if e.type == "message" and hasattr(e, "message") and e.message.role == "user"
+    ]
+    assert user_msgs == ["turn 1"]
