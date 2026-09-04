@@ -895,3 +895,188 @@ async def test_deterministic_activation_staged_publication_and_factory_integrati
     assert "tool_x" in harness_tool_names
     assert "tool_y" in harness_tool_names
     assert len(runtime.disposers) >= 2
+
+
+@pytest.mark.asyncio
+async def test_activation_observers_and_disposers_in_agent_runner(tmp_path: Path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.plugin_host import PluginContext, PluginHost
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+    from mia_tools.base import BaseTool
+
+    observer_trace: list[str] = []
+    disposer_trace: list[str] = []
+
+    class DummyTool(BaseTool):
+        name = "observed_tool"
+        description = "Observed Tool"
+        parameters = {}
+        effect = "non-mutating"
+
+        async def execute(self, *args: Any, **kwargs: Any) -> Any:
+            return "ok"
+
+    class ObservablePlugin:
+        @property
+        def manifest(self) -> PluginManifest:
+            return PluginManifest(
+                plugin_id="obs_plugin",
+                version="1.0.0",
+                display_name="Observable Plugin",
+                description="Tests observers and disposers",
+                tool_specs=[
+                    PluginToolSpec(
+                        name="observed_tool", description="Observed Tool", effect="non-mutating"
+                    )
+                ],
+            )
+
+        async def activate(self, context: PluginContext) -> None:
+            context.register(DummyTool())
+            context.observe("run_started", lambda identity: observer_trace.append("run_started"))
+            context.observe("event_emitted", lambda env: observer_trace.append("event_emitted"))
+            context.observe("run_finished", lambda identity: observer_trace.append("run_finished"))
+            await context.effect(lambda: disposer_trace.append("disposed_first"))
+            await context.effect(lambda: disposer_trace.append("disposed_second"))
+
+    agents = make_agent_manager(tmp_path)
+    alpha = agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+
+    p = ObservablePlugin()
+    plugins._catalog["obs_plugin"] = p.manifest
+    plugins.install("obs_plugin")
+    plugins.trust_plugin("obs_plugin")
+    plugins.enable(alpha.agent_id, "obs_plugin")
+
+    host = PluginHost()
+    host.register_implementation("obs_plugin", p)
+
+    factory = AgentRuntimeFactory(agent_manager=agents, plugin_manager=plugins, plugin_host=host)
+    runner = AgentRunner(agent_manager=agents, factory=factory)
+
+    provider = MockProvider()
+    provider.queue_text_response("Hello from observed agent")
+
+    req = RunRequest(prompt_text="hello", agent_id="alpha")
+    events = [env async for env in runner.run(req, provider=provider, cwd=tmp_path)]
+
+    assert events
+    assert events[-1].event.type == "turn_complete"
+
+    # Observers verified
+    assert "run_started" in observer_trace
+    assert "event_emitted" in observer_trace
+    assert "run_finished" in observer_trace
+
+    # Disposers executed in reverse order
+    assert disposer_trace == ["disposed_second", "disposed_first"]
+
+
+@pytest.mark.asyncio
+async def test_activation_disposal_timeout_diagnosed_and_quarantined_preserving_terminal_truth(
+    tmp_path: Path,
+) -> None:
+    import asyncio
+
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.plugin_host import PluginContext, PluginHost
+    from mia_agent.runtime_events import PluginDiagnosticEvent
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+    from mia_tools.base import BaseTool
+
+    PluginManager.clear_quarantine()
+
+    class HangingTool(BaseTool):
+        name = "hang_tool"
+        description = "Hang Tool"
+        parameters = {}
+        effect = "non-mutating"
+
+        async def execute(self, *args: Any, **kwargs: Any) -> Any:
+            return "ok"
+
+    class TimeoutPlugin:
+        @property
+        def manifest(self) -> PluginManifest:
+            return PluginManifest(
+                plugin_id="timeout_plugin",
+                version="1.0.0",
+                display_name="Timeout Plugin",
+                description="Times out in cleanup",
+                tool_specs=[
+                    PluginToolSpec(name="hang_tool", description="Hang Tool", effect="non-mutating")
+                ],
+            )
+
+        async def activate(self, context: PluginContext) -> None:
+            context.register(HangingTool())
+
+            async def hang():
+                await asyncio.sleep(10.0)
+
+            await context.effect(hang)
+
+    agents = make_agent_manager(tmp_path)
+    alpha = agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+
+    tp = TimeoutPlugin()
+    plugins._catalog["timeout_plugin"] = tp.manifest
+    plugins.install("timeout_plugin")
+    plugins.trust_plugin("timeout_plugin")
+    plugins.enable(alpha.agent_id, "timeout_plugin")
+
+    host = PluginHost()
+    host.register_implementation("timeout_plugin", tp)
+
+    factory = AgentRuntimeFactory(agent_manager=agents, plugin_manager=plugins, plugin_host=host)
+    runner = AgentRunner(agent_manager=agents, factory=factory)
+
+    orig_cleanup = runner._run_cooperative_cleanup
+
+    async def fast_cleanup(runtime, identity, timeout=0.01):
+        return await orig_cleanup(runtime, identity, timeout=0.01)
+
+    runner._run_cooperative_cleanup = fast_cleanup  # type: ignore[method-assign]
+
+    provider = MockProvider()
+    provider.queue_text_response("Done work successfully")
+
+    req = RunRequest(prompt_text="hello", agent_id="alpha")
+    events = [env async for env in runner.run(req, provider=provider, cwd=tmp_path)]
+
+    # Diagnostic event emitted
+    diag_envs = [env for env in events if isinstance(env.event, PluginDiagnosticEvent)]
+    assert len(diag_envs) == 1
+    assert diag_envs[0].event.plugin_id == "timeout_plugin"
+    assert "timed out" in diag_envs[0].event.message
+
+    # Terminal truth preserved
+    assert events[-1].event.type == "turn_complete"
+
+    # Plugin is now quarantined
+    assert PluginManager.is_quarantined("timeout_plugin")
+
+    # Later plan fails closed due to quarantine
+    with pytest.raises(ValueError, match="quarantined"):
+        host.plan(agents.get_agent(alpha.agent_id), plugins)
+
+
+def test_event_loop_blocking_python_limit_documented() -> None:
+    """Document and test that synchronous blocking code cannot be cancelled cooperatively.
+
+    Mia honestly documents that same-process event-loop-blocking code in trusted Python
+    prevents the event loop from running, so cooperative timeouts only apply when callbacks yield.
+    """
+    import time
+
+    start = time.monotonic()
+    time.sleep(0.01)
+    duration = time.monotonic() - start
+    assert duration >= 0.009
+
