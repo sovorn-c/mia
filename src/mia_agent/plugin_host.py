@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+import contextlib
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Protocol, TypeVar, runtime_checkable
@@ -148,8 +149,31 @@ class PluginActivation:
     disposers: tuple[Callable[[], Any], ...] = ()
 
 
+def _attributed_disposer(fn: Callable[[], Any], plugin_id: str) -> Callable[[], Any]:
+    def _wrapper() -> Any:
+        return fn()
+
+    _wrapper.plugin_id = plugin_id  # type: ignore[attr-defined]
+    return _wrapper
+
+
 class PluginHost:
     """Core extension host for planning and activating governed Plugins."""
+
+    def __init__(self) -> None:
+        self._implementations: dict[str, Any] = {}
+
+    def register_implementation(self, plugin_id: str, implementation: Any) -> None:
+        """Register an in-memory Plugin implementation (e.g. for testing or synthetic plugins)."""
+        self._implementations[normalize_plugin_id(plugin_id)] = implementation
+
+    async def _rollback(self, disposers: list[tuple[str, Callable[[], Any]]]) -> None:
+        """Dispose every acquired effect in reverse order on activation failure."""
+        for _pid, disposer in reversed(disposers):
+            with contextlib.suppress(Exception):
+                res = disposer()
+                if isinstance(res, Awaitable):
+                    await res
 
     def plan(self, agent: Agent, plugin_manager: PluginManager) -> ActivationPlan:
         """Plan the complete enabled Plugin set without executing any callbacks."""
@@ -205,6 +229,140 @@ class PluginHost:
             agent_id=agent.agent_id,
             plugins=tuple(ordered),
             manifests=manifests,
+        )
+
+    async def activate(
+        self,
+        plan: ActivationPlan,
+        *,
+        agent: Agent,
+        agent_manager: Any | None = None,
+        plugin_manager: PluginManager | None = None,
+    ) -> PluginActivation:
+        """Deterministically activate all enabled Plugins in plan, or roll back entirely on failure."""
+        if not plan.plugins:
+            return PluginActivation(agent_id=plan.agent_id)
+
+        from mia_agent.plugin_catalog import NotesPlugin
+        from mia_agent.plugins import discover_entry_points
+
+        all_disposers: list[tuple[str, Callable[[], Any]]] = []
+        staged_tools: list[BaseTool] = []
+        staged_context_contributors: list[ContextContributor] = []
+        staged_observers: dict[RunObserverPhase, list[RunObserver]] = {
+            "run_started": [],
+            "event_emitted": [],
+            "run_finished": [],
+        }
+        staged_middleware: list[Any] = []
+        seen_tool_names: set[str] = set()
+
+        for plugin_id in plan.plugins:
+            norm_id = normalize_plugin_id(plugin_id)
+            manifest = plan.manifests.get(norm_id)
+            if manifest is None and plugin_manager is not None:
+                with contextlib.suppress(Exception):
+                    manifest = plugin_manager.get_manifest(norm_id)
+            if manifest is None:
+                await self._rollback(all_disposers)
+                raise ValueError(f"Plugin '{norm_id}' has no manifest in plan")
+
+            # Look up implementation
+            impl = self._implementations.get(norm_id)
+            if impl is None:
+                if norm_id == "notes":
+                    impl = NotesPlugin()
+                else:
+                    with contextlib.suppress(Exception):
+                        for ep in discover_entry_points():
+                            if normalize_plugin_id(getattr(ep, "name", "")) == norm_id:
+                                loaded = ep.load()
+                                impl = (
+                                    loaded()
+                                    if callable(loaded) and not hasattr(loaded, "activate")
+                                    else loaded
+                                )
+                                break
+
+            if impl is None:
+                await self._rollback(all_disposers)
+                raise ValueError(f"Plugin '{norm_id}' has no implementation available")
+
+            config = getattr(agent, "plugin_config", {}).get(norm_id, {})
+            if agent_manager is not None:
+                data_dir = agent_manager.agent_home(agent.agent_id) / "plugins" / norm_id
+            else:
+                data_dir = Path.home() / ".mia" / "agents" / agent.agent_id / "plugins" / norm_id
+            data_dir.mkdir(parents=True, exist_ok=True)
+
+            ctx = PluginContext(
+                plugin_id=norm_id,
+                agent_id=agent.agent_id,
+                config=config,
+                data_dir=data_dir,
+                manifest=manifest,
+            )
+
+            try:
+                if hasattr(impl, "activate"):
+                    res = impl.activate(ctx)
+                    if isinstance(res, Awaitable):
+                        await res
+                elif hasattr(impl, "build_tools"):
+                    for tool in impl.build_tools(
+                        agent_id=agent.agent_id, data_dir=data_dir, config=dict(config)
+                    ):
+                        ctx.register(tool)
+                else:
+                    raise ValueError(f"Plugin '{norm_id}' implementation has no activate method")
+
+                # Validate tool declarations match manifest tool_specs
+                declared_specs = {s.name: s for s in manifest.tool_specs}
+                actual_tools = {t.name: t for t in ctx._tools}
+                if set(actual_tools) != set(declared_specs):
+                    missing = set(declared_specs) - set(actual_tools)
+                    extra = set(actual_tools) - set(declared_specs)
+                    errs = []
+                    if missing:
+                        errs.append(f"missing declared tools: {sorted(missing)}")
+                    if extra:
+                        errs.append(f"undeclared tools: {sorted(extra)}")
+                    raise ValueError(f"Plugin '{norm_id}' tool mismatch: {'; '.join(errs)}")
+
+                # Check collisions with tools from earlier plugins
+                for t_name in actual_tools:
+                    if t_name in seen_tool_names:
+                        raise ValueError(
+                            f"Plugin contribution collision: duplicate Tool name '{t_name}'"
+                        )
+                    seen_tool_names.add(t_name)
+
+                # Record disposers
+                for disp in ctx._disposers:
+                    all_disposers.append((norm_id, disp))
+
+                # Stage contributions
+                staged_tools.extend(ctx._tools)
+                staged_context_contributors.extend(ctx._context_contributors)
+                for phase in VALID_OBSERVER_PHASES:
+                    staged_observers[phase].extend(ctx._observers[phase])
+                staged_middleware.extend(ctx._tool_middleware)
+
+            except Exception as exc:
+                for disp in ctx._disposers:
+                    all_disposers.append((norm_id, disp))
+                await self._rollback(all_disposers)
+                raise ValueError(f"Activation failed for plugin '{norm_id}': {exc}") from exc
+
+        final_disposers = tuple(_attributed_disposer(disp, pid) for pid, disp in all_disposers)
+
+        return PluginActivation(
+            agent_id=agent.agent_id,
+            tools=tuple(staged_tools),
+            context_contributors=tuple(staged_context_contributors),
+            observers={phase: tuple(staged_observers[phase]) for phase in VALID_OBSERVER_PHASES},
+            tool_middleware=tuple(staged_middleware),
+            disposers=final_disposers,
         )
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -539,7 +540,7 @@ async def test_plugin_context_operations_and_invariants(tmp_path: Path) -> None:
     # 1. Register matching tool
     tool = DummyTool()
     ctx.register(tool)
-    assert getattr(tool, "plugin_id") == "my_plugin"
+    assert tool.plugin_id == "my_plugin"
     assert len(ctx._tools) == 1
 
     # 2. Register undeclared tool fails
@@ -629,7 +630,9 @@ async def test_activation_staging_and_rollback_on_failure(tmp_path: Path) -> Non
                 version="1.0.0",
                 display_name="Plugin A",
                 description="Acquires effect",
-                tool_specs=[PluginToolSpec(name="tool_a", description="Tool A", effect="non-mutating")],
+                tool_specs=[
+                    PluginToolSpec(name="tool_a", description="Tool A", effect="non-mutating")
+                ],
             )
 
         async def activate(self, context: PluginContext) -> None:
@@ -645,7 +648,9 @@ async def test_activation_staging_and_rollback_on_failure(tmp_path: Path) -> Non
                 display_name="Plugin B",
                 description="Fails activation",
                 dependencies=["plugin_a"],
-                tool_specs=[PluginToolSpec(name="tool_b", description="Tool B", effect="non-mutating")],
+                tool_specs=[
+                    PluginToolSpec(name="tool_b", description="Tool B", effect="non-mutating")
+                ],
             )
 
         async def activate(self, context: PluginContext) -> None:
@@ -715,7 +720,11 @@ async def test_activation_reverse_order_rollback(tmp_path: Path) -> None:
                 version="1.0.0",
                 display_name=self.pid,
                 description=self.pid,
-                tool_specs=[PluginToolSpec(name=f"tool_{self.pid}", description=self.pid, effect="non-mutating")],
+                tool_specs=[
+                    PluginToolSpec(
+                        name=f"tool_{self.pid}", description=self.pid, effect="non-mutating"
+                    )
+                ],
             )
 
         async def activate(self, context: PluginContext) -> None:
@@ -754,4 +763,135 @@ async def test_activation_reverse_order_rollback(tmp_path: Path) -> None:
     assert disposed_order == ["cleaned_p2", "cleaned_p1"]
 
 
+@pytest.mark.asyncio
+async def test_deterministic_activation_staged_publication_and_factory_integration(
+    tmp_path: Path,
+) -> None:
+    import dataclasses
 
+    from mia_agent.plugin_host import PluginContext, PluginHost
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import RuntimeIdentity
+    from mia_ai.providers.mock import MockProvider
+    from mia_tools.base import BaseTool
+
+    activation_order: list[str] = []
+    disposed_effects: list[str] = []
+
+    class ToolX(BaseTool):
+        name = "tool_x"
+        description = "Tool X"
+        parameters = {}
+        effect = "non-mutating"
+
+        async def execute(self, *args: Any, **kwargs: Any) -> Any:
+            return "x"
+
+    class ToolY(BaseTool):
+        name = "tool_y"
+        description = "Tool Y"
+        parameters = {}
+        effect = "side-effecting"
+
+        async def execute(self, *args: Any, **kwargs: Any) -> Any:
+            return "y"
+
+    class PluginY:
+        @property
+        def manifest(self) -> PluginManifest:
+            return PluginManifest(
+                plugin_id="plugin_y",
+                version="1.0.0",
+                display_name="Plugin Y",
+                description="Depends on plugin_x",
+                dependencies=["plugin_x"],
+                tool_specs=[
+                    PluginToolSpec(name="tool_y", description="Tool Y", effect="side-effecting")
+                ],
+            )
+
+        async def activate(self, context: PluginContext) -> None:
+            activation_order.append("plugin_y")
+            context.register(ToolY())
+            await context.effect(lambda: disposed_effects.append("cleanup_y"))
+
+    class PluginX:
+        @property
+        def manifest(self) -> PluginManifest:
+            return PluginManifest(
+                plugin_id="plugin_x",
+                version="1.0.0",
+                display_name="Plugin X",
+                description="Base dependency",
+                tool_specs=[
+                    PluginToolSpec(name="tool_x", description="Tool X", effect="non-mutating")
+                ],
+            )
+
+        async def activate(self, context: PluginContext) -> None:
+            activation_order.append("plugin_x")
+            context.register(ToolX())
+            await context.effect(lambda: disposed_effects.append("cleanup_x"))
+
+    agents = make_agent_manager(tmp_path)
+    alpha = agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+
+    px = PluginX()
+    py = PluginY()
+    plugins._catalog["plugin_x"] = px.manifest
+    plugins._catalog["plugin_y"] = py.manifest
+    plugins.install("plugin_x")
+    plugins.install("plugin_y")
+    plugins.trust_plugin("plugin_x")
+    plugins.trust_plugin("plugin_y")
+    plugins.enable(alpha.agent_id, "plugin_y")
+    plugins.enable(alpha.agent_id, "plugin_x")
+
+    host = PluginHost()
+    host.register_implementation("plugin_x", px)
+    host.register_implementation("plugin_y", py)
+
+    plan = host.plan(agents.get_agent(alpha.agent_id), plugins)
+    assert plan.plugins == ("plugin_x", "plugin_y")
+
+    # Activation
+    activation = await host.activate(
+        plan,
+        agent=agents.get_agent(alpha.agent_id),
+        agent_manager=agents,
+        plugin_manager=plugins,
+    )
+
+    # Deterministic dependency-first order
+    assert activation_order == ["plugin_x", "plugin_y"]
+
+    # Published contributions
+    assert len(activation.tools) == 2
+    tool_names = [t.name for t in activation.tools]
+    assert tool_names == ["tool_x", "tool_y"]
+    assert activation.tools[0].plugin_id == "plugin_x"
+    assert activation.tools[1].plugin_id == "plugin_y"
+    assert len(activation.disposers) == 2
+
+    # Immutability
+    with pytest.raises((TypeError, dataclasses.FrozenInstanceError)):
+        activation.tools = ()  # type: ignore[misc]
+
+    # Integration with AgentRuntimeFactory
+    factory = AgentRuntimeFactory(agent_manager=agents, plugin_manager=plugins, plugin_host=host)
+    identity = RuntimeIdentity(
+        run_id="r1", task_id="root", agent_id=alpha.agent_id, session_id="s1"
+    )
+    runtime = factory.build(
+        identity=identity,
+        provider=MockProvider(),
+        cwd=tmp_path,
+        activation=activation,
+    )
+
+    assert runtime.activation is activation
+    harness_tool_names = [t.name for t in runtime.harness.tools]
+    assert "tool_x" in harness_tool_names
+    assert "tool_y" in harness_tool_names
+    assert len(runtime.disposers) >= 2

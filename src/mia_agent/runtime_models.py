@@ -6,6 +6,7 @@ import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -155,6 +156,7 @@ class AgentRuntime:
     agent: Agent
     effective_settings: EffectiveSettings | None = None
     disposers: tuple[Callable[[], Awaitable[None] | None], ...] = ()
+    activation: Any | None = None
 
 
 __all__ = ["AgentRuntime", "EffectiveSettings", "RunRequest", "RuntimeIdentity"]

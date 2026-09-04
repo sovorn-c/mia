@@ -9,6 +9,7 @@ from typing import Any
 from mia_agent.agents import Agent, AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.harness import AgentHarness
+from mia_agent.plugin_host import PluginActivation, PluginHost
 from mia_agent.plugins import PluginManager
 from mia_agent.runtime_models import AgentRuntime, EffectiveSettings, RuntimeIdentity
 from mia_agent.session.compactor import ContextCompactor
@@ -57,11 +58,13 @@ class AgentRuntimeFactory:
         config_manager: ConfigManager | None = None,
         delegation_service: Any | None = None,
         plugin_manager: PluginManager | None = None,
+        plugin_host: PluginHost | None = None,
     ) -> None:
         self.agent_manager = agent_manager or AgentManager()
         self.config_manager = config_manager or ConfigManager()
         self.delegation_service = delegation_service
         self.plugin_manager = plugin_manager or PluginManager(agent_manager=self.agent_manager)
+        self.plugin_host = plugin_host or PluginHost()
 
     def resolve_effective_settings(
         self,
@@ -170,6 +173,7 @@ class AgentRuntimeFactory:
         delegation_service: Any | None = None,
         delegation_depth: int = 0,
         disposers: Sequence[Callable[[], Awaitable[None] | None]] | None = None,
+        activation: PluginActivation | None = None,
     ) -> AgentRuntime:
         """Construct an Agent-scoped harness, restoring and annotating its Session."""
         agent = self.agent_manager.get_agent(identity.agent_id)
@@ -178,7 +182,10 @@ class AgentRuntimeFactory:
         work_dir = cwd or Path.cwd()
 
         # Stage and validate complete current Plugin Tool set before settings/provider/harness
-        plugin_tools = self.plugin_manager.resolve_tools(agent)
+        if activation is not None:
+            plugin_tools = list(activation.tools)
+        else:
+            plugin_tools = self.plugin_manager.resolve_tools(agent)
         plugin_names = [tool.name for tool in plugin_tools]
 
         available_tools = [
@@ -296,6 +303,8 @@ class AgentRuntimeFactory:
                 collected_disposers.append(_attributed_disposer(tool.dispose, pid))
             elif hasattr(tool, "cleanup") and callable(tool.cleanup):
                 collected_disposers.append(_attributed_disposer(tool.cleanup, pid))
+        if activation is not None:
+            collected_disposers.extend(activation.disposers)
         if disposers is not None:
             collected_disposers.extend(disposers)
 
@@ -306,6 +315,7 @@ class AgentRuntimeFactory:
             agent=agent,
             effective_settings=settings,
             disposers=tuple(collected_disposers),
+            activation=activation,
         )
 
     @staticmethod
