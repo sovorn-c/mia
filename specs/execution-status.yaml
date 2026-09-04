@@ -162,11 +162,12 @@ epics:
         bcps: 7
         risk: P0
         tasks_total: 5
-        tasks_passing: 0
-        tasks_failing: 5
+        tasks_passing: 5
+        tasks_failing: 0
       e08s02:
         title: Transactional Run Activation and Owned Plugin Lifecycle
         status: planned
+        started_at: '2026-09-04T21:21:00Z'
         bcps: 8
         risk: P0
         tasks_total: 5
