@@ -538,3 +538,160 @@ async def test_terminal_truth_duplicate_terminal_suppressed(tmp_path) -> None:
     events = [e async for e in runner.run(request, cwd=tmp_path)]
     assert len(events) == 1
     assert events[0].event.type == "turn_complete"
+
+
+@pytest.mark.asyncio
+async def test_cancellation_before_finalization_raises_without_envelope(tmp_path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.base import LLMProvider
+    from mia_ai.types import ChatMessage, StreamChunk, ToolDefinition
+
+    started = asyncio.Event()
+
+    class BlockingProvider(LLMProvider):
+        async def stream(
+            self,
+            *,
+            model: str,
+            messages: list[ChatMessage],
+            tools: list[ToolDefinition] | None = None,
+            system: str | None = None,
+            temperature: float = 0.7,
+            max_tokens: int | None = None,
+        ):
+            started.set()
+            await asyncio.Event().wait()
+            yield StreamChunk(type="finish")
+
+    runner = AgentRunner(agent_manager=AgentManager(agents_dir=tmp_path / "agents"))
+    seen = []
+
+    async def consume() -> None:
+        req = RunRequest(prompt_text="hello", agent_id="mia")
+        async for env in runner.run(req, provider=BlockingProvider(), cwd=tmp_path):
+            seen.append(env)
+
+    task = asyncio.create_task(consume())
+    await asyncio.wait_for(started.wait(), timeout=1)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    # Pre-finalization cancellation must NOT yield a terminal or error envelope
+    terminals = [e for e in seen if e.event.type in ("turn_complete", "run_error")]
+    assert len(terminals) == 0
+
+
+@pytest.mark.asyncio
+async def test_aclose_before_finalization_finalizes_cancelled_without_envelope(tmp_path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+
+    provider = MockProvider()
+    provider.queue_text_response("hello world")
+
+    runner = AgentRunner(agent_manager=AgentManager(agents_dir=tmp_path / "agents"))
+    req = RunRequest(prompt_text="hello", agent_id="mia")
+    stream = runner.run(req, provider=provider, cwd=tmp_path)
+
+    # Receive the first event (turn_start), then close the stream before turn_complete
+    first_event = await stream.__anext__()
+    assert first_event.event.type == "turn_start"
+
+    # Await aclose() on stream before finalization
+    await stream.aclose()
+
+    with pytest.raises(StopAsyncIteration):
+        await stream.__anext__()
+
+
+@pytest.mark.asyncio
+async def test_aclose_after_terminal_delivery_is_idempotent(tmp_path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+
+    provider = MockProvider()
+    provider.queue_text_response("finished")
+
+    runner = AgentRunner(agent_manager=AgentManager(agents_dir=tmp_path / "agents"))
+    req = RunRequest(prompt_text="hello", agent_id="mia")
+    stream = runner.run(req, provider=provider, cwd=tmp_path)
+
+    events = [e async for e in stream]
+    assert events
+    assert events[-1].event.type == "turn_complete"
+
+    # Awaiting aclose() after terminal delivery is idempotent
+    await stream.aclose()
+    await stream.aclose()
+
+
+@pytest.mark.asyncio
+async def test_late_cancellation_deferred_until_terminal_envelope_returned(tmp_path) -> None:
+    from unittest.mock import MagicMock
+
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.events import TurnCompleteEvent
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import AgentRuntime, RunRequest
+
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+
+    async def harness_prompt(prompt_text: str):
+        yield TurnCompleteEvent(total_steps=1, stop_reason="stop")
+
+    mock_harness = MagicMock()
+    mock_harness.prompt = harness_prompt
+
+    factory = MagicMock(spec=AgentRuntimeFactory)
+    mock_runtime = MagicMock(spec=AgentRuntime)
+    mock_runtime.harness = mock_harness
+    factory.build.return_value = mock_runtime
+
+    runner = AgentRunner(factory=factory, agent_manager=manager)
+    req = RunRequest(prompt_text="hello", agent_id="mia")
+
+    seen = []
+
+    async def run_with_cancel() -> None:
+        async for env in runner.run(req, cwd=tmp_path):
+            seen.append(env)
+            # Cancel current task immediately upon receiving terminal envelope
+            asyncio.current_task().cancel()
+
+    consume_task = asyncio.create_task(run_with_cancel())
+    with pytest.raises(asyncio.CancelledError):
+        await consume_task
+
+    assert len(seen) == 1
+    assert seen[0].event.type == "turn_complete"
+
+
+@pytest.mark.asyncio
+async def test_bare_abandonment_has_no_lifecycle_guarantee(tmp_path) -> None:
+    """Document and test that bare abandonment has no timing guarantee, while aclosing is safe."""
+    from contextlib import aclosing
+
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+
+    provider = MockProvider()
+    provider.queue_text_response("hello")
+
+    runner = AgentRunner(agent_manager=AgentManager(agents_dir=tmp_path / "agents"))
+    req = RunRequest(prompt_text="hello", agent_id="mia")
+
+    # When using contextlib.aclosing, early break is safely closed
+    async with aclosing(runner.run(req, provider=provider, cwd=tmp_path)) as stream:
+        async for _env in stream:
+            break
