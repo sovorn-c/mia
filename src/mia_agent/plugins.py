@@ -29,11 +29,24 @@ if TYPE_CHECKING:
     from mia_agent.agents.manager import AgentManager
 
 
+MIA_PLUGIN_ENTRY_POINT_GROUP = "mia.plugins"
+
+
+def discover_entry_points() -> list[Any]:
+    """Discover installed Plugin entry points from the allowlisted Mia group."""
+    from importlib.metadata import entry_points
+
+    eps = entry_points()
+    if hasattr(eps, "select"):
+        return list(eps.select(group=MIA_PLUGIN_ENTRY_POINT_GROUP))
+    return list(eps.get(MIA_PLUGIN_ENTRY_POINT_GROUP, []))
+
+
 _QUARANTINED_PLUGINS: set[str] = set()
 
 
 class PluginManager:
-    """Manage the small bundled catalog and explicit local installation state."""
+    """Manage the bundled and discovered catalog and explicit local installation/trust state."""
 
     @classmethod
     def quarantine_plugin(cls, plugin_id: str) -> None:
@@ -64,11 +77,128 @@ class PluginManager:
         default_dir = self.agent_manager.agents_dir.parent / "plugins"
         self.plugins_dir = (plugins_dir or default_dir).expanduser().resolve()
         self.state_path = self.plugins_dir / "installed.json"
-        self._catalog = {"notes": NotesPlugin().manifest}
+        self.trust_path = self.plugins_dir / "trust.json"
+        self._catalog: dict[str, PluginManifest] = {"notes": NotesPlugin().manifest}
+
+    def list_trusted(self) -> list[str]:
+        """Read explicitly trusted Plugin IDs."""
+        if not self.trust_path.exists():
+            return []
+        try:
+            payload = json.loads(self.trust_path.read_text(encoding="utf-8"))
+            trusted = payload.get("trusted", [])
+            if not isinstance(trusted, list):
+                return []
+            return [normalize_plugin_id(p) for p in trusted]
+        except Exception:
+            return []
+
+    def trust_plugin(self, plugin_id: str) -> None:
+        """Grant explicit trust to an installed-code Plugin."""
+        norm_id = normalize_plugin_id(plugin_id)
+        trusted = set(self.list_trusted())
+        trusted.add(norm_id)
+        self.plugins_dir.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(self.trust_path, {"trusted": sorted(trusted)})
+
+    def revoke_plugin_trust(self, plugin_id: str) -> None:
+        """Revoke explicit trust from an installed-code Plugin."""
+        norm_id = normalize_plugin_id(plugin_id)
+        trusted = set(self.list_trusted())
+        trusted.discard(norm_id)
+        self.plugins_dir.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(self.trust_path, {"trusted": sorted(trusted)})
+
+    def is_trusted(self, plugin_id: str) -> bool:
+        """Check whether a Plugin has effective trust."""
+        norm_id = normalize_plugin_id(plugin_id)
+        if norm_id == "notes":
+            return True
+        manifest = self.get_manifest(norm_id)
+        if manifest.provenance and manifest.provenance.source == "bundled":
+            return True
+        if manifest.plugin_type == "declarative":
+            return True
+        return norm_id in self.list_trusted()
+
+    def _get_effective_catalog(self) -> dict[str, PluginManifest]:
+        catalog: dict[str, PluginManifest] = dict(self._catalog)
+        trusted_ids = set(self.list_trusted())
+        try:
+            discovered_eps = discover_entry_points()
+        except Exception:
+            discovered_eps = []
+
+        for ep in discovered_eps:
+            norm_id = normalize_plugin_id(getattr(ep, "name", ""))
+            if norm_id in catalog:
+                continue
+            try:
+                plugin_obj = ep.load()
+                manifest_obj = getattr(plugin_obj, "manifest", plugin_obj)
+                if callable(manifest_obj):
+                    manifest_obj = manifest_obj()
+                if not isinstance(manifest_obj, PluginManifest):
+                    continue
+                dist = getattr(ep, "dist", None)
+                pkg_name = getattr(dist, "name", None) if dist else None
+                pkg_ver = getattr(dist, "version", None) if dist else None
+                ep_val = getattr(ep, "value", None)
+                provenance = PluginProvenance(
+                    source="installed",
+                    package_name=pkg_name,
+                    package_version=pkg_ver,
+                    entry_point=ep_val,
+                )
+                is_explicit_trusted = norm_id in trusted_ids
+                if manifest_obj.plugin_type == "declarative":
+                    trust = PluginTrust(
+                        trust_class="declarative",
+                        status="declarative",
+                        explicit=True,
+                        message="Declarative static catalog resources.",
+                    )
+                else:
+                    trust = PluginTrust(
+                        trust_class="trusted-code",
+                        status="trusted" if is_explicit_trusted else "untrusted",
+                        explicit=is_explicit_trusted,
+                        message="Explicit trust granted"
+                        if is_explicit_trusted
+                        else "Installed code requires explicit administrator trust before enablement.",
+                    )
+                catalog[norm_id] = manifest_obj.model_copy(
+                    update={"provenance": provenance, "trust": trust}
+                )
+            except Exception:
+                continue
+
+        # Dynamically update trust status for catalog entries
+        for key, manifest in list(catalog.items()):
+            if key == "notes" or (manifest.provenance and manifest.provenance.source == "bundled"):
+                continue
+            if manifest.plugin_type == "declarative":
+                continue
+            is_explicit_trusted = key in trusted_ids
+            status: PluginTrustStatus = "trusted" if is_explicit_trusted else "untrusted"
+            msg = (
+                "Explicit trust granted"
+                if is_explicit_trusted
+                else "Installed code requires explicit administrator trust before enablement."
+            )
+            trust = PluginTrust(
+                trust_class=manifest.plugin_type,
+                status=status,
+                explicit=is_explicit_trusted,
+                message=msg,
+            )
+            catalog[key] = manifest.model_copy(update={"trust": trust})
+        return catalog
 
     def list_available(self) -> list[PluginManifest]:
-        """List bundled Plugin manifests in stable ID order."""
-        return [self._catalog[key] for key in sorted(self._catalog)]
+        """List bundled and discovered Plugin manifests in stable ID order."""
+        catalog = self._get_effective_catalog()
+        return [catalog[key] for key in sorted(catalog)]
 
     def list_installed(self) -> list[InstalledPlugin]:
         """Read explicit installation records, failing closed on malformed state."""
@@ -87,18 +217,19 @@ class PluginManager:
         return installed
 
     def get_manifest(self, plugin_id: str) -> PluginManifest:
-        """Return one bundled manifest or an actionable unknown-ID error."""
+        """Return one manifest or an actionable unknown-ID error."""
         key = normalize_plugin_id(plugin_id)
+        catalog = self._get_effective_catalog()
         try:
-            return self._catalog[key]
+            return catalog[key]
         except KeyError as exc:
-            available = ", ".join(sorted(self._catalog))
+            available = ", ".join(sorted(catalog))
             raise ValueError(
                 f"Plugin '{key}' is unavailable. Available Plugins: {available}"
             ) from exc
 
     def install(self, plugin_id: str) -> InstalledPlugin:
-        """Install one bundled Plugin idempotently without network or code loading."""
+        """Install one Plugin idempotently without network or code loading."""
         manifest = self.get_manifest(plugin_id)
         records = self.list_installed()
         existing = next(
@@ -133,6 +264,11 @@ class PluginManager:
             raise ValueError(f"Plugin '{manifest.plugin_id}' is not installed; install it first")
         if record.version != manifest.version or record.api_version != manifest.api_version:
             raise ValueError(f"Installed Plugin '{manifest.plugin_id}' is incompatible")
+
+        if manifest.plugin_type == "trusted-code" and not self.is_trusted(manifest.plugin_id):
+            raise ValueError(
+                f"Plugin '{manifest.plugin_id}' is not trusted; explicit administrator trust is required before enablement"
+            )
 
         agent = self.agent_manager.get_agent(agent_id)
         if agent.agent_id in BUILTIN_AGENTS:
@@ -305,6 +441,7 @@ class PluginManager:
 
 __all__ = [
     "CORE_PLUGIN_API_VERSION",
+    "MIA_PLUGIN_ENTRY_POINT_GROUP",
     "AgentTemplate",
     "InstalledPlugin",
     "PluginEffect",
@@ -316,5 +453,6 @@ __all__ = [
     "PluginTrust",
     "PluginTrustStatus",
     "StaticSkill",
+    "discover_entry_points",
     "normalize_plugin_id",
 ]
