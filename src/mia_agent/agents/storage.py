@@ -63,6 +63,7 @@ def atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def atomic_write_text(path: Path, value: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     with NamedTemporaryFile(
         "w", dir=path.parent, prefix=".default-", suffix=".tmp", encoding="utf-8", delete=False
     ) as temp:

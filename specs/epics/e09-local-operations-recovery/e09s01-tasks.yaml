@@ -1,0 +1,121 @@
+story_id: e09s01
+title: Attributed Local Diagnostics and Bounded Retention
+spec: e09s01-attributed-local-diagnostics-and-bounded-retention.md
+status: passing
+bcps: 5
+risk: P0
+delta: ADDED
+scenarios:
+  - SC-e09s01-P0-01
+  - SC-e09s01-P0-02
+  - SC-e09s01-P0-03
+  - SC-e09s01-P1-04
+tasks:
+  - id: e09s01t01
+    title: Specify the diagnostic record and sanitation contract
+    status: passing
+    risk: P0
+    depends_on: []
+    story_steps: [1]
+    scenarios: [SC-e09s01-P0-01, SC-e09s01-P0-02, SC-e09s01-P0-03]
+    work:
+      - Add public-interface tests for Tool, Run, and Plugin source records and all available attribution fields.
+      - Assert recursive redaction of credentials, authorization material, sensitive arguments, unsafe paths, and raw exception text before persistence.
+    files:
+      - tests/test_diagnostics.py
+      - src/mia_agent/diagnostics.py
+      - src/mia_middleware/access.py
+    verify: >-
+      uv run --offline pytest tests/test_diagnostics.py -k 'record or attribut or secret or redact or exception'
+    allure:
+      severity: critical
+      categories: ["Operations", "Security Review", "unit"]
+  - id: e09s01t02
+    title: Implement append-only diagnostic storage and bounded retention
+    status: passing
+    risk: P0
+    depends_on: [e09s01t01]
+    story_steps: [2]
+    scenarios: [SC-e09s01-P0-01, SC-e09s01-P0-03]
+    work:
+      - Implement validated DiagnosticRecord and DiagnosticStore persistence under the configured local data root.
+      - Enforce deterministic count/byte retention and explicit sanitized health errors without deleting Session or Plugin data.
+    files:
+      - src/mia_agent/diagnostics.py
+      - src/mia_agent/agents/manager.py
+      - src/mia_agent/agents/storage.py
+      - tests/test_diagnostics.py
+    verify: >-
+      uv run --offline pytest tests/test_diagnostics.py -k 'append or retention or bounded or persistence or failure'
+    allure:
+      severity: critical
+      categories: ["Operations", "Security Review", "persistence"]
+  - id: e09s01t03
+    title: Connect Tool, Run, and Plugin lifecycle diagnostics
+    status: passing
+    risk: P0
+    depends_on: [e09s01t02]
+    story_steps: [3]
+    scenarios: [SC-e09s01-P0-01, SC-e09s01-P0-02]
+    work:
+      - Connect sanitized AuditLogMiddleware callbacks and existing AgentRunner/PluginHost lifecycle diagnostics to the Core-owned store.
+      - Preserve exactly-once Run finalization, cleanup ordering, truthful Tool outcomes, and append-only Session behavior when the store fails.
+    files:
+      - src/mia_middleware/telemetry.py
+      - src/mia_agent/runtime_factory.py
+      - src/mia_agent/agent_runner.py
+      - src/mia_agent/plugin_host.py
+      - tests/test_diagnostics.py
+      - tests/test_agent_runtime.py
+      - tests/test_plugin_host.py
+    verify: >-
+      uv run --offline pytest tests/test_diagnostics.py tests/test_agent_runtime.py tests/test_plugin_host.py -k 'tool or run or plugin or cleanup or quarantine or outcome or diagnostic'
+    allure:
+      severity: critical
+      categories: ["Operations", "Security Review", "integration"]
+  - id: e09s01t04
+    title: Expose deterministic read-only diagnostic inspection
+    status: passing
+    risk: P1
+    depends_on: [e09s01t03]
+    story_steps: [4]
+    scenarios: [SC-e09s01-P1-04]
+    work:
+      - Add the canonical CLI diagnostic inspection command with stable ordering, bounded output, source/identity filters, and truthful exit codes.
+      - Keep output plain-text readable and secret-free for empty, valid, malformed, unreadable, and invalid-filter states.
+    files:
+      - src/mia_cli/main.py
+      - tests/test_diagnostics_cli.py
+      - tests/test_cli_print_mode.py
+    verify: >-
+      uv run --offline pytest tests/test_diagnostics_cli.py tests/test_cli_print_mode.py -k 'diagnostic or filter or empty or invalid or secret'
+    allure:
+      severity: high
+      categories: ["Operations", "CLI", "integration"]
+  - id: e09s01t05
+    title: Verify local diagnostics and retention end to end
+    status: passing
+    risk: P0
+    depends_on: [e09s01t04]
+    story_steps: [5]
+    scenarios: [SC-e09s01-P0-01, SC-e09s01-P0-02, SC-e09s01-P0-03, SC-e09s01-P1-04]
+    work:
+      - Run the story tests, public-surface checks, formatting, lint, strict typing, coverage, and security-sensitive diagnostics checks.
+      - Confirm no new security findings in affected paths and no domain outcome changes when diagnostic persistence fails.
+    files:
+      - src/mia_agent/diagnostics.py
+      - src/mia_middleware/telemetry.py
+      - src/mia_agent/runtime_factory.py
+      - src/mia_agent/agent_runner.py
+      - src/mia_cli/main.py
+      - tests/test_diagnostics.py
+      - tests/test_diagnostics_cli.py
+    verify: >-
+      uv run --offline pytest tests/test_diagnostics.py tests/test_diagnostics_cli.py tests/test_agent_runtime.py tests/test_plugin_host.py tests/test_middleware_pipeline.py
+      && uv run --offline ruff format --check .
+      && uv run --offline ruff check .
+      && uv run --offline mypy src
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: ["Operations", "Security Review", "quality"]

@@ -1,0 +1,16 @@
+story_id: e09s01
+verified_at: '2026-09-04T22:47:30Z'
+verifier: verify-work
+branch: e09-local-operations-recovery
+status: passing
+phases:
+  mechanical:
+    passed: true
+    commands:
+      - uv run --offline pytest tests/test_diagnostics.py tests/test_diagnostics_cli.py
+    tests_passed: 23
+    tests_failed: 0
+  terminal_verdict:
+    passed: true
+    exit_code: 0
+    note: Attributed local diagnostics and bounded retention verified.

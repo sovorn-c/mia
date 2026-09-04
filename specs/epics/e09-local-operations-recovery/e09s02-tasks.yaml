@@ -1,0 +1,134 @@
+story_id: e09s02
+title: Supported Data Locations and Backup/Restore
+spec: e09s02-supported-data-locations-and-backup-restore.md
+status: passing
+bcps: 5
+risk: P0
+delta: ADDED
+scenarios:
+  - SC-e09s02-P0-01
+  - SC-e09s02-P0-02
+  - SC-e09s02-P0-03
+  - SC-e09s02-P1-04
+tasks:
+  - id: e09s02t01
+    title: Specify local data ownership and backup boundaries
+    status: passing
+    risk: P0
+    depends_on: []
+    story_steps: [1]
+    scenarios: [SC-e09s02-P0-01, SC-e09s02-P0-02]
+    work:
+      - Add tests for Agent, Session, Plugin, diagnostic, credential, temporary, symlink, and unsupported-file classification.
+      - Assert data-location output exposes ownership and sensitivity but never credential values.
+    files:
+      - tests/test_operations.py
+      - src/mia_agent/operations.py
+      - src/mia_agent/agents/manager.py
+      - src/mia_agent/auth/credentials.py
+    verify: >-
+      uv run --offline pytest tests/test_operations.py -k 'location or ownership or sensitive or credential or exclude'
+    allure:
+      severity: critical
+      categories: ["Operations", "Security Review", "unit"]
+  - id: e09s02t02
+    title: Implement the Core-owned data layout and supported-file set
+    status: passing
+    risk: P0
+    depends_on: [e09s02t01]
+    story_steps: [2]
+    scenarios: [SC-e09s02-P0-01, SC-e09s02-P0-02]
+    work:
+      - Implement configured-root data layout and deterministic enumeration with symlink, file-type, path, and permission checks.
+      - Keep credential paths visible as sensitive/excluded and preserve existing Agent/Session/Plugin path ownership.
+    files:
+      - src/mia_agent/operations.py
+      - src/mia_agent/agents/manager.py
+      - tests/test_operations.py
+    verify: >-
+      uv run --offline pytest tests/test_operations.py -k 'layout or enumerate or symlink or path or supported'
+    allure:
+      severity: critical
+      categories: ["Operations", "Security Review", "persistence"]
+  - id: e09s02t03
+    title: Create integrity-checked non-credential backups
+    status: passing
+    risk: P0
+    depends_on: [e09s02t02]
+    story_steps: [3]
+    scenarios: [SC-e09s02-P0-02]
+    work:
+      - Implement versioned archive creation with relative members, manifest sizes/digests, restrictive output handling, and explicit exclusions.
+      - Ensure backup failure is reported without changing source Agent, Session, Plugin, or diagnostic data.
+    files:
+      - src/mia_agent/operations.py
+      - tests/test_operations.py
+    verify: >-
+      uv run --offline pytest tests/test_operations.py -k 'backup or archive or manifest or digest or credential'
+    allure:
+      severity: critical
+      categories: ["Operations", "Security Review", "integration"]
+  - id: e09s02t04
+    title: Validate and restore archives without destructive partial writes
+    status: passing
+    risk: P0
+    depends_on: [e09s02t03]
+    story_steps: [4]
+    scenarios: [SC-e09s02-P0-03, SC-e09s02-P1-04]
+    work:
+      - Validate archive version, member paths, duplicate names, file types, sizes, digests, and destination policy before commit.
+      - Stage a complete restore and atomically commit only after validation; reject implicit overwrite and preserve source bytes.
+    files:
+      - src/mia_agent/operations.py
+      - src/mia_agent/session/jsonl.py
+      - tests/test_operations.py
+      - tests/test_sessions.py
+    verify: >-
+      uv run --offline pytest tests/test_operations.py tests/test_sessions.py -k 'restore or checksum or traversal or duplicate or preserve or overwrite'
+    allure:
+      severity: critical
+      categories: ["Operations", "Security Review", "resilience"]
+  - id: e09s02t05
+    title: Expose data locations and backup/restore operations in the CLI
+    status: passing
+    risk: P1
+    depends_on: [e09s02t04]
+    story_steps: [5]
+    scenarios: [SC-e09s02-P0-01, SC-e09s02-P1-04]
+    work:
+      - Add explicit data-location, backup, restore, validation/dry-run, and truthful error output commands.
+      - Keep commands plain-text, secret-free, and non-destructive by default.
+    files:
+      - src/mia_cli/main.py
+      - tests/test_operations_cli.py
+    verify: >-
+      uv run --offline pytest tests/test_operations_cli.py -k 'location or backup or restore or dry or invalid or secret'
+    allure:
+      severity: high
+      categories: ["Operations", "CLI", "integration"]
+  - id: e09s02t06
+    title: Verify supported data backup and restore
+    status: passing
+    risk: P0
+    depends_on: [e09s02t05]
+    story_steps: [6]
+    scenarios: [SC-e09s02-P0-01, SC-e09s02-P0-02, SC-e09s02-P0-03, SC-e09s02-P1-04]
+    work:
+      - Run archive, path-security, compatibility, public-surface, quality, coverage, and packaging checks.
+      - Confirm no new security findings in affected paths and no credential values or partial restore claims.
+    files:
+      - src/mia_agent/operations.py
+      - src/mia_agent/agents/manager.py
+      - src/mia_cli/main.py
+      - tests/test_operations.py
+      - tests/test_operations_cli.py
+    verify: >-
+      uv run --offline pytest tests/test_operations.py tests/test_operations_cli.py tests/test_sessions.py tests/test_plugins.py
+      && uv run --offline ruff format --check .
+      && uv run --offline ruff check .
+      && uv run --offline mypy src
+      && uv build --offline
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: ["Operations", "Security Review", "quality"]

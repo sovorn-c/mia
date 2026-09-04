@@ -113,4 +113,7 @@ class AuditLogMiddleware:
             )
             self.logs.append(record)
             if self.callback:
-                self.callback(record)
+                import contextlib
+
+                with contextlib.suppress(Exception):
+                    self.callback(record)

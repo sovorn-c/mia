@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 from pathlib import Path
 from typing import Annotated
 
@@ -32,11 +33,15 @@ agent_app = typer.Typer(help="Create, inspect, and select named Agents.")
 sessions_app = typer.Typer(help="Inspect and manage saved session trees.")
 plugin_app = typer.Typer(help="Install and manage bundled Plugins.")
 template_app = typer.Typer(help="Inspect and instantiate Agent Templates.")
+diagnostics_app = typer.Typer(help="Inspect local operational diagnostics.")
+data_app = typer.Typer(help="Inspect local data locations, create backups, and restore data.")
 
 app.add_typer(agent_app, name="agent")
 app.add_typer(sessions_app, name="sessions")
 app.add_typer(plugin_app, name="plugin")
 app.add_typer(template_app, name="template")
+app.add_typer(diagnostics_app, name="diagnostics")
+app.add_typer(data_app, name="data")
 
 console = Console()
 
@@ -413,7 +418,307 @@ def list_sessions_command(
         size_kb = session_file.stat().st_size / 1024.0
         table.add_row(session_file.stem, f"{size_kb:.1f} KB", str(session_file))
 
+
+def _render_diagnostics(
+    source: str | None = None,
+    agent: str | None = None,
+    session: str | None = None,
+    run: str | None = None,
+    plugin: str | None = None,
+    limit: int = 50,
+) -> None:
+    if source is not None and source not in {"tool", "run", "plugin"}:
+        console.print(
+            f"[red]Invalid source filter '{source}'. Must be 'tool', 'run', or 'plugin'.[/red]"
+        )
+        raise typer.Exit(code=1)
+    if limit <= 0:
+        console.print("[red]Limit must be greater than 0.[/red]")
+        raise typer.Exit(code=1)
+
+    manager = AgentManager()
+    from mia_agent.diagnostics import DiagnosticStore, DiagnosticStoreError
+
+    store = DiagnosticStore(path=manager.get_diagnostics_path())
+    try:
+        records = store.read_records(
+            limit=limit,
+            source=source,
+            agent_id=agent,
+            session_id=session,
+            run_id=run,
+            plugin_id=plugin,
+        )
+    except DiagnosticStoreError as exc:
+        console.print(f"[red]Error reading diagnostics: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        console.print(f"[red]Failed to inspect diagnostics: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    if not records:
+        console.print("[yellow]No diagnostic records found.[/yellow]")
+        return
+
+    table = Table(title="Local Diagnostics", show_lines=True)
+    table.add_column("Timestamp", style="dim")
+    table.add_column("Source", style="bold")
+    table.add_column("Agent")
+    table.add_column("Target")
+    table.add_column("Outcome")
+    table.add_column("Details", overflow="fold")
+
+    import datetime
+    import json
+
+    for r in records:
+        ts_str = datetime.datetime.fromtimestamp(r.timestamp).strftime("%Y-%m-%d %H:%M:%S")
+        target = r.tool_name or r.plugin_id or (r.run_id[:8] if r.run_id else "-")
+        outcome_str = f"{r.action}: {r.outcome}" if r.action else r.outcome
+
+        details_parts = []
+        if r.error:
+            details_parts.append(r.error)
+        if r.details:
+            details_parts.append(json.dumps(r.details))
+        details_text = " | ".join(details_parts) or "-"
+
+        table.add_row(ts_str, r.source, r.agent_id or "-", target, outcome_str, details_text)
+
     console.print(table)
+
+
+@diagnostics_app.callback(invoke_without_command=True)
+def diagnostics_callback(
+    ctx: typer.Context,
+    source: Annotated[
+        str | None,
+        typer.Option("--source", "-s", help="Filter by source: tool, run, plugin"),
+    ] = None,
+    agent: Annotated[
+        str | None,
+        typer.Option("--agent", "-a", help="Filter by Agent ID"),
+    ] = None,
+    session: Annotated[
+        str | None,
+        typer.Option("--session", help="Filter by Session ID"),
+    ] = None,
+    run: Annotated[
+        str | None,
+        typer.Option("--run", help="Filter by Run ID"),
+    ] = None,
+    plugin: Annotated[
+        str | None,
+        typer.Option("--plugin", help="Filter by Plugin ID"),
+    ] = None,
+    limit: Annotated[
+        int,
+        typer.Option("--limit", "-n", help="Maximum records to return"),
+    ] = 50,
+) -> None:
+    """Inspect local operational diagnostics."""
+    if ctx.invoked_subcommand is None:
+        _render_diagnostics(
+            source=source,
+            agent=agent,
+            session=session,
+            run=run,
+            plugin=plugin,
+            limit=limit,
+        )
+
+
+@diagnostics_app.command("list")
+def diagnostics_list(
+    source: Annotated[
+        str | None,
+        typer.Option("--source", "-s", help="Filter by source: tool, run, plugin"),
+    ] = None,
+    agent: Annotated[
+        str | None,
+        typer.Option("--agent", "-a", help="Filter by Agent ID"),
+    ] = None,
+    session: Annotated[
+        str | None,
+        typer.Option("--session", help="Filter by Session ID"),
+    ] = None,
+    run: Annotated[
+        str | None,
+        typer.Option("--run", help="Filter by Run ID"),
+    ] = None,
+    plugin: Annotated[
+        str | None,
+        typer.Option("--plugin", help="Filter by Plugin ID"),
+    ] = None,
+    limit: Annotated[
+        int,
+        typer.Option("--limit", "-n", help="Maximum records to return"),
+    ] = 50,
+) -> None:
+    """List local operational diagnostic records."""
+    _render_diagnostics(
+        source=source,
+        agent=agent,
+        session=session,
+        run=run,
+        plugin=plugin,
+        limit=limit,
+    )
+
+
+@data_app.command("locations")
+def data_locations() -> None:
+    """Inspect Core-owned local data categories, ownership, and sensitivity."""
+    manager = AgentManager()
+    layout = manager.get_data_layout()
+
+    table = Table(title="Local Data Locations", show_lines=True)
+    table.add_column("Category", style="bold cyan", no_wrap=True)
+    table.add_column("Ownership", style="bold", no_wrap=True)
+    table.add_column("Sensitive", no_wrap=True)
+    table.add_column("Backup", no_wrap=True)
+    table.add_column("Path", overflow="fold")
+
+    for loc in layout.locations:
+        sens_str = "[red]yes[/red]" if loc.sensitive else "[green]no[/green]"
+        backup_str = (
+            "[green]included[/green]" if loc.included_in_backup else "[yellow]excluded[/yellow]"
+        )
+        table.add_row(
+            loc.category,
+            loc.ownership,
+            sens_str,
+            backup_str,
+            str(loc.path),
+        )
+    console.print(table)
+
+
+@data_app.command("backup")
+def data_backup(
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Target archive path (.zip)"),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Overwrite existing backup archive"),
+    ] = False,
+) -> None:
+    """Create an integrity-checked, versioned backup of supported local data."""
+    manager = AgentManager()
+    target_path = output or Path.cwd() / f"mia-backup-{int(time.time())}.zip"
+
+    if target_path.exists() and not overwrite:
+        console.print(f"[red]Backup destination already exists: {target_path}[/red]")
+        raise typer.Exit(code=1)
+
+    from mia_agent.operations import create_backup
+
+    try:
+        manifest = create_backup(manager, archive_path=target_path, overwrite=overwrite)
+        console.print(
+            f"[green]Backup created successfully at [bold]{target_path}[/bold] "
+            f"({len(manifest.files)} files, {manifest.total_bytes} bytes).[/green]"
+        )
+    except Exception as exc:
+        console.print(f"[red]Error creating backup: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+
+@data_app.command("restore")
+def data_restore(
+    archive: Annotated[Path, typer.Argument(help="Path to backup archive to restore")],
+    destination: Annotated[
+        Path,
+        typer.Option("--destination", "-d", help="Destination directory to restore into"),
+    ],
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Overwrite existing files in destination"),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Validate archive integrity without writing"),
+    ] = False,
+) -> None:
+    """Validate and restore a backup archive into a selected destination."""
+    from mia_agent.operations import restore_backup
+
+    outcome = restore_backup(
+        archive_path=archive,
+        destination_dir=destination,
+        overwrite=overwrite,
+        dry_run=dry_run,
+    )
+
+    if outcome.status == "rejected":
+        console.print("[red]Restore rejected:[/red]")
+        for err in outcome.errors:
+            console.print(f"  [red]- {err}[/red]")
+        raise typer.Exit(code=1)
+    elif outcome.status == "failed":
+        console.print("[red]Restore failed:[/red]")
+        for err in outcome.errors:
+            console.print(f"  [red]- {err}[/red]")
+        raise typer.Exit(code=1)
+    else:
+        mode_str = "Dry-run validation succeeded" if dry_run else "Restored successfully"
+        console.print(
+            f"[green]{mode_str}: {outcome.files_restored} files ({outcome.total_bytes} bytes).[/green]"
+        )
+
+
+@data_app.command("verify")
+def data_verify() -> None:
+    """Run deterministic read-only recovery verification over supported local data."""
+    from mia_agent.recovery import verify_recovery
+
+    manager = AgentManager()
+    report = verify_recovery(manager)
+
+    if report.findings:
+        table = Table(title=f"Recovery Verification ({report.status})")
+        table.add_column("Category", style="cyan", no_wrap=True)
+        table.add_column("Status", no_wrap=True)
+        table.add_column("Path", style="dim")
+        table.add_column("Evidence")
+        table.add_column("Action", style="yellow")
+        for finding in report.findings:
+            status_style = (
+                "[bold red]blocked[/bold red]"
+                if finding.status == "blocked"
+                else "[yellow]attention[/yellow]"
+            )
+            table.add_row(
+                finding.category,
+                status_style,
+                finding.path,
+                finding.evidence,
+                finding.action,
+            )
+        console.print(table)
+
+    if report.status == "clean":
+        console.print(
+            f"[green]All local data verified clean: {report.files_scanned} files scanned, 0 issues found.[/green]"
+        )
+    elif report.status == "attention":
+        console.print(
+            f"[yellow]Operator attention required: {len(report.findings)} issue(s) detected across {report.files_scanned} files.[/yellow]"
+        )
+        console.print(
+            "[dim]Inspect temporary files or restore from a verified backup if needed.[/dim]"
+        )
+        raise typer.Exit(code=2)
+    else:
+        console.print(
+            f"[bold red]Data recovery blocked: {len(report.findings)} corruption or schema issue(s) detected across {report.files_scanned} files.[/bold red]"
+        )
+        console.print(
+            "[bold red]Restore required: Use 'mia data restore <archive> --destination <dir>' to recover from a verified backup.[/bold red]"
+        )
+        raise typer.Exit(code=1)
 
 
 @app.command(name="tui")

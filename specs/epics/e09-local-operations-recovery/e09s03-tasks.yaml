@@ -1,0 +1,99 @@
+story_id: e09s03
+title: Non-Destructive Interrupted-Write and Corrupt-Data Recovery
+spec: e09s03-non-destructive-interrupted-write-and-corrupt-data-recovery.md
+status: passing
+bcps: 3
+risk: P0
+delta: ADDED
+scenarios:
+  - SC-e09s03-P0-01
+  - SC-e09s03-P0-02
+  - SC-e09s03-P1-03
+tasks:
+  - id: e09s03t01
+    title: Specify interrupted-write and corruption classifications
+    status: passing
+    risk: P0
+    depends_on: []
+    story_steps: [1]
+    scenarios: [SC-e09s03-P0-01, SC-e09s03-P0-02]
+    work:
+      - Add fixtures for orphan atomic-write files, truncated final Session lines, interior corruption, unsupported records, unsafe paths, and Plugin-data damage.
+      - Assert verification is read-only and preserves every supported file byte.
+    files:
+      - tests/test_recovery.py
+      - tests/test_sessions.py
+      - src/mia_agent/recovery.py
+      - src/mia_agent/session/jsonl.py
+    verify: >-
+      uv run --offline pytest tests/test_recovery.py tests/test_sessions.py -k 'interrupted or corrupt or unsupported or preserve or temp'
+    allure:
+      severity: critical
+      categories: ["Operations", "Security Review", "resilience"]
+  - id: e09s03t02
+    title: Implement deterministic read-only recovery verification
+    status: passing
+    risk: P0
+    depends_on: [e09s03t01]
+    story_steps: [2]
+    scenarios: [SC-e09s03-P0-01, SC-e09s03-P0-02, SC-e09s03-P1-03]
+    work:
+      - Implement RecoveryVerifier findings, clean/attention/blocked status precedence, safe relative paths, bounded errors, and byte-preserving scans.
+      - Reuse existing Session validation, DataLayout, diagnostic sanitation, and archive integrity boundaries without adding automatic repair.
+    files:
+      - src/mia_agent/recovery.py
+      - src/mia_agent/session/jsonl.py
+      - src/mia_agent/operations.py
+      - src/mia_agent/diagnostics.py
+      - tests/test_recovery.py
+    verify: >-
+      uv run --offline pytest tests/test_recovery.py -k 'verify or classify or finding or clean or attention or blocked'
+    allure:
+      severity: critical
+      categories: ["Operations", "Security Review", "integration"]
+  - id: e09s03t03
+    title: Expose recovery verification and explicit restore guidance
+    status: passing
+    risk: P1
+    depends_on: [e09s03t02]
+    story_steps: [3]
+    scenarios: [SC-e09s03-P1-03]
+    work:
+      - Add read-only CLI verification with distinct clean, attention, and blocked exit statuses and sanitized guidance to use validated restore when required.
+      - Ensure repeated verification is deterministic and does not remove temporary evidence or change Plugin data.
+    files:
+      - src/mia_cli/main.py
+      - tests/test_recovery_cli.py
+      - tests/test_operations_cli.py
+    verify: >-
+      uv run --offline pytest tests/test_recovery_cli.py tests/test_operations_cli.py -k 'recover or verify or restore or status or secret'
+    allure:
+      severity: high
+      categories: ["Operations", "CLI", "resilience"]
+  - id: e09s03t04
+    title: Verify non-destructive recovery boundaries
+    status: passing
+    risk: P0
+    depends_on: [e09s03t03]
+    story_steps: [4]
+    scenarios: [SC-e09s03-P0-01, SC-e09s03-P0-02, SC-e09s03-P1-03]
+    work:
+      - Run recovery, Session, Plugin-data preservation, archive, public-surface, quality, coverage, and packaging checks.
+      - Confirm no new security findings in affected paths and no automatic repair or false-clean result.
+    files:
+      - src/mia_agent/recovery.py
+      - src/mia_agent/operations.py
+      - src/mia_agent/session/jsonl.py
+      - src/mia_cli/main.py
+      - tests/test_recovery.py
+      - tests/test_recovery_cli.py
+    verify: >-
+      uv run --offline pytest tests/test_recovery.py tests/test_recovery_cli.py tests/test_operations.py tests/test_sessions.py tests/test_plugins.py
+      && uv run --offline ruff format --check .
+      && uv run --offline ruff check .
+      && uv run --offline mypy src
+      && uv build --offline
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: ["Operations", "Security Review", "quality"]

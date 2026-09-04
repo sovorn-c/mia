@@ -1,0 +1,16 @@
+story_id: e09s02
+verified_at: '2026-09-04T22:47:30Z'
+verifier: verify-work
+branch: e09-local-operations-recovery
+status: passing
+phases:
+  mechanical:
+    passed: true
+    commands:
+      - uv run --offline pytest tests/test_operations.py tests/test_operations_cli.py
+    tests_passed: 20
+    tests_failed: 0
+  terminal_verdict:
+    passed: true
+    exit_code: 0
+    note: Supported data locations, backup manifest integrity, and restore verified.

@@ -22,7 +22,16 @@ TOOL_EFFECTS: dict[str, ToolEffect] = {
     "bash": "side-effecting",
 }
 
-_SECRET_KEY_PARTS = ("api_key", "apikey", "token", "secret", "authorization", "password")
+_SECRET_KEY_PARTS = (
+    "api_key",
+    "apikey",
+    "token",
+    "secret",
+    "authorization",
+    "password",
+    "credential",
+    "cookie",
+)
 _SECRET_VALUE_RE = re.compile(r"(?i)(?:bearer\s+|sk-|ghp_|gho_|github_pat_|xoxb-|xoxp-)[^\s,;]+")
 _SECRET_ASSIGNMENT_RE = re.compile(
     r"(?i)(?P<key_quote>[\"']?)(?P<key>[A-Za-z0-9_-]*(?:api[-_]?key|"

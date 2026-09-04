@@ -1,0 +1,78 @@
+id: e09
+slug: local-operations-recovery
+title: Local Operations and Recovery
+type: production-readiness
+status: completed
+planning_stage: delivered
+target_version: "0.6.0"
+wsjf:
+  business_value: 8
+  time_criticality: 8
+  risk_reduction: 9
+  job_size: 3
+  score: 8.33
+total_bcps: 13
+depends_on: [e07, e08]
+outcome: >-
+  Operators can diagnose Runs and Plugin lifecycles, protect local data, and recover safely from expected failures.
+boundaries:
+  includes:
+    - Attributed and secret-free local Run, Tool, and Plugin lifecycle diagnostics
+    - Bounded retention and explicit operational presentation of telemetry and Plugin cleanup failures defined by e07/e08
+    - Documented Agent, Session, credential, Plugin, and diagnostic data locations
+    - Backup and restore outcomes for supported local and Plugin-owned data
+    - Interrupted-write and corrupt/unsupported-data recovery behavior
+    - Operational verification that does not rewrite valid Session history or delete Plugin data
+  excludes:
+    - Remote telemetry, dashboards, hosted monitoring, or exporter ecosystem
+    - Automatic destructive repair or migration
+    - Hosted support service
+    - Backup or display of credential values
+    - OS-level process isolation or sandbox guarantees
+architecture:
+  - specs/IMPACT_LATEST.md
+  - specs/tech-architecture/REFACTOR_LATEST.md
+  - specs/tech-architecture/tech-stack.md
+  - specs/tech-architecture/e09-TEST_PLAN_LATEST.md
+requirement_deltas:
+  - story_id: e09s01
+    type: ADDED
+    requirement: Attributed local diagnostics and bounded retention
+    after: Core persists bounded, append-only, attributed, secret-free Run, Tool, and Plugin lifecycle diagnostics and exposes safe local inspection with explicit telemetry failure behavior.
+  - story_id: e09s02
+    type: ADDED
+    requirement: Supported data locations and backup/restore
+    after: Operators can identify Agent, Session, Plugin, diagnostic, and credential locations and create or restore an integrity-checked archive of supported non-credential local data without path traversal or destructive overwrite.
+  - story_id: e09s03
+    type: ADDED
+    requirement: Non-destructive interrupted-write and corrupt-data recovery
+    after: Core detects interrupted writes and corrupt or unsupported local records, reports actionable recovery state, and preserves valid Session history and Plugin data unless an explicit verified restore is requested.
+stories:
+  - id: e09s01
+    title: Attributed Local Diagnostics and Bounded Retention
+    status: done
+    bcps: 5
+    risk: P0
+    delta: ADDED
+    depends_on: []
+    spec_file: e09s01-attributed-local-diagnostics-and-bounded-retention.md
+    tasks_file: e09s01-tasks.yaml
+  - id: e09s02
+    title: Supported Data Locations and Backup/Restore
+    status: done
+    bcps: 5
+    risk: P0
+    delta: ADDED
+    depends_on: [e09s01]
+    spec_file: e09s02-supported-data-locations-and-backup-restore.md
+    tasks_file: e09s02-tasks.yaml
+  - id: e09s03
+    title: Non-Destructive Interrupted-Write and Corrupt-Data Recovery
+    status: done
+    bcps: 3
+    risk: P0
+    delta: ADDED
+    depends_on: [e09s01, e09s02]
+    spec_file: e09s03-non-destructive-interrupted-write-and-corrupt-data-recovery.md
+    tasks_file: e09s03-tasks.yaml
+next_skill: release-branch
