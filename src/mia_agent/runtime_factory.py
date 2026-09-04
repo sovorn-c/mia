@@ -107,12 +107,20 @@ class AgentRuntimeFactory:
         delegation_service: Any | None = None,
         plugin_manager: PluginManager | None = None,
         plugin_host: PluginHost | None = None,
+        diagnostic_store: Any | None = None,
     ) -> None:
         self.agent_manager = agent_manager or AgentManager()
         self.config_manager = config_manager or ConfigManager()
         self.delegation_service = delegation_service
         self.plugin_manager = plugin_manager or PluginManager(agent_manager=self.agent_manager)
         self.plugin_host = plugin_host or PluginHost()
+        from mia_agent.diagnostics import DiagnosticStore
+
+        self.diagnostic_store = (
+            diagnostic_store
+            if diagnostic_store is not None
+            else DiagnosticStore(path=self.agent_manager.get_diagnostics_path())
+        )
 
     def resolve_effective_settings(
         self,
@@ -315,6 +323,7 @@ class AgentRuntimeFactory:
                 tool.name: tool_effect(tool.name, {"effect": tool.effect}) for tool in tools
             },
             plugin_middleware=plugin_middleware,
+            diagnostic_store=self.diagnostic_store,
         )
         session_store = JsonlSessionStore(
             self.agent_manager.get_session_path(agent.agent_id, identity.session_id)
@@ -397,6 +406,7 @@ class AgentRuntimeFactory:
         full_access_confirmed: bool | None = None,
         tool_effects: dict[str, Any] | None = None,
         plugin_middleware: Sequence[Any] = (),
+        diagnostic_store: Any | None = None,
     ) -> ToolPipeline:
         active: list[Any] = []
         final_validator = None
@@ -428,7 +438,31 @@ class AgentRuntimeFactory:
                 approval_callback=approval_callback,
             )
         active.append(SecurityGuardMiddleware())
-        active.append(AuditLogMiddleware())
+
+        def _log_to_diagnostic_store(record: Any) -> None:
+            if diagnostic_store is not None:
+                import contextlib
+
+                with contextlib.suppress(Exception):
+                    from mia_agent.diagnostics import DiagnosticRecord
+
+                    diag = DiagnosticRecord.create(
+                        source="tool",
+                        agent_id=getattr(record, "agent_id", ""),
+                        run_id=getattr(record, "run_id", ""),
+                        task_id=getattr(record, "task_id", ""),
+                        session_id=getattr(record, "session_id", ""),
+                        plugin_id=getattr(record, "plugin_id", None),
+                        tool_name=getattr(record, "tool_name", None),
+                        action="execute",
+                        outcome="failed" if getattr(record, "is_error", False) else "success",
+                        duration_ms=getattr(record, "duration_ms", None),
+                        details={"arguments": getattr(record, "arguments", {})},
+                        error=getattr(record, "error_message", None),
+                    )
+                    diagnostic_store.append(diag)
+
+        active.append(AuditLogMiddleware(callback=_log_to_diagnostic_store))
         active.append(CostBudgetMiddleware())
         for pm in plugin_middleware:
             active.append(_wrap_plugin_middleware(pm))

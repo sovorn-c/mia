@@ -260,7 +260,6 @@ def test_agent_manager_diagnostics_path(tmp_path: Path) -> None:
     assert diag_path == tmp_path / "diagnostics" / "diagnostics.jsonl"
 
 
-
 @pytest.mark.asyncio
 async def test_tool_execution_produces_diagnostic_record(tmp_path: Path) -> None:
     from mia_agent.agent_runner import AgentRunner
@@ -276,12 +275,10 @@ async def test_tool_execution_produces_diagnostic_record(tmp_path: Path) -> None
 
     (tmp_path / "test.txt").write_text("hello tool")
 
-    provider = MockProvider(
-        chunks=[
-            "I will read the file.",
-            ToolCall(id="call-1", name="read_file", arguments={"path": "test.txt"}),
-            "File read successfully.",
-        ]
+    provider = MockProvider()
+    provider.queue_tool_call(
+        ToolCall(id="call-1", name="read_file", arguments={"path": "test.txt"}),
+        thought="I will read the file.",
     )
 
     req = RunRequest(

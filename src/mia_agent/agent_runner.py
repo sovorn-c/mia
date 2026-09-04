@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import uuid
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Sequence
 from pathlib import Path
@@ -64,12 +65,17 @@ def _safe_error_identity(identity: RuntimeIdentity) -> RuntimeIdentity:
 class _RunLifecycle:
     """Core-owned atomic idempotent finalizer and terminal guard for one Run."""
 
-    def __init__(self, identity: RuntimeIdentity) -> None:
+    def __init__(
+        self,
+        identity: RuntimeIdentity,
+        on_finalize: Callable[[str, AgentEventEnvelope | None], None] | None = None,
+    ) -> None:
         self.identity = identity
         self.finalized: bool = False
         self.outcome: str | None = None
         self.terminal_envelope: AgentEventEnvelope | None = None
         self.terminal_delivered: bool = False
+        self.on_finalize = on_finalize
 
     def finalize(
         self,
@@ -82,6 +88,9 @@ class _RunLifecycle:
         self.finalized = True
         self.outcome = outcome
         self.terminal_envelope = envelope
+        if self.on_finalize is not None:
+            with contextlib.suppress(Exception):
+                self.on_finalize(outcome, envelope)
         return True
 
 
@@ -94,13 +103,25 @@ class AgentRunner:
         factory: AgentRuntimeFactory | None = None,
         agent_manager: AgentManager | None = None,
         config_manager: ConfigManager | None = None,
+        diagnostic_store: Any | None = None,
     ) -> None:
         self.agent_manager = agent_manager or AgentManager()
         self.factory = factory or AgentRuntimeFactory(
             agent_manager=self.agent_manager,
             config_manager=config_manager,
+            diagnostic_store=diagnostic_store,
+        )
+        self.diagnostic_store = (
+            diagnostic_store
+            if diagnostic_store is not None
+            else getattr(self.factory, "diagnostic_store", None)
         )
         self.last_runtime: AgentRuntime | None = None
+
+    def _record_diagnostic(self, record: Any) -> None:
+        if self.diagnostic_store is not None:
+            with contextlib.suppress(Exception):
+                self.diagnostic_store.append(record)
 
     def prepare_runtime(
         self,
@@ -130,8 +151,8 @@ class AgentRunner:
         self.last_runtime = runtime
         return runtime
 
-    @staticmethod
     async def _notify_observers(
+        self,
         observers: Sequence[Any],
         payload: Any,
         identity: RuntimeIdentity | None = None,
@@ -153,6 +174,22 @@ class AgentRunner:
                         error=str(sanitize_arguments(str(exc))),
                     )
                     diagnostics.append(_envelope(identity, diag))
+                    from mia_agent.diagnostics import DiagnosticRecord
+
+                    self._record_diagnostic(
+                        DiagnosticRecord.create(
+                            source="plugin",
+                            agent_id=identity.agent_id,
+                            run_id=identity.run_id,
+                            task_id=identity.task_id,
+                            session_id=identity.session_id,
+                            plugin_id=plugin_id,
+                            action=phase,
+                            outcome="failed",
+                            severity="error",
+                            error=diag.error,
+                        )
+                    )
         return diagnostics
 
     async def _emit(
@@ -220,6 +257,22 @@ class AgentRunner:
                     error=f"Plugin '{plugin_id}' exceeded {timeout:g}s cleanup timeout",
                 )
                 diagnostics.append(_envelope(identity, diag))
+                from mia_agent.diagnostics import DiagnosticRecord
+
+                self._record_diagnostic(
+                    DiagnosticRecord.create(
+                        source="plugin",
+                        agent_id=identity.agent_id,
+                        run_id=identity.run_id,
+                        task_id=identity.task_id,
+                        session_id=identity.session_id,
+                        plugin_id=plugin_id,
+                        action="cleanup",
+                        outcome="failed",
+                        severity="error",
+                        error=diag.error,
+                    )
+                )
             except Exception as exc:
                 diag = PluginDiagnosticEvent(
                     plugin_id=plugin_id,
@@ -228,6 +281,22 @@ class AgentRunner:
                     error=str(sanitize_arguments(str(exc))),
                 )
                 diagnostics.append(_envelope(identity, diag))
+                from mia_agent.diagnostics import DiagnosticRecord
+
+                self._record_diagnostic(
+                    DiagnosticRecord.create(
+                        source="plugin",
+                        agent_id=identity.agent_id,
+                        run_id=identity.run_id,
+                        task_id=identity.task_id,
+                        session_id=identity.session_id,
+                        plugin_id=plugin_id,
+                        action="cleanup",
+                        outcome="failed",
+                        severity="error",
+                        error=diag.error,
+                    )
+                )
         return diagnostics
 
     async def _safe_cleanup(
@@ -258,7 +327,27 @@ class AgentRunner:
             agent_id=target_agent_id,
             session_id=request.session_id or f"session_{uuid.uuid4().hex[:12]}",
         )
-        lifecycle = _RunLifecycle(identity)
+
+        def _on_finalize(outcome: str, env: AgentEventEnvelope | None) -> None:
+            from mia_agent.diagnostics import DiagnosticRecord
+
+            err_msg = None
+            if env is not None and hasattr(env.event, "error"):
+                err_msg = str(getattr(env.event, "error", None))
+            rec = DiagnosticRecord.create(
+                source="run",
+                agent_id=lifecycle.identity.agent_id,
+                run_id=lifecycle.identity.run_id,
+                task_id=lifecycle.identity.task_id,
+                session_id=lifecycle.identity.session_id,
+                action="finalize",
+                outcome=outcome,
+                details={"terminal_code": outcome},
+                error=err_msg,
+            )
+            self._record_diagnostic(rec)
+
+        lifecycle = _RunLifecycle(identity, on_finalize=_on_finalize)
 
         try:
             agent = self.agent_manager.get_agent(target_agent_id)
