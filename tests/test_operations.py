@@ -156,3 +156,57 @@ def test_supported_and_excluded_file_classification(tmp_path: Path) -> None:
     assert temp_file2.resolve() not in supported_paths
     assert symlink_file.resolve() not in supported_paths
     assert unsupported_file.resolve() not in supported_paths
+
+
+def test_symlink_directory_and_traversal_rejected(tmp_path: Path) -> None:
+    """Symlinked directories and files traversing outside configured roots are rejected."""
+    agents_dir = tmp_path / "agents"
+    diagnostics_dir = tmp_path / "diagnostics"
+    outside_dir = tmp_path / "outside_dir"
+    outside_dir.mkdir(parents=True, exist_ok=True)
+    sensitive_file = outside_dir / "sensitive_external.txt"
+    sensitive_file.write_text("should_not_leak", encoding="utf-8")
+
+    manager = AgentManager(agents_dir=agents_dir, diagnostics_dir=diagnostics_dir)
+    agent_home = agents_dir / "mia"
+    agent_home.mkdir(parents=True, exist_ok=True)
+
+    # Symlink directory inside agent home pointing outside
+    sym_dir = agent_home / "sym_dir"
+    sym_dir.symlink_to(outside_dir, target_is_directory=True)
+
+    nested_file = sym_dir / "sensitive_external.txt"
+    assert is_supported_backup_file(nested_file, manager=manager) is False
+
+    supported = enumerate_supported_files(manager)
+    for p in supported:
+        assert "outside_dir" not in str(p)
+        assert "sym_dir" not in str(p)
+        assert p.name != "sensitive_external.txt"
+
+
+def test_agent_manager_data_layout_integration(tmp_path: Path) -> None:
+    """AgentManager exposes get_data_layout directly as a Core contract."""
+    manager = AgentManager(agents_dir=tmp_path / "agents", diagnostics_dir=tmp_path / "diagnostics")
+    layout = manager.get_data_layout()
+    assert isinstance(layout, DataLayout)
+    assert any(loc.category == "agents" for loc in layout.locations)
+    assert any(loc.category == "credentials" for loc in layout.locations)
+    assert any(loc.category == "diagnostics" for loc in layout.locations)
+
+
+def test_deterministic_enumeration_order(tmp_path: Path) -> None:
+    """Supported file enumeration is strictly deterministic and sorted."""
+    agents_dir = tmp_path / "agents"
+    diagnostics_dir = tmp_path / "diagnostics"
+    manager = AgentManager(agents_dir=agents_dir, diagnostics_dir=diagnostics_dir)
+
+    for agent_id in ["zebra", "alpha", "beta"]:
+        p = agents_dir / agent_id / "agent.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("{}", encoding="utf-8")
+
+    files = enumerate_supported_files(manager)
+    file_strs = [str(f) for f in files]
+    assert file_strs == sorted(file_strs)
+
