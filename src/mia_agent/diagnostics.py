@@ -6,9 +6,9 @@ import re
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 DiagnosticSource = Literal["tool", "run", "plugin"]
 DiagnosticSeverity = Literal["info", "warning", "error"]
@@ -104,6 +104,22 @@ class DiagnosticRecord(BaseModel):
     duration_ms: float | None = None
     details: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
+
+    @field_validator("details", mode="before")
+    @classmethod
+    def _validate_details(cls, v: Any) -> dict[str, Any]:
+        if isinstance(v, dict):
+            res = sanitize_diagnostic_data(v)
+            if isinstance(res, dict):
+                return res
+        return cast(dict[str, Any], v or {})
+
+    @field_validator("error", mode="before")
+    @classmethod
+    def _validate_error(cls, v: Any) -> str | None:
+        if v is not None:
+            return sanitize_diagnostic_error(v)
+        return None
 
     @classmethod
     def create(
@@ -211,6 +227,14 @@ class DiagnosticStore:
         """Append one record to the store; enforce bounded retention and capture health."""
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
+            sanitized_details = sanitize_diagnostic_data(record.details)
+            sanitized_error = (
+                sanitize_diagnostic_error(record.error) if record.error is not None else None
+            )
+            if sanitized_details != record.details or sanitized_error != record.error:
+                record = record.model_copy(
+                    update={"details": sanitized_details, "error": sanitized_error}
+                )
             serialized = record.model_dump_json() + "\n"
             with self.path.open("a", encoding="utf-8") as f:
                 f.write(serialized)

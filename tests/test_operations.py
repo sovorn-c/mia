@@ -17,6 +17,7 @@ from mia_agent.operations import (
     get_data_locations,
     is_supported_backup_file,
     restore_backup,
+    validate_archive,
 )
 
 
@@ -466,4 +467,40 @@ def test_restore_dry_run_validates_without_writing(tmp_path: Path) -> None:
 
     outcome = restore_backup(archive_path=archive_path, destination_dir=dest_dir, dry_run=True)
     assert outcome.status == "restored"
+    assert not dest_dir.exists()
+
+
+def test_validate_archive_rejects_duplicate_manifest_entries(tmp_path: Path) -> None:
+    """validate_archive fails closed with an actionable error when manifest lists the same path twice."""
+    import hashlib
+    import json
+    import zipfile
+
+    archive_path = tmp_path / "dup_manifest.zip"
+    content = b'{"agent_id": "mia"}'
+    c_sha = hashlib.sha256(content).hexdigest()
+
+    manifest_dict = {
+        "version": "1.0",
+        "created_at": 1700000000.0,
+        "files": [
+            {"path": "agents/mia/agent.json", "size": len(content), "sha256": c_sha},
+            {"path": "agents/mia/agent.json", "size": len(content), "sha256": c_sha},
+        ],
+        "total_bytes": len(content) * 2,
+    }
+
+    with zipfile.ZipFile(archive_path, "w") as zf:
+        zf.writestr("backup_manifest.json", json.dumps(manifest_dict))
+        zf.writestr("agents/mia/agent.json", content)
+
+    valid, manifest, errors = validate_archive(archive_path)
+    assert valid is False
+    assert any("duplicate" in err.lower() and "manifest" in err.lower() for err in errors)
+
+    # restore_backup must also reject it
+    dest_dir = tmp_path / "dest"
+    outcome = restore_backup(archive_path=archive_path, destination_dir=dest_dir)
+    assert outcome.status == "rejected"
+    assert any("duplicate" in err.lower() for err in outcome.errors)
     assert not dest_dir.exists()

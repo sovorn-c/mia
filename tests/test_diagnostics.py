@@ -400,3 +400,32 @@ async def test_store_failure_does_not_break_tool_or_run(tmp_path: Path) -> None:
 
     events = [env async for env in runner.run(req, provider=provider, cwd=tmp_path)]
     assert any(env.event.__class__.__name__ == "TurnCompleteEvent" for env in events)
+
+
+def test_diagnostic_record_direct_construction_and_persistence_sanitization(tmp_path: Path) -> None:
+    """Direct DiagnosticRecord construction and append persist only sanitized data without leaking secrets."""
+    secret_key = "sk-direct-leak-12345"
+    secret_error = "Authorization header Bearer sk-auth-token-67890 rejected"
+
+    # Direct model construction without DiagnosticRecord.create
+    record = DiagnosticRecord(
+        source="tool",
+        details={"api_key": secret_key, "safe_field": "public-value"},
+        error=secret_error,
+    )
+
+    # Public model boundary sanitization
+    assert record.details["api_key"] == "[REDACTED]"
+    assert record.details["safe_field"] == "public-value"
+    assert secret_key not in str(record.details)
+    assert "sk-auth-token-67890" not in (record.error or "")
+
+    # Persistence boundary sanitization
+    diag_file = tmp_path / "diagnostics.jsonl"
+    store = DiagnosticStore(path=diag_file)
+    assert store.append(record) is True
+
+    raw_content = diag_file.read_text(encoding="utf-8")
+    assert secret_key not in raw_content
+    assert "sk-auth-token-67890" not in raw_content
+    assert "[REDACTED]" in raw_content

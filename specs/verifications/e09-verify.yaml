@@ -1,0 +1,83 @@
+epic_id: e09
+title: Local Operations and Recovery
+verified_at: '2026-09-04T22:47:30Z'
+verifier: verify-work
+branch: e09-local-operations-recovery
+status: passing
+phases:
+  branch:
+    passed: true
+    command: git branch --show-current
+    actual: e09-local-operations-recovery
+  guidance:
+    passed: true
+    command: cmp -s AGENTS.md CLAUDE.md
+    note: Guidance files are byte-for-byte identical.
+  specs:
+    passed: true
+    command: uv run --offline python -c "import pathlib,yaml; [yaml.safe_load(p.read_text()) for p in pathlib.Path('specs').rglob('*.yaml')]"
+    note: All YAML specifications in specs/ parse cleanly.
+  mechanical:
+    passed: true
+    commands:
+      - uv run --offline ruff format --check .
+      - uv run --offline ruff check .
+      - uv run --offline mypy src
+      - uv run --offline pytest
+      - uv build --offline
+    tests_passed: 300
+    tests_failed: 0
+    source_files_typechecked: 64
+    artifacts_built:
+      - dist/mia_ai-0.6.0.tar.gz
+      - dist/mia_ai-0.6.0-py3-none-any.whl
+  story_verifications:
+    e09s01:
+      title: Attributed Local Diagnostics and Bounded Retention
+      status: passing
+      commands:
+        - uv run --offline pytest tests/test_diagnostics.py tests/test_diagnostics_cli.py
+      tests_passed: 23
+      tests_failed: 0
+      outcomes:
+        - Attributed diagnostic record creation and FIFO bounded retention verified.
+        - Public model and persistence boundary recursive secret redaction verified.
+        - CLI inspection with filtering and limits verified.
+    e09s02:
+      title: Supported Data Locations and Backup/Restore
+      status: passing
+      commands:
+        - uv run --offline pytest tests/test_operations.py tests/test_operations_cli.py
+      tests_passed: 20
+      tests_failed: 0
+      outcomes:
+        - Supported data layout inspection excluding sensitive credentials.
+        - SHA-256 integrity-checked backup creation with JSON manifest.
+        - Preflight validation, duplicate manifest entry rejection, and atomic restore.
+        - CLI backup, restore, and dry-run validation verified.
+    e09s03:
+      title: Non-Destructive Interrupted-Write and Corrupt-Data Recovery
+      status: passing
+      commands:
+        - uv run --offline pytest tests/test_recovery.py tests/test_recovery_cli.py
+      tests_passed: 18
+      tests_failed: 0
+      outcomes:
+        - Orphan atomic-write files and truncated final appends classified as attention.
+        - Interior JSONL corruption and schema validation failure classified as blocked.
+        - Backup archive integrity/corruption detection under supported roots.
+        - Deterministic, read-only, byte-preserving verification verified.
+        - CLI verify with distinct exit codes (0 clean, 2 attention, 1 blocked) verified.
+  security:
+    passed: true
+    checks:
+      - path: Credentials store excluded from backup datasets and recovery reports.
+      - redaction: Recursive secret redaction at DiagnosticRecord construction and storage boundaries.
+      - path_traversal: Member path traversal and symlink escapes rejected fail-closed.
+      - non_destructive: Recovery verification never mutates or removes files.
+  terminal_verdict:
+    passed: true
+    exit_code: 0
+    captured_at: '2026-09-04T22:47:30Z'
+    command: uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest && uv build --offline
+    note: Full epic e09 verification passed cleanly with 300 tests passing.

@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field
 
 from mia_agent.agents.manager import AgentManager
 from mia_agent.agents.model import Agent
+from mia_agent.diagnostics import DiagnosticRecord
+from mia_agent.session.jsonl import _ENTRY_ADAPTER
 
 RecoveryStatus = Literal["clean", "attention", "blocked"]
 FindingStatus = Literal["attention", "blocked"]
@@ -109,7 +111,26 @@ class RecoveryVerifier:
                     )
                 return
 
-            # 4. Check JSONL files (session or diagnostics)
+            # 4. Check backup archives (.zip) under supported roots
+            if name.endswith(".zip"):
+                from mia_agent.operations import validate_archive
+
+                valid, _, errors = validate_archive(file_path)
+                if not valid:
+                    findings.append(
+                        RecoveryFinding(
+                            category="archive",
+                            status="blocked",
+                            path=rel,
+                            evidence="; ".join(errors)
+                            if errors
+                            else "Corrupted or invalid backup archive",
+                            action="Inspect or replace damaged archive with a verified backup",
+                        )
+                    )
+                return
+
+            # 5. Check JSONL files (session or diagnostics)
             if name.endswith(".jsonl"):
                 is_diag = name == "diagnostics.jsonl" or rel.startswith("diagnostics/")
                 cat = "diagnostics" if is_diag else "session"
@@ -121,7 +142,7 @@ class RecoveryVerifier:
                         line_bytes = raw_lines[idx]
                         is_last_item = pos == len(non_empty_indices) - 1
                         try:
-                            json.loads(line_bytes.decode("utf-8"))
+                            raw_obj = json.loads(line_bytes.decode("utf-8"))
                         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
                             if is_last_item:
                                 findings.append(
@@ -143,6 +164,24 @@ class RecoveryVerifier:
                                         action=f"Restore {cat} from verified backup using 'mia data restore'",
                                     )
                                 )
+                            continue
+
+                        # Validate schema against supported models
+                        try:
+                            if is_diag:
+                                DiagnosticRecord.model_validate(raw_obj)
+                            else:
+                                _ENTRY_ADAPTER.validate_python(raw_obj)
+                        except Exception as exc:
+                            findings.append(
+                                RecoveryFinding(
+                                    category="schema",
+                                    status="blocked",
+                                    path=rel,
+                                    evidence=f"Unsupported or malformed {target_label} schema at line {idx + 1}: {exc}",
+                                    action=f"Restore {cat} from verified backup using 'mia data restore'",
+                                )
+                            )
                 except OSError as exc:
                     findings.append(
                         RecoveryFinding(

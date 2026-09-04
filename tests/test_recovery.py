@@ -20,7 +20,9 @@ def test_clean_environment_reports_clean(tmp_path: Path) -> None:
 
     session_file = agents_dir / "mia" / "sessions" / "s1.jsonl"
     session_file.parent.mkdir(parents=True, exist_ok=True)
-    session_file.write_text('{"event": "start"}\n{"event": "turn"}\n', encoding="utf-8")
+    session_file.write_text(
+        '{"type": "session_info", "title": "Test"}\n{"type": "leaf"}\n', encoding="utf-8"
+    )
 
     diag_file = diagnostics_dir / "diagnostics.jsonl"
     diag_file.parent.mkdir(parents=True, exist_ok=True)
@@ -65,7 +67,7 @@ def test_truncated_final_session_line_classified_as_attention(tmp_path: Path) ->
 
     session_file = agents_dir / "mia" / "sessions" / "s1.jsonl"
     session_file.parent.mkdir(parents=True, exist_ok=True)
-    raw_content = '{"event": "start"}\n{"event": "incomp'
+    raw_content = '{"type": "session_info"}\n{"type": "incomp'
     session_file.write_text(raw_content, encoding="utf-8")
 
     verifier = RecoveryVerifier(manager=manager)
@@ -88,7 +90,7 @@ def test_interior_session_corruption_classified_as_blocked(tmp_path: Path) -> No
 
     session_file = agents_dir / "mia" / "sessions" / "s1.jsonl"
     session_file.parent.mkdir(parents=True, exist_ok=True)
-    raw_content = '{"event": "start"}\nNOT_VALID_JSON_INTERIOR\n{"event": "end"}\n'
+    raw_content = '{"type": "session_info"}\nNOT_VALID_JSON_INTERIOR\n{"type": "leaf"}\n'
     session_file.write_text(raw_content, encoding="utf-8")
 
     verifier = RecoveryVerifier(manager=manager)
@@ -159,7 +161,7 @@ def test_status_precedence_blocked_over_attention(tmp_path: Path) -> None:
     session_file = agents_dir / "mia" / "sessions" / "s1.jsonl"
     session_file.parent.mkdir(parents=True, exist_ok=True)
     session_file.write_text(
-        '{"event": "start"}\nCORRUPT_INTERIOR\n{"event": "end"}\n', encoding="utf-8"
+        '{"type": "session_info"}\nCORRUPT_INTERIOR\n{"type": "leaf"}\n', encoding="utf-8"
     )
 
     report = verify_recovery(manager)
@@ -223,7 +225,7 @@ def test_recovery_verification_is_strictly_byte_preserving(tmp_path: Path) -> No
 
     files_and_contents = {
         agents_dir / "mia" / "agent.json": '{"agent_id": "mia", "display_name": "Mia"}',
-        agents_dir / "mia" / "sessions" / "s1.jsonl": '{"event": "start"}\n{"event": "incomp',
+        agents_dir / "mia" / "sessions" / "s1.jsonl": '{"type": "session_info"}\n{"type": "incomp',
         agents_dir / "mia" / ".atomic_tmp_1": "temporary artifact data",
         diagnostics_dir / "diagnostics.jsonl": '{"source": "run", "outcome": "success"}\n',
     }
@@ -244,3 +246,72 @@ def test_recovery_verification_is_strictly_byte_preserving(tmp_path: Path) -> No
     for p, expected_content in files_and_contents.items():
         assert p.exists()
         assert p.read_text(encoding="utf-8") == expected_content
+
+
+def test_recovery_unsupported_session_jsonl_schema_classified_as_blocked(tmp_path: Path) -> None:
+    """A valid JSON record with unsupported Session schema fails closed as blocked."""
+    agents_dir = tmp_path / "agents"
+    diagnostics_dir = tmp_path / "diagnostics"
+    manager = AgentManager(agents_dir=agents_dir, diagnostics_dir=diagnostics_dir)
+
+    agent_json = agents_dir / "mia" / "agent.json"
+    agent_json.parent.mkdir(parents=True, exist_ok=True)
+    agent_json.write_text('{"agent_id": "mia", "display_name": "Mia"}', encoding="utf-8")
+
+    session_file = agents_dir / "mia" / "sessions" / "s1.jsonl"
+    session_file.parent.mkdir(parents=True, exist_ok=True)
+    # Valid JSON syntax, but invalid/unsupported session schema (missing valid type discriminator)
+    raw_content = '{"unsupported_field": "unknown_value", "extra": 123}\n'
+    session_file.write_text(raw_content, encoding="utf-8")
+
+    verifier = RecoveryVerifier(manager=manager)
+    report = verifier.verify()
+
+    assert report.status == "blocked"
+    assert any(
+        f.category in {"schema", "session"} and f.status == "blocked" for f in report.findings
+    )
+    assert session_file.read_text(encoding="utf-8") == raw_content
+
+
+def test_recovery_unsupported_diagnostic_jsonl_schema_classified_as_blocked(tmp_path: Path) -> None:
+    """A valid JSON record with unsupported Diagnostic schema fails closed as blocked."""
+    agents_dir = tmp_path / "agents"
+    diagnostics_dir = tmp_path / "diagnostics"
+    manager = AgentManager(agents_dir=agents_dir, diagnostics_dir=diagnostics_dir)
+
+    diag_file = diagnostics_dir / "diagnostics.jsonl"
+    diag_file.parent.mkdir(parents=True, exist_ok=True)
+    # Valid JSON syntax, but invalid diagnostic schema (source missing or invalid)
+    raw_content = '{"source": "invalid_source_type", "outcome": "success"}\n'
+    diag_file.write_text(raw_content, encoding="utf-8")
+
+    verifier = RecoveryVerifier(manager=manager)
+    report = verifier.verify()
+
+    assert report.status == "blocked"
+    assert any(
+        f.category in {"schema", "diagnostics"} and f.status == "blocked" for f in report.findings
+    )
+    assert diag_file.read_text(encoding="utf-8") == raw_content
+
+
+def test_recovery_detects_corrupt_or_unsupported_archive_under_root(tmp_path: Path) -> None:
+    """Corrupt or unsupported backup archive under supported root is detected as blocked."""
+    agents_dir = tmp_path / "agents"
+    diagnostics_dir = tmp_path / "diagnostics"
+    manager = AgentManager(agents_dir=agents_dir, diagnostics_dir=diagnostics_dir)
+
+    # 1. Corrupt zip archive
+    bad_zip = agents_dir / "mia" / "corrupted_backup.zip"
+    bad_zip.parent.mkdir(parents=True, exist_ok=True)
+    bad_zip.write_bytes(b"not a valid zip file content")
+
+    verifier = RecoveryVerifier(manager=manager)
+    report = verifier.verify()
+
+    assert report.status == "blocked"
+    assert any(f.category == "archive" and f.status == "blocked" for f in report.findings)
+    # Non-destructive
+    assert bad_zip.exists()
+    assert bad_zip.read_bytes() == b"not a valid zip file content"

@@ -324,7 +324,19 @@ def validate_archive(archive_path: Path) -> tuple[bool, BackupManifest | None, l
                     errors.append(f"Unsupported top-level archive directory: {parts[0]}")
 
             # Manifest entry checks
-            manifest_paths = {entry.path for entry in manifest.files}
+            seen_manifest_paths: set[str] = set()
+            duplicate_manifest_paths: set[str] = set()
+            for entry in manifest.files:
+                if entry.path in seen_manifest_paths:
+                    duplicate_manifest_paths.add(entry.path)
+                seen_manifest_paths.add(entry.path)
+
+            if duplicate_manifest_paths:
+                errors.append(
+                    f"Duplicate manifest entries detected: {sorted(duplicate_manifest_paths)}"
+                )
+
+            manifest_paths = seen_manifest_paths
             archive_non_manifest = {n for n in namelist if n != MANIFEST_FILENAME}
 
             missing_in_archive = manifest_paths - archive_non_manifest
