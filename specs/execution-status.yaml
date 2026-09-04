@@ -196,12 +196,12 @@ epics:
         tasks_failing: 0
       e09s02:
         title: Supported Data Locations and Backup/Restore
-        status: planned
+        status: completed
         bcps: 5
         risk: P0
         tasks_total: 6
-        tasks_passing: 0
-        tasks_failing: 6
+        tasks_passing: 6
+        tasks_failing: 0
       e09s03:
         title: Non-Destructive Interrupted-Write and Corrupt-Data Recovery
         status: planned
