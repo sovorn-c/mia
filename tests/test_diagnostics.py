@@ -178,3 +178,81 @@ def test_diagnostic_record_auto_sanitization() -> None:
     assert rec.details["normal"] == "value"
     assert "ghp_123456789" not in (rec.error or "")
     assert "[REDACTED]" in (rec.error or "")
+
+
+from mia_agent.agents import AgentManager
+from mia_agent.diagnostics import DiagnosticHealth, DiagnosticStore, DiagnosticStoreError
+
+
+def test_diagnostic_store_append_and_read(tmp_path: Path) -> None:
+    store_file = tmp_path / "diagnostics.jsonl"
+    store = DiagnosticStore(path=store_file)
+    r1 = DiagnosticRecord.create(source="tool", tool_name="bash", action="run", outcome="success")
+    r2 = DiagnosticRecord.create(source="run", agent_id="mia", action="finish", outcome="success")
+
+    assert store.append(r1) is True
+    assert store.append(r2) is True
+
+    records = store.read_records()
+    assert len(records) == 2
+    assert records[0].record_id == r1.record_id
+    assert records[1].record_id == r2.record_id
+
+
+def test_diagnostic_store_retention_bounded_by_count(tmp_path: Path) -> None:
+    store_file = tmp_path / "diagnostics.jsonl"
+    store = DiagnosticStore(path=store_file, max_records=3)
+    records = [
+        DiagnosticRecord.create(source="tool", tool_name=f"tool_{i}", action="run", outcome="success")
+        for i in range(5)
+    ]
+    for r in records:
+        store.append(r)
+
+    loaded = store.read_records()
+    assert len(loaded) == 3
+    # Oldest 2 pruned, newest 3 kept
+    assert [r.tool_name for r in loaded] == ["tool_2", "tool_3", "tool_4"]
+
+
+def test_diagnostic_store_retention_bounded_by_bytes(tmp_path: Path) -> None:
+    store_file = tmp_path / "diagnostics.jsonl"
+    store = DiagnosticStore(path=store_file, max_records=100, max_bytes=600)
+    for i in range(10):
+        store.append(DiagnosticRecord.create(source="run", details={"index": i, "payload": "x" * 50}))
+
+    assert store_file.stat().st_size <= 700
+    loaded = store.read_records()
+    assert len(loaded) < 10
+    assert len(loaded) >= 1
+
+
+def test_diagnostic_store_persistence_failure_health(tmp_path: Path) -> None:
+    not_dir = tmp_path / "not_a_dir"
+    not_dir.write_text("blocking file")
+    invalid_path = not_dir / "readonly.jsonl"
+
+    store = DiagnosticStore(path=invalid_path)
+    r = DiagnosticRecord.create(source="run", outcome="test")
+    ok = store.append(r)
+    assert ok is False
+    health = store.get_health()
+    assert health.healthy is False
+    assert health.last_error is not None
+
+
+def test_diagnostic_store_malformed_record_failure(tmp_path: Path) -> None:
+    store_file = tmp_path / "corrupt.jsonl"
+    store_file.write_text('{"valid": "line"}\n{invalid json\n', encoding="utf-8")
+    store = DiagnosticStore(path=store_file)
+    with pytest.raises(DiagnosticStoreError) as exc_info:
+        store.read_records()
+    assert "malformed" in str(exc_info.value).lower() or "line 2" in str(exc_info.value).lower()
+
+
+def test_agent_manager_diagnostics_path(tmp_path: Path) -> None:
+    manager = AgentManager(agents_dir=tmp_path / "agents", diagnostics_dir=tmp_path / "diagnostics")
+    diag_dir = manager.get_diagnostics_dir()
+    diag_path = manager.get_diagnostics_path()
+    assert diag_dir == tmp_path / "diagnostics"
+    assert diag_path == tmp_path / "diagnostics" / "diagnostics.jsonl"
