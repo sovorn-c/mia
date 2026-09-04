@@ -669,6 +669,58 @@ def data_restore(
         )
 
 
+@data_app.command("verify")
+def data_verify() -> None:
+    """Run deterministic read-only recovery verification over supported local data."""
+    from mia_agent.recovery import verify_recovery
+
+    manager = AgentManager()
+    report = verify_recovery(manager)
+
+    if report.findings:
+        table = Table(title=f"Recovery Verification ({report.status})")
+        table.add_column("Category", style="cyan", no_wrap=True)
+        table.add_column("Status", no_wrap=True)
+        table.add_column("Path", style="dim")
+        table.add_column("Evidence")
+        table.add_column("Action", style="yellow")
+        for finding in report.findings:
+            status_style = (
+                "[bold red]blocked[/bold red]"
+                if finding.status == "blocked"
+                else "[yellow]attention[/yellow]"
+            )
+            table.add_row(
+                finding.category,
+                status_style,
+                finding.path,
+                finding.evidence,
+                finding.action,
+            )
+        console.print(table)
+
+    if report.status == "clean":
+        console.print(
+            f"[green]All local data verified clean: {report.files_scanned} files scanned, 0 issues found.[/green]"
+        )
+    elif report.status == "attention":
+        console.print(
+            f"[yellow]Operator attention required: {len(report.findings)} issue(s) detected across {report.files_scanned} files.[/yellow]"
+        )
+        console.print(
+            "[dim]Inspect temporary files or restore from a verified backup if needed.[/dim]"
+        )
+        raise typer.Exit(code=2)
+    else:
+        console.print(
+            f"[bold red]Data recovery blocked: {len(report.findings)} corruption or schema issue(s) detected across {report.files_scanned} files.[/bold red]"
+        )
+        console.print(
+            "[bold red]Restore required: Use 'mia data restore <archive> --destination <dir>' to recover from a verified backup.[/bold red]"
+        )
+        raise typer.Exit(code=1)
+
+
 @app.command(name="tui")
 def tui_command(
     model: Annotated[str | None, typer.Option("--model", "-m", help="Default model")] = None,

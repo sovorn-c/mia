@@ -96,7 +96,9 @@ def test_cli_data_verify_deterministic_and_byte_preserving(tmp_path: Path) -> No
 
     session_file = agent_dir / "sessions" / "sess-1.jsonl"
     session_file.parent.mkdir(parents=True, exist_ok=True)
-    session_file.write_bytes(b'{"session_id": "sess-1"}\n{"invalid": interior\n')
+    session_file.write_bytes(
+        b'{"session_id": "sess-1"}\n{"invalid": interior\n{"valid": "entry"}\n'
+    )
 
     # Snapshot all bytes before runs
     files = [agent_json, orphan_file, session_file]
