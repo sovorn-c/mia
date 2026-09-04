@@ -52,6 +52,12 @@ class AgentManager:
         """Return the canonical path for diagnostic records."""
         return self.diagnostics_dir / "diagnostics.jsonl"
 
+    def get_data_layout(self, credentials_path: Path | None = None) -> Any:
+        """Return the Core data layout for this AgentManager."""
+        from mia_agent.operations import get_data_locations
+
+        return get_data_locations(self, credentials_path=credentials_path)
+
     def get_agent(self, agent_id: str | None = None) -> Agent:
         """Resolve one Agent, defaulting to the selected or built-in Mia Agent."""
         if agent_id is None:

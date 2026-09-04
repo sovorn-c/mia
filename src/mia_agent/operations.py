@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -153,9 +154,12 @@ def enumerate_supported_files(
     def _scan_dir(root: Path) -> None:
         if not root.exists() or root.is_symlink():
             return
-        for item in sorted(root.rglob("*")):
-            if is_supported_backup_file(item, manager, credentials_path):
-                candidates.append(item)
+        for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+            dirnames[:] = [d for d in sorted(dirnames) if not (Path(dirpath) / d).is_symlink()]
+            for fname in sorted(filenames):
+                file_path = Path(dirpath) / fname
+                if is_supported_backup_file(file_path, manager, credentials_path):
+                    candidates.append(file_path)
 
     _scan_dir(manager.agents_dir)
     _scan_dir(manager.get_diagnostics_dir())
