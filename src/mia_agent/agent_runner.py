@@ -134,14 +134,26 @@ class AgentRunner:
     async def _notify_observers(
         observers: Sequence[Any],
         payload: Any,
-    ) -> None:
+        identity: RuntimeIdentity | None = None,
+        phase: str = "observer",
+    ) -> list[AgentEventEnvelope]:
+        diagnostics: list[AgentEventEnvelope] = []
         for obs in observers:
+            plugin_id = getattr(obs, "plugin_id", "plugin")
             try:
                 res = obs(payload)
                 if isinstance(res, Awaitable):
                     await res
-            except Exception:
-                pass
+            except Exception as exc:
+                if identity is not None:
+                    diag = PluginDiagnosticEvent(
+                        plugin_id=plugin_id,
+                        phase=phase,
+                        message=f"{phase} observer notification failed",
+                        error=str(sanitize_arguments(str(exc))),
+                    )
+                    diagnostics.append(_envelope(identity, diag))
+        return diagnostics
 
     async def _emit(
         self,
@@ -162,14 +174,17 @@ class AgentRunner:
             return []
         object.__setattr__(runtime, "cleanup_done", True)
 
+        diagnostics: list[AgentEventEnvelope] = []
         activation = getattr(runtime, "activation", None)
         if activation is not None:
             finished_observers = activation.observers.get("run_finished", ())
-            await self._notify_observers(finished_observers, identity)
+            finish_diags = await self._notify_observers(
+                finished_observers, identity, identity=identity, phase="run_finished"
+            )
+            diagnostics.extend(finish_diags)
 
         if not getattr(runtime, "disposers", None):
-            return []
-        diagnostics: list[AgentEventEnvelope] = []
+            return diagnostics
         disposers = runtime.disposers
         object.__setattr__(runtime, "disposers", ())
         for disposer in reversed(disposers):
@@ -291,7 +306,14 @@ class AgentRunner:
             self.last_runtime = runtime
 
             if activation is not None:
-                await self._notify_observers(activation.observers.get("run_started", ()), identity)
+                start_diags = await self._notify_observers(
+                    activation.observers.get("run_started", ()),
+                    identity,
+                    identity=identity,
+                    phase="run_started",
+                )
+                for diag_env in start_diags:
+                    yield diag_env
 
             async for event in runtime.harness.prompt(request.prompt_text):
                 if lifecycle.terminal_delivered:

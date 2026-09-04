@@ -114,6 +114,8 @@ class PluginContext:
             )
         if not callable(observer):
             raise TypeError("Observer must be callable")
+        with contextlib.suppress(Exception):
+            object.__setattr__(observer, "plugin_id", self.plugin_id)
         self._observers[phase].append(observer)
 
     async def effect(

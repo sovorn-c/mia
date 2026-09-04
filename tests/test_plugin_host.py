@@ -1281,3 +1281,68 @@ async def test_plugin_free_agent_compatibility(tmp_path: Path) -> None:
 
     assert events
     assert events[-1].event.type == "turn_complete"
+
+
+@pytest.mark.asyncio
+async def test_observer_failure_produces_sanitized_diagnostic_and_preserves_terminal_truth(
+    tmp_path: Path,
+) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.plugin_host import PluginContext, PluginHost
+    from mia_agent.runtime_events import PluginDiagnosticEvent
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+
+    class FaultyObserverPlugin:
+        @property
+        def manifest(self) -> PluginManifest:
+            return PluginManifest(
+                plugin_id="faulty_plugin",
+                version="1.0.0",
+                display_name="Faulty Observer Plugin",
+                description="Fails in observer with secret",
+            )
+
+        async def activate(self, context: PluginContext) -> None:
+            def bad_start_observer(identity: Any) -> None:
+                raise RuntimeError("Bearer sk-secret_api_token_123 failed in start observer")
+
+            def bad_finish_observer(identity: Any) -> None:
+                raise ValueError("sk-secret_password_456 failed in finish observer")
+
+            context.observe("run_started", bad_start_observer)
+            context.observe("run_finished", bad_finish_observer)
+
+    agents = make_agent_manager(tmp_path)
+    alpha = agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+
+    fp = FaultyObserverPlugin()
+    plugins._catalog["faulty_plugin"] = fp.manifest
+    plugins.install("faulty_plugin")
+    plugins.trust_plugin("faulty_plugin")
+    plugins.enable(alpha.agent_id, "faulty_plugin")
+
+    host = PluginHost()
+    host.register_implementation("faulty_plugin", fp)
+
+    factory = AgentRuntimeFactory(agent_manager=agents, plugin_manager=plugins, plugin_host=host)
+    runner = AgentRunner(agent_manager=agents, factory=factory)
+
+    provider = MockProvider()
+    provider.queue_text_response("Work finished successfully")
+
+    req = RunRequest(prompt_text="do safe work", agent_id="alpha")
+    events = [env async for env in runner.run(req, provider=provider, cwd=tmp_path)]
+
+    # 1. Terminal truth is preserved: turn_complete is the final terminal event!
+    assert events[-1].event.type == "turn_complete"
+
+    # 2. Sanitized diagnostics are emitted for the failed observers
+    diag_events = [env.event for env in events if isinstance(env.event, PluginDiagnosticEvent)]
+    assert len(diag_events) >= 1
+    for d in diag_events:
+        assert d.plugin_id == "faulty_plugin"
+        assert "sk-" not in d.error
+        assert "[REDACTED]" in d.error
