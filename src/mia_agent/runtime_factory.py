@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
+import inspect
 from collections.abc import Awaitable, Callable, Collection, Sequence
 from pathlib import Path
 from typing import Any
@@ -9,6 +12,7 @@ from typing import Any
 from mia_agent.agents import Agent, AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.harness import AgentHarness
+from mia_agent.plugin_host import PluginActivation, PluginHost
 from mia_agent.plugins import PluginManager
 from mia_agent.runtime_models import AgentRuntime, EffectiveSettings, RuntimeIdentity
 from mia_agent.session.compactor import ContextCompactor
@@ -24,7 +28,7 @@ from mia_middleware.access import (
     FinalCoreToolValidator,
     tool_effect,
 )
-from mia_middleware.pipeline import ToolPipeline
+from mia_middleware.pipeline import ToolCallContext, ToolPipeline
 from mia_middleware.security import SecurityGuardMiddleware
 from mia_middleware.telemetry import AuditLogMiddleware, CostBudgetMiddleware
 from mia_tools.bash import BashTool
@@ -37,6 +41,36 @@ POLICY_RANK: dict[str, int] = {
 }
 
 
+def _wrap_plugin_middleware(middleware: Any) -> Any:
+    if callable(middleware) and not (
+        hasattr(middleware, "pre_tool") or hasattr(middleware, "post_tool")
+    ):
+        try:
+            sig = inspect.signature(middleware)
+            if len(sig.parameters) >= 2 or any(
+                p.kind == inspect.Parameter.VAR_POSITIONAL for p in sig.parameters.values()
+            ):
+                return middleware
+        except (ValueError, TypeError):
+            return middleware
+
+    async def _wrapped(ctx: ToolCallContext, next_fn: Callable[[], Awaitable[Any]]) -> Any:
+        if hasattr(middleware, "pre_tool"):
+            res = middleware.pre_tool(ctx)
+            if inspect.isawaitable(res):
+                await res
+        result = await next_fn()
+        if hasattr(middleware, "post_tool"):
+            post_res = middleware.post_tool(ctx, result)
+            if inspect.isawaitable(post_res):
+                return await post_res
+            elif post_res is not None:
+                return post_res
+        return result
+
+    return _wrapped
+
+
 def _attributed_disposer(
     fn: Callable[[], Any], plugin_id: str
 ) -> Callable[[], Awaitable[None] | None]:
@@ -45,6 +79,21 @@ def _attributed_disposer(
 
     _wrapper.plugin_id = plugin_id  # type: ignore[attr-defined]
     return _wrapper
+
+
+def _resolve_awaitable(awaitable: Awaitable[Any]) -> Any:
+    """Resolve an awaitable in either sync or running event loop context."""
+
+    async def _await(target: Awaitable[Any]) -> Any:
+        return await target
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(_await(awaitable))
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        return executor.submit(lambda: asyncio.run(_await(awaitable))).result()
 
 
 class AgentRuntimeFactory:
@@ -57,11 +106,13 @@ class AgentRuntimeFactory:
         config_manager: ConfigManager | None = None,
         delegation_service: Any | None = None,
         plugin_manager: PluginManager | None = None,
+        plugin_host: PluginHost | None = None,
     ) -> None:
         self.agent_manager = agent_manager or AgentManager()
         self.config_manager = config_manager or ConfigManager()
         self.delegation_service = delegation_service
         self.plugin_manager = plugin_manager or PluginManager(agent_manager=self.agent_manager)
+        self.plugin_host = plugin_host or PluginHost()
 
     def resolve_effective_settings(
         self,
@@ -170,6 +221,7 @@ class AgentRuntimeFactory:
         delegation_service: Any | None = None,
         delegation_depth: int = 0,
         disposers: Sequence[Callable[[], Awaitable[None] | None]] | None = None,
+        activation: PluginActivation | None = None,
     ) -> AgentRuntime:
         """Construct an Agent-scoped harness, restoring and annotating its Session."""
         agent = self.agent_manager.get_agent(identity.agent_id)
@@ -178,7 +230,10 @@ class AgentRuntimeFactory:
         work_dir = cwd or Path.cwd()
 
         # Stage and validate complete current Plugin Tool set before settings/provider/harness
-        plugin_tools = self.plugin_manager.resolve_tools(agent)
+        if activation is not None:
+            plugin_tools = list(activation.tools)
+        else:
+            plugin_tools = self.plugin_manager.resolve_tools(agent)
         plugin_names = [tool.name for tool in plugin_tools]
 
         available_tools = [
@@ -249,6 +304,7 @@ class AgentRuntimeFactory:
                 if tool_effect(tool.name, {"effect": tool.effect}) == "non-mutating"
             ]
             agent = agent.model_copy(update={"tools": [tool.name for tool in tools]})
+        plugin_middleware = activation.tool_middleware if activation is not None else ()
         pipeline = self._build_pipeline(
             agent.middlewares,
             agent=agent,
@@ -258,6 +314,7 @@ class AgentRuntimeFactory:
             tool_effects={
                 tool.name: tool_effect(tool.name, {"effect": tool.effect}) for tool in tools
             },
+            plugin_middleware=plugin_middleware,
         )
         session_store = JsonlSessionStore(
             self.agent_manager.get_session_path(agent.agent_id, identity.session_id)
@@ -267,10 +324,29 @@ class AgentRuntimeFactory:
             identity, session_store, last_entry_id, namespace=namespace
         )
 
+        system_prompt = agent.instructions
+        if activation is not None and activation.context_contributors:
+            context_additions: list[str] = []
+            for contributor in activation.context_contributors:
+                try:
+                    res = contributor()
+                    if inspect.isawaitable(res):
+                        res = _resolve_awaitable(res)
+                    if isinstance(res, str) and res.strip():
+                        context_additions.append(res.strip())
+                except Exception:
+                    pass
+            if context_additions:
+                system_prompt = (
+                    f"{system_prompt}\n\n" + "\n\n".join(context_additions)
+                    if system_prompt
+                    else "\n\n".join(context_additions)
+                )
+
         harness = AgentHarness(
             provider=provider,
             model=model_name,
-            system_prompt=agent.instructions,
+            system_prompt=system_prompt,
             tools=tools,
             pipeline=pipeline,
             max_steps_per_turn=settings.max_steps_per_turn,
@@ -296,6 +372,8 @@ class AgentRuntimeFactory:
                 collected_disposers.append(_attributed_disposer(tool.dispose, pid))
             elif hasattr(tool, "cleanup") and callable(tool.cleanup):
                 collected_disposers.append(_attributed_disposer(tool.cleanup, pid))
+        if activation is not None:
+            collected_disposers.extend(activation.disposers)
         if disposers is not None:
             collected_disposers.extend(disposers)
 
@@ -306,6 +384,7 @@ class AgentRuntimeFactory:
             agent=agent,
             effective_settings=settings,
             disposers=tuple(collected_disposers),
+            activation=activation,
         )
 
     @staticmethod
@@ -317,6 +396,7 @@ class AgentRuntimeFactory:
         approval_callback: ApprovalCallback | None = None,
         full_access_confirmed: bool | None = None,
         tool_effects: dict[str, Any] | None = None,
+        plugin_middleware: Sequence[Any] = (),
     ) -> ToolPipeline:
         active: list[Any] = []
         final_validator = None
@@ -350,6 +430,8 @@ class AgentRuntimeFactory:
         active.append(SecurityGuardMiddleware())
         active.append(AuditLogMiddleware())
         active.append(CostBudgetMiddleware())
+        for pm in plugin_middleware:
+            active.append(_wrap_plugin_middleware(pm))
         return ToolPipeline(active, final_validator=final_validator)
 
     @staticmethod

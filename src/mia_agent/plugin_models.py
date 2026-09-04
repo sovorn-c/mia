@@ -142,18 +142,79 @@ class AgentTemplate(BaseModel):
         return self
 
 
+class StaticSkill(BaseModel):
+    """Strict, serializable description of one static Skill resource."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    skill_id: str
+    display_name: str
+    description: str
+    instructions: str
+
+    @field_validator("skill_id")
+    @classmethod
+    def validate_skill_id(cls, value: str) -> str:
+        return normalize_plugin_id(value)
+
+    @field_validator("display_name", "description", "instructions")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Skill text fields must not be blank")
+        return value
+
+    @model_validator(mode="after")
+    def validate_secrets(self) -> StaticSkill:
+        _validate_secret_free(self.instructions, f"skills.{self.skill_id}.instructions")
+        _validate_secret_free(self.display_name, f"skills.{self.skill_id}.display_name")
+        _validate_secret_free(self.description, f"skills.{self.skill_id}.description")
+        return self
+
+
+class PluginProvenance(BaseModel):
+    """Core-derived source identity and distribution metadata for one Plugin."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: Literal["bundled", "installed"]
+    package_name: str | None = None
+    package_version: str | None = None
+    entry_point: str | None = None
+
+
+PluginTrustStatus = Literal["declarative", "trusted", "untrusted", "unavailable", "incompatible"]
+
+
+class PluginTrust(BaseModel):
+    """Core-assigned authority class and effective trust state."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    trust_class: Literal["declarative", "trusted-code"]
+    status: PluginTrustStatus
+    explicit: bool = False
+    message: str = ""
+
+
 class PluginManifest(BaseModel):
-    """Strict, serializable description of one bundled Plugin."""
+    """Strict, serializable description of one Plugin."""
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     plugin_id: str
     version: str
     api_version: int = CORE_PLUGIN_API_VERSION
+    plugin_type: Literal["declarative", "trusted-code"] = "trusted-code"
     display_name: str
     description: str
     tool_specs: list[PluginToolSpec] = Field(default_factory=list)
     templates: list[AgentTemplate] = Field(default_factory=list)
+    skills: list[StaticSkill] = Field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
+    provenance: PluginProvenance | None = None
+    trust: PluginTrust | None = None
 
     @field_validator("plugin_id")
     @classmethod
@@ -183,14 +244,34 @@ class PluginManifest(BaseModel):
             raise ValueError(f"Unsupported Plugin API version: {value}")
         return value
 
+    @field_validator("dependencies")
+    @classmethod
+    def validate_dependencies(cls, value: list[str]) -> list[str]:
+        normalized = [normalize_plugin_id(dep) for dep in value]
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("Plugin dependencies contain duplicates")
+        return normalized
+
     @model_validator(mode="after")
-    def validate_tool_names(self) -> PluginManifest:
+    def validate_manifest_integrity(self) -> PluginManifest:
+        _validate_secret_free(self.display_name, f"plugin.{self.plugin_id}.display_name")
+        _validate_secret_free(self.description, f"plugin.{self.plugin_id}.description")
+
+        if self.plugin_type == "declarative" and self.tool_specs:
+            raise ValueError("Declarative Plugins cannot declare executable tools")
+
         names = [tool.name for tool in self.tool_specs]
         if len(names) != len(set(names)):
             raise ValueError(f"Plugin '{self.plugin_id}' declares duplicate Tool names")
+
         template_ids = [template.template_id for template in self.templates]
         if len(template_ids) != len(set(template_ids)):
             raise ValueError(f"Plugin '{self.plugin_id}' declares duplicate Template IDs")
+
+        skill_ids = [skill.skill_id for skill in self.skills]
+        if len(skill_ids) != len(set(skill_ids)):
+            raise ValueError(f"Plugin '{self.plugin_id}' declares duplicate Skill IDs")
+
         return self
 
     @property
@@ -220,5 +301,9 @@ __all__ = [
     "InstalledPlugin",
     "PluginEffect",
     "PluginManifest",
+    "PluginProvenance",
     "PluginToolSpec",
+    "PluginTrust",
+    "PluginTrustStatus",
+    "StaticSkill",
 ]

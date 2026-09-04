@@ -72,3 +72,56 @@ async def test_notes_tools_reject_a_symlinked_data_root(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="symbolic link"):
         NotesPlugin().build_tools(agent_id="alpha", data_dir=linked_root, config={})
+
+
+@pytest.mark.asyncio
+async def test_notes_activation_through_plugin_context_and_retention(tmp_path: Path) -> None:
+    from mia_agent.plugin_catalog import NotesPlugin, notes_manifest
+    from mia_agent.plugin_host import PluginContext
+
+    manifest = notes_manifest()
+    data_dir = tmp_path / "notes_data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    ctx = PluginContext(
+        plugin_id="notes",
+        agent_id="agent_alpha",
+        config={},
+        data_dir=data_dir,
+        manifest=manifest,
+    )
+
+    plugin = NotesPlugin()
+    await plugin.activate(ctx)
+
+    # 1. Check tools are registered with proper attribution and effects
+    assert len(ctx._tools) == 3
+    tool_map = {t.name: t for t in ctx._tools}
+    assert "note_create" in tool_map
+    assert "note_list" in tool_map
+    assert "note_read" in tool_map
+    for t in ctx._tools:
+        assert getattr(t, "plugin_id", None) == "notes"
+
+    # 2. Execute note_create and verify note file exists on disk
+    created = await tool_map["note_create"].execute(title="Important Note", content="Retained data")
+    note_id = created["note_id"]
+    note_file = data_dir / f"{note_id}.json"
+    assert note_file.exists()
+
+    # 3. Simulate disablement (no plugin context or tools active) and verify data is retained
+    assert note_file.exists()
+
+    # 4. Re-activate and verify data is readable
+    ctx2 = PluginContext(
+        plugin_id="notes",
+        agent_id="agent_alpha",
+        config={},
+        data_dir=data_dir,
+        manifest=manifest,
+    )
+    await plugin.activate(ctx2)
+    tool_map2 = {t.name: t for t in ctx2._tools}
+    read_note = await tool_map2["note_read"].execute(note_id=note_id)
+    assert read_note["title"] == "Important Note"
+    assert read_note["content"] == "Retained data"

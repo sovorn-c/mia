@@ -152,33 +152,35 @@ epics:
         tasks_failing: 0
   e08:
     title: Governed Core Extension Host
-    status: planned
+    status: completed
     bcps: 21
     stories:
       e08s01:
         title: Typed Plugin Contract, Trust, and Static Catalog
-        status: planned
+        status: completed
+        started_at: '2026-09-04T21:16:00Z'
         bcps: 7
         risk: P0
         tasks_total: 5
-        tasks_passing: 0
-        tasks_failing: 5
+        tasks_passing: 5
+        tasks_failing: 0
       e08s02:
         title: Transactional Run Activation and Owned Plugin Lifecycle
-        status: planned
+        status: completed
+        started_at: '2026-09-04T21:21:00Z'
         bcps: 8
         risk: P0
         tasks_total: 5
-        tasks_passing: 0
-        tasks_failing: 5
+        tasks_passing: 5
+        tasks_failing: 0
       e08s03:
         title: Core Boundary, Notes Migration, and Compatibility
-        status: planned
+        status: completed
         bcps: 6
         risk: P0
         tasks_total: 5
-        tasks_passing: 0
-        tasks_failing: 5
+        tasks_passing: 5
+        tasks_failing: 0
   e09:
     title: Local Operations and Recovery
     status: planned

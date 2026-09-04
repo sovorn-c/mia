@@ -480,3 +480,67 @@ async def test_cooperative_cleanup_timeout_quarantines_plugin(tmp_path: Path) ->
             factory.build(identity=identity, provider=provider, cwd=tmp_path)
     finally:
         PluginManager.clear_quarantine()
+
+
+def test_static_skill_model_validation_and_secret_rejection() -> None:
+    from mia_agent.plugin_models import StaticSkill
+
+    skill = StaticSkill(
+        skill_id="guide",
+        display_name="Guide Skill",
+        description="A helpful guide skill.",
+        instructions="Always explain steps concisely.",
+    )
+    assert skill.skill_id == "guide"
+    assert skill.display_name == "Guide Skill"
+
+    # Reject secret-shaped instructions
+    with pytest.raises(ValueError, match="secret-like"):
+        StaticSkill(
+            skill_id="bad_skill",
+            display_name="Bad",
+            description="Bad",
+            instructions="Use secret key ghp_1234567890abcdef for access",
+        )
+
+
+def test_plugin_provenance_and_trust_validation() -> None:
+    from mia_agent.plugin_models import PluginProvenance, PluginTrust
+
+    prov = PluginProvenance(source="bundled")
+    assert prov.source == "bundled"
+    assert prov.package_name is None
+
+    # Unknown source rejected
+    with pytest.raises(ValueError, match="source"):
+        PluginProvenance.model_validate({"source": "remote_download"})
+
+    trust = PluginTrust(
+        trust_class="declarative",
+        status="declarative",
+        explicit=True,
+    )
+    assert trust.status == "declarative"
+
+
+def test_plugin_manifest_declarative_validation() -> None:
+    from mia_agent.plugin_models import PluginManifest, StaticSkill
+
+    manifest = PluginManifest(
+        plugin_id="declarative_kit",
+        version="1.0.0",
+        plugin_type="declarative",
+        display_name="Declarative Kit",
+        description="Pure static skill kit.",
+        skills=[
+            StaticSkill(
+                skill_id="style_guide",
+                display_name="Style Guide",
+                description="Writing style",
+                instructions="Follow concise tone",
+            )
+        ],
+    )
+    assert manifest.plugin_type == "declarative"
+    assert len(manifest.skills) == 1
+    assert manifest.tool_specs == []
