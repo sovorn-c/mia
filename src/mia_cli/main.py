@@ -32,11 +32,13 @@ agent_app = typer.Typer(help="Create, inspect, and select named Agents.")
 sessions_app = typer.Typer(help="Inspect and manage saved session trees.")
 plugin_app = typer.Typer(help="Install and manage bundled Plugins.")
 template_app = typer.Typer(help="Inspect and instantiate Agent Templates.")
+diagnostics_app = typer.Typer(help="Inspect local operational diagnostics.")
 
 app.add_typer(agent_app, name="agent")
 app.add_typer(sessions_app, name="sessions")
 app.add_typer(plugin_app, name="plugin")
 app.add_typer(template_app, name="template")
+app.add_typer(diagnostics_app, name="diagnostics")
 
 console = Console()
 
@@ -413,7 +415,152 @@ def list_sessions_command(
         size_kb = session_file.stat().st_size / 1024.0
         table.add_row(session_file.stem, f"{size_kb:.1f} KB", str(session_file))
 
+
+def _render_diagnostics(
+    source: str | None = None,
+    agent: str | None = None,
+    session: str | None = None,
+    run: str | None = None,
+    plugin: str | None = None,
+    limit: int = 50,
+) -> None:
+    if source is not None and source not in {"tool", "run", "plugin"}:
+        console.print(
+            f"[red]Invalid source filter '{source}'. Must be 'tool', 'run', or 'plugin'.[/red]"
+        )
+        raise typer.Exit(code=1)
+    if limit <= 0:
+        console.print("[red]Limit must be greater than 0.[/red]")
+        raise typer.Exit(code=1)
+
+    manager = AgentManager()
+    from mia_agent.diagnostics import DiagnosticStore, DiagnosticStoreError
+
+    store = DiagnosticStore(path=manager.get_diagnostics_path())
+    try:
+        records = store.read_records(
+            limit=limit,
+            source=source,
+            agent_id=agent,
+            session_id=session,
+            run_id=run,
+            plugin_id=plugin,
+        )
+    except DiagnosticStoreError as exc:
+        console.print(f"[red]Error reading diagnostics: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        console.print(f"[red]Failed to inspect diagnostics: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    if not records:
+        console.print("[yellow]No diagnostic records found.[/yellow]")
+        return
+
+    table = Table(title="Local Diagnostics", show_lines=True)
+    table.add_column("Timestamp", style="dim")
+    table.add_column("Source", style="bold")
+    table.add_column("Agent")
+    table.add_column("Target")
+    table.add_column("Outcome")
+    table.add_column("Details", overflow="fold")
+
+    import datetime
+    import json
+
+    for r in records:
+        ts_str = datetime.datetime.fromtimestamp(r.timestamp).strftime("%Y-%m-%d %H:%M:%S")
+        target = r.tool_name or r.plugin_id or (r.run_id[:8] if r.run_id else "-")
+        outcome_str = f"{r.action}: {r.outcome}" if r.action else r.outcome
+
+        details_parts = []
+        if r.error:
+            details_parts.append(r.error)
+        if r.details:
+            details_parts.append(json.dumps(r.details))
+        details_text = " | ".join(details_parts) or "-"
+
+        table.add_row(ts_str, r.source, r.agent_id or "-", target, outcome_str, details_text)
+
     console.print(table)
+
+
+@diagnostics_app.callback(invoke_without_command=True)
+def diagnostics_callback(
+    ctx: typer.Context,
+    source: Annotated[
+        str | None,
+        typer.Option("--source", "-s", help="Filter by source: tool, run, plugin"),
+    ] = None,
+    agent: Annotated[
+        str | None,
+        typer.Option("--agent", "-a", help="Filter by Agent ID"),
+    ] = None,
+    session: Annotated[
+        str | None,
+        typer.Option("--session", help="Filter by Session ID"),
+    ] = None,
+    run: Annotated[
+        str | None,
+        typer.Option("--run", help="Filter by Run ID"),
+    ] = None,
+    plugin: Annotated[
+        str | None,
+        typer.Option("--plugin", help="Filter by Plugin ID"),
+    ] = None,
+    limit: Annotated[
+        int,
+        typer.Option("--limit", "-n", help="Maximum records to return"),
+    ] = 50,
+) -> None:
+    """Inspect local operational diagnostics."""
+    if ctx.invoked_subcommand is None:
+        _render_diagnostics(
+            source=source,
+            agent=agent,
+            session=session,
+            run=run,
+            plugin=plugin,
+            limit=limit,
+        )
+
+
+@diagnostics_app.command("list")
+def diagnostics_list(
+    source: Annotated[
+        str | None,
+        typer.Option("--source", "-s", help="Filter by source: tool, run, plugin"),
+    ] = None,
+    agent: Annotated[
+        str | None,
+        typer.Option("--agent", "-a", help="Filter by Agent ID"),
+    ] = None,
+    session: Annotated[
+        str | None,
+        typer.Option("--session", help="Filter by Session ID"),
+    ] = None,
+    run: Annotated[
+        str | None,
+        typer.Option("--run", help="Filter by Run ID"),
+    ] = None,
+    plugin: Annotated[
+        str | None,
+        typer.Option("--plugin", help="Filter by Plugin ID"),
+    ] = None,
+    limit: Annotated[
+        int,
+        typer.Option("--limit", "-n", help="Maximum records to return"),
+    ] = 50,
+) -> None:
+    """List local operational diagnostic records."""
+    _render_diagnostics(
+        source=source,
+        agent=agent,
+        session=session,
+        run=run,
+        plugin=plugin,
+        limit=limit,
+    )
 
 
 @app.command(name="tui")
