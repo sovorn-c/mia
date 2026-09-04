@@ -350,7 +350,7 @@ def test_installed_code_requires_explicit_trust_before_enablement(
     # But cannot be enabled without explicit trust
     assert not plugins.is_trusted("code_tools")
     with pytest.raises(ValueError, match="trust"):
-        plugins.enable("alpha", "code_tools")
+        plugins.enable(alpha.agent_id, "code_tools")
 
     # Explicitly trust the plugin
     plugins.trust_plugin("code_tools")
@@ -361,11 +361,10 @@ def test_installed_code_requires_explicit_trust_before_enablement(
     assert manifest.trust.explicit is True
 
     # Now enablement succeeds
-    enabled = plugins.enable("alpha", "code_tools")
+    enabled = plugins.enable(alpha.agent_id, "code_tools")
     assert "code_tools" in enabled.plugins
 
     # Revoke trust
     plugins.revoke_plugin_trust("code_tools")
     assert not plugins.is_trusted("code_tools")
     assert plugins.get_manifest("code_tools").trust.status == "untrusted"
-

@@ -36,10 +36,7 @@ def discover_entry_points() -> list[Any]:
     """Discover installed Plugin entry points from the allowlisted Mia group."""
     from importlib.metadata import entry_points
 
-    eps = entry_points()
-    if hasattr(eps, "select"):
-        return list(eps.select(group=MIA_PLUGIN_ENTRY_POINT_GROUP))
-    return list(eps.get(MIA_PLUGIN_ENTRY_POINT_GROUP, []))
+    return list(entry_points(group=MIA_PLUGIN_ENTRY_POINT_GROUP))
 
 
 _QUARANTINED_PLUGINS: set[str] = set()

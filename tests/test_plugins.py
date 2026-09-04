@@ -544,4 +544,3 @@ def test_plugin_manifest_declarative_validation() -> None:
     assert manifest.plugin_type == "declarative"
     assert len(manifest.skills) == 1
     assert manifest.tool_specs == []
-
