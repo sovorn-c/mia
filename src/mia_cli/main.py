@@ -17,7 +17,7 @@ from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.events import AgentErrorEvent
 from mia_agent.plugins import PluginManager
-from mia_agent.runtime_events import RunErrorEvent
+from mia_agent.runtime_events import PluginDiagnosticEvent, RunErrorEvent
 from mia_agent.runtime_factory import AgentRuntimeFactory
 from mia_agent.runtime_models import RunRequest
 from mia_cli.renderers.rich_stream import RichStreamRenderer
@@ -93,6 +93,8 @@ async def _run_agent_loop(
                 console.print(
                     f"[bold red]Run error ({envelope.event.stage}): {envelope.event.error}[/bold red]"
                 )
+                continue
+            if isinstance(envelope.event, PluginDiagnosticEvent):
                 continue
             if isinstance(envelope.event, AgentErrorEvent):
                 had_error = True

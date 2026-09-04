@@ -10,8 +10,10 @@ from pathlib import Path
 from mia_agent.agents import AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.events import AgentErrorEvent, AssistantChunkEvent, TurnCompleteEvent
+from mia_agent.plugins import PluginManager
 from mia_agent.runtime_events import (
     AgentEventEnvelope,
+    PluginDiagnosticEvent,
     RunErrorEvent,
 )
 from mia_agent.runtime_events import (
@@ -24,7 +26,7 @@ from mia_agent.runtime_factory import AgentRuntimeFactory
 from mia_agent.runtime_models import AgentRuntime, RunRequest, RuntimeIdentity
 from mia_agent.session import SessionAdmission
 from mia_ai.providers.base import LLMProvider
-from mia_middleware.access import ApprovalCallback
+from mia_middleware.access import ApprovalCallback, sanitize_arguments
 
 
 def _identity_part(value: str | None, fallback: str) -> str:
@@ -126,6 +128,43 @@ class AgentRunner:
         self.last_runtime = runtime
         return runtime
 
+    async def _run_cooperative_cleanup(
+        self,
+        runtime: AgentRuntime | None,
+        identity: RuntimeIdentity,
+        timeout: float = 2.0,
+    ) -> list[AgentEventEnvelope]:
+        if runtime is None or not getattr(runtime, "disposers", None):
+            return []
+        diagnostics: list[AgentEventEnvelope] = []
+        disposers = runtime.disposers
+        object.__setattr__(runtime, "disposers", ())
+        for disposer in reversed(disposers):
+            plugin_id = getattr(disposer, "plugin_id", "plugin")
+            try:
+                async with asyncio.timeout(timeout):
+                    res = disposer()
+                    if res is not None:
+                        await res
+            except TimeoutError:
+                PluginManager.quarantine_plugin(plugin_id)
+                diag = PluginDiagnosticEvent(
+                    plugin_id=plugin_id,
+                    phase="cleanup",
+                    message="cooperative cleanup timed out",
+                    error=f"Plugin '{plugin_id}' exceeded {timeout:g}s cleanup timeout",
+                )
+                diagnostics.append(_envelope(identity, diag))
+            except Exception as exc:
+                diag = PluginDiagnosticEvent(
+                    plugin_id=plugin_id,
+                    phase="cleanup",
+                    message="cooperative cleanup failed",
+                    error=str(sanitize_arguments(str(exc))),
+                )
+                diagnostics.append(_envelope(identity, diag))
+        return diagnostics
+
     async def run(
         self,
         request: RunRequest,
@@ -173,6 +212,7 @@ class AgentRunner:
                 yield err_env
             return
 
+        runtime: AgentRuntime | None = None
         try:
             if agent.agent_id == "research":
                 async for envelope in self._run_research(
@@ -202,12 +242,16 @@ class AgentRunner:
                     break
 
                 if isinstance(event, TurnCompleteEvent):
+                    for diag_env in await self._run_cooperative_cleanup(runtime, identity):
+                        yield diag_env
                     env = _envelope(identity, event)
                     if lifecycle.finalize("success", env):
                         lifecycle.terminal_delivered = True
                         yield env
                     break
                 elif isinstance(event, AgentErrorEvent):
+                    for diag_env in await self._run_cooperative_cleanup(runtime, identity):
+                        yield diag_env
                     err_env = _error_envelope(
                         _safe_error_identity(identity),
                         stage="agent",
@@ -219,6 +263,8 @@ class AgentRunner:
                         yield err_env
                     break
                 elif isinstance(event, RunErrorEvent):
+                    for diag_env in await self._run_cooperative_cleanup(runtime, identity):
+                        yield diag_env
                     err_env = AgentEventEnvelope(**identity.model_dump(), event=event)
                     if lifecycle.finalize(event.code, err_env):
                         lifecycle.terminal_delivered = True
@@ -228,6 +274,8 @@ class AgentRunner:
                     yield _envelope(identity, event)
 
             if not lifecycle.finalized:
+                for diag_env in await self._run_cooperative_cleanup(runtime, identity):
+                    yield diag_env
                 missing_env = _error_envelope(
                     _safe_error_identity(identity),
                     stage="runtime",
@@ -253,6 +301,8 @@ class AgentRunner:
             return
         except Exception as exc:
             if not lifecycle.finalized:
+                for diag_env in await self._run_cooperative_cleanup(runtime, identity):
+                    yield diag_env
                 err_text = str(exc)
                 code = (
                     "invalid_configuration"
@@ -278,7 +328,11 @@ class AgentRunner:
                     lifecycle.terminal_delivered = True
                     yield err_env
         finally:
-            SessionAdmission.release(identity.agent_id, identity.session_id)
+            try:
+                if runtime is not None:
+                    await self._run_cooperative_cleanup(runtime, identity)
+            finally:
+                SessionAdmission.release(identity.agent_id, identity.session_id)
 
     async def prompt(
         self,
@@ -302,6 +356,7 @@ class AgentRunner:
             agent_id=_identity_part(agent_id, "unknown"),
             session_id=_identity_part(session_id, f"session_{uuid.uuid4().hex[:12]}"),
         )
+        runtime: AgentRuntime | None = None
         try:
             agent = self.agent_manager.get_agent(agent_id)
             identity = identity.model_copy(update={"agent_id": agent.agent_id})
@@ -343,6 +398,9 @@ class AgentRunner:
             raise
         except Exception as exc:
             yield _error_envelope(_safe_error_identity(identity), "prompt", str(exc))
+        finally:
+            if runtime is not None:
+                await self._run_cooperative_cleanup(runtime, identity)
 
     async def _prompt_research(
         self,
@@ -448,6 +506,8 @@ class AgentRunner:
             session_id=f"{lifecycle.identity.session_id}_specialist",
             parent_session_id=lifecycle.identity.session_id,
         )
+        specialist: AgentRuntime | None = None
+        coordinator: AgentRuntime | None = None
         findings: list[str] = []
         try:
             specialist = self.factory.build(
@@ -503,6 +563,9 @@ class AgentRunner:
                 lifecycle.terminal_delivered = True
                 yield err_env
             return
+        finally:
+            if specialist is not None:
+                await self._run_cooperative_cleanup(specialist, specialist_identity)
 
         coordinator_identity = RuntimeIdentity(
             run_id=lifecycle.identity.run_id,
@@ -530,12 +593,20 @@ class AgentRunner:
                 if lifecycle.terminal_delivered:
                     break
                 if isinstance(event, TurnCompleteEvent):
+                    for diag_env in await self._run_cooperative_cleanup(
+                        coordinator, coordinator_identity
+                    ):
+                        yield diag_env
                     env = _envelope(coordinator_identity, event)
                     if lifecycle.finalize("success", env):
                         lifecycle.terminal_delivered = True
                         yield env
                     break
                 elif isinstance(event, AgentErrorEvent):
+                    for diag_env in await self._run_cooperative_cleanup(
+                        coordinator, coordinator_identity
+                    ):
+                        yield diag_env
                     err_env = _error_envelope(
                         _safe_error_identity(coordinator_identity),
                         stage="coordinator",
@@ -547,6 +618,10 @@ class AgentRunner:
                         yield err_env
                     break
                 elif isinstance(event, RunErrorEvent):
+                    for diag_env in await self._run_cooperative_cleanup(
+                        coordinator, coordinator_identity
+                    ):
+                        yield diag_env
                     err_env = AgentEventEnvelope(**coordinator_identity.model_dump(), event=event)
                     if lifecycle.finalize(event.code, err_env):
                         lifecycle.terminal_delivered = True
@@ -556,6 +631,10 @@ class AgentRunner:
                     yield _envelope(coordinator_identity, event)
 
             if not lifecycle.finalized:
+                for diag_env in await self._run_cooperative_cleanup(
+                    coordinator, coordinator_identity
+                ):
+                    yield diag_env
                 missing_env = _error_envelope(
                     _safe_error_identity(coordinator_identity),
                     stage="runtime",
@@ -576,6 +655,11 @@ class AgentRunner:
             return
         except Exception as exc:
             if not lifecycle.finalized:
+                if coordinator is not None:
+                    for diag_env in await self._run_cooperative_cleanup(
+                        coordinator, coordinator_identity
+                    ):
+                        yield diag_env
                 err_env = _error_envelope(
                     _safe_error_identity(coordinator_identity),
                     stage="coordinator",
@@ -585,3 +669,6 @@ class AgentRunner:
                 if lifecycle.finalize("provider_error", err_env):
                     lifecycle.terminal_delivered = True
                     yield err_env
+        finally:
+            if coordinator is not None:
+                await self._run_cooperative_cleanup(coordinator, coordinator_identity)

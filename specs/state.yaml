@@ -2,40 +2,11 @@ workflow_mode: solo-git
 session:
   active_flow: build
   active_epic_id: e07
-  active_story_id: e07s03
+  active_story_id: null
   target_version: 0.6.0
 handoff:
-  next_skill: develop-tdd
-  summary: 'bp-plan selected e07 Production Runtime Integrity as the next dependency-eligible
-    epic and planned all three stories in manifest order: e07s01 Canonical Closeable
-    Agent Run Stream (8 BCP, P0), e07s02 Safeguarded Runtime Settings and Session
-    Admission (7 BCP, P0), and e07s03 Final Core Tool Validation and Plugin Boundary
-    (6 BCP, P0). All 12 P0/P1 test scenarios have a dedicated e07 test plan; every
-    story has implementation-ready spec and failing task ledger. The next action is
-    kickoff-branch/bp-build on one e07 branch in the current workspace. The existing
-    blueprint, delivered e01-e06, and e08 host scope remain unchanged. A user-approved
-    selective replan keeps delivered e01-e06 stable, retains runtime integrity as
-    e07, adds e08 Governed Core Extension Host, and renumbers the previous planned
-    epics to e09-e11. The selected Plugin Interface is a narrow Pi-like registration
-    context with DSH/Cordis-inspired dependency-ready activation, owned effects, rollback,
-    and Core-owned cleanup deadlines. Declarative manifests expose inspectable Skills/Templates;
-    explicitly trusted installed code activates runtime Tools/context/observers/middleware.
-    The supported host API cannot replace Core identity, credentials, policy, Sessions,
-    attribution, lifecycle, or terminal truth; trusted Python remains unsandboxed.
-    Scope maps eleven outcomes to e01-e11; blueprint-only e07-e11 add 81 estimated
-    BCP. Downstream operations, documentation, and release gates include Plugin lifecycle,
-    trust, authoring, and compatibility outcomes. The revised plan audit verdict is
-    READY for /bp-plan, not implementation or publication. The post-replan quality
-    gate passed Ruff format/lint, strict mypy, all 166 tests, and the v0.6.0 source/wheel
-    build. Story slicing, acceptance criteria, task plans, and per-story impact/test
-    planning remain intentionally deferred. Independent audit blockers were resolved
-    by separating catalog from Run activation, defining exactly-once Core finalization
-    plus normal, cancellation, and awaited-closure semantics while excluding bare
-    stream abandonment; fixing lifecycle order as atomic finalization, final observation,
-    cleanup decision, then terminal delivery without claiming forced in-process termination,
-    qualifying same-process authority, making e10 depend on e09, and aligning delivered-epic
-    status vocabulary. A final independent audit returned READY with no remaining
-    blocker or concern. e07 planning completed with no blockers.'
+  next_skill: verify-work
+  summary: 'All three stories of epic e07 Production Runtime Integrity are complete and passing: e07s01 (Canonical Closeable Agent Run Stream), e07s02 (Safeguarded Runtime Settings and Session Admission), and e07s03 (Final Core Tool Validation and Plugin Boundary). All 205 tests pass, code is strictly typed with mypy, formatted with ruff, and offline build succeeds.'
   open_decisions: []
 git:
   branch: e07-production-runtime-integrity

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection
+from collections.abc import Awaitable, Callable, Collection, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +18,12 @@ from mia_agent.session.tree import SessionTree
 from mia_ai.providers.anthropic import AnthropicProvider
 from mia_ai.providers.base import LLMProvider
 from mia_ai.providers.openai_compatible import OpenAICompatibleProvider
-from mia_middleware.access import AccessPolicyMiddleware, ApprovalCallback, tool_effect
+from mia_middleware.access import (
+    AccessPolicyMiddleware,
+    ApprovalCallback,
+    FinalCoreToolValidator,
+    tool_effect,
+)
 from mia_middleware.pipeline import ToolPipeline
 from mia_middleware.security import SecurityGuardMiddleware
 from mia_middleware.telemetry import AuditLogMiddleware, CostBudgetMiddleware
@@ -30,6 +35,16 @@ POLICY_RANK: dict[str, int] = {
     "approval-required": 1,
     "full-access": 2,
 }
+
+
+def _attributed_disposer(
+    fn: Callable[[], Any], plugin_id: str
+) -> Callable[[], Awaitable[None] | None]:
+    def _wrapper() -> Any:
+        return fn()
+
+    _wrapper.plugin_id = plugin_id  # type: ignore[attr-defined]
+    return _wrapper
 
 
 class AgentRuntimeFactory:
@@ -154,10 +169,31 @@ class AgentRuntimeFactory:
         capabilities_override: Collection[str] | None = None,
         delegation_service: Any | None = None,
         delegation_depth: int = 0,
+        disposers: Sequence[Callable[[], Awaitable[None] | None]] | None = None,
     ) -> AgentRuntime:
         """Construct an Agent-scoped harness, restoring and annotating its Session."""
         agent = self.agent_manager.get_agent(identity.agent_id)
         namespace = "agent"
+
+        work_dir = cwd or Path.cwd()
+
+        # Stage and validate complete current Plugin Tool set before settings/provider/harness
+        plugin_tools = self.plugin_manager.resolve_tools(agent)
+        plugin_names = [tool.name for tool in plugin_tools]
+
+        available_tools = [
+            ReadFileTool(cwd=work_dir),
+            WriteFileTool(cwd=work_dir),
+            EditFileTool(cwd=work_dir),
+            BashTool(cwd=work_dir),
+            *plugin_tools,
+        ]
+        tool_names = [getattr(tool, "name", "") for tool in available_tools]
+        if len(tool_names) != len(set(tool_names)):
+            raise ValueError("Plugin activation failed: duplicate Tool names are not allowed")
+
+        if agent.tools is not None and capabilities_override is None:
+            agent = agent.model_copy(update={"tools": [*agent.tools, *plugin_names]})
 
         settings = self.resolve_effective_settings(
             agent,
@@ -181,11 +217,6 @@ class AgentRuntimeFactory:
             }
         )
 
-        plugin_tools = self.plugin_manager.resolve_tools(agent)
-        plugin_names = [tool.name for tool in plugin_tools]
-        if agent.tools is not None and capabilities_override is None:
-            agent = agent.model_copy(update={"tools": [*agent.tools, *plugin_names]})
-        work_dir = cwd or Path.cwd()
         target_model = settings.model
 
         if provider is None:
@@ -199,16 +230,6 @@ class AgentRuntimeFactory:
         else:
             model_name = target_model
 
-        available_tools = [
-            ReadFileTool(cwd=work_dir),
-            WriteFileTool(cwd=work_dir),
-            EditFileTool(cwd=work_dir),
-            BashTool(cwd=work_dir),
-            *plugin_tools,
-        ]
-        tool_names = [getattr(tool, "name", "") for tool in available_tools]
-        if len(tool_names) != len(set(tool_names)):
-            raise ValueError("Plugin activation failed: duplicate Tool names are not allowed")
         tools = self.agent_manager.filter_tools(agent, available_tools)
         active_delegation_service = delegation_service or self.delegation_service
         if (
@@ -268,12 +289,23 @@ class AgentRuntimeFactory:
                 "session_id": identity.session_id,
             },
         )
+        collected_disposers: list[Callable[[], Awaitable[None] | None]] = []
+        for tool in tools:
+            pid = getattr(tool, "plugin_id", "plugin")
+            if hasattr(tool, "dispose") and callable(tool.dispose):
+                collected_disposers.append(_attributed_disposer(tool.dispose, pid))
+            elif hasattr(tool, "cleanup") and callable(tool.cleanup):
+                collected_disposers.append(_attributed_disposer(tool.cleanup, pid))
+        if disposers is not None:
+            collected_disposers.extend(disposers)
+
         return AgentRuntime(
             harness=harness,
             identity=identity,
             session_store=session_store,
             agent=agent,
             effective_settings=settings,
+            disposers=tuple(collected_disposers),
         )
 
     @staticmethod
@@ -287,17 +319,19 @@ class AgentRuntimeFactory:
         tool_effects: dict[str, Any] | None = None,
     ) -> ToolPipeline:
         active: list[Any] = []
+        final_validator = None
         if agent is not None and identity is not None:
+            effective_confirmed = (
+                agent.full_access_confirmed
+                if full_access_confirmed is None
+                else full_access_confirmed
+            )
             active.append(
                 AccessPolicyMiddleware(
                     access_policy=agent.access_policy,
                     capabilities=agent.tools,
                     approval_callback=approval_callback,
-                    full_access_confirmed=(
-                        agent.full_access_confirmed
-                        if full_access_confirmed is None
-                        else full_access_confirmed
-                    ),
+                    full_access_confirmed=effective_confirmed,
                     agent_id=agent.agent_id,
                     run_id=identity.run_id,
                     task_id=identity.task_id,
@@ -305,10 +339,18 @@ class AgentRuntimeFactory:
                     tool_effects=tool_effects,
                 )
             )
+            final_validator = FinalCoreToolValidator(
+                agent_id=agent.agent_id,
+                access_policy=agent.access_policy,
+                capabilities=agent.tools,
+                full_access_confirmed=effective_confirmed,
+                tool_effects=tool_effects,
+                approval_callback=approval_callback,
+            )
         active.append(SecurityGuardMiddleware())
         active.append(AuditLogMiddleware())
         active.append(CostBudgetMiddleware())
-        return ToolPipeline(active)
+        return ToolPipeline(active, final_validator=final_validator)
 
     @staticmethod
     def _restore_session(

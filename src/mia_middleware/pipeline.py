@@ -30,8 +30,13 @@ ToolMiddleware = Callable[
 class ToolPipeline:
     """Async onion pipeline runner executing middlewares in registration order."""
 
-    def __init__(self, middlewares: list[ToolMiddleware] | None = None) -> None:
+    def __init__(
+        self,
+        middlewares: list[ToolMiddleware] | None = None,
+        final_validator: Callable[[ToolCallContext], Awaitable[None] | None] | None = None,
+    ) -> None:
         self.middlewares: list[ToolMiddleware] = list(middlewares or [])
+        self.final_validator = final_validator
 
     def use(self, middleware: ToolMiddleware) -> ToolPipeline:
         """Register a middleware at the end of the pipeline chain."""
@@ -44,14 +49,67 @@ class ToolPipeline:
         core_executor: Callable[[], Awaitable[Any]],
     ) -> Any:
         """Execute the middleware chain wrapping the core tool executor."""
+        initial_tool_name = ctx.tool_name
+        initial_plugin_id = ctx.plugin_id
+
+        execution_count = 0
+        core_rejection: BaseException | None = None
 
         async def dispatch(index: int) -> Any:
+            nonlocal execution_count, core_rejection
             if index < len(self.middlewares):
                 middleware = self.middlewares[index]
                 return await middleware(ctx, lambda: dispatch(index + 1))
-            res = core_executor()
-            if hasattr(res, "__await__"):
-                return await res
-            return res
 
-        return await dispatch(0)
+            # Final Core Gate right before executor
+            if execution_count > 0:
+                core_rejection = RuntimeError(
+                    "Core tool executor cannot be invoked more than once for a single tool call"
+                )
+                raise core_rejection
+
+            if ctx.tool_name != initial_tool_name:
+                core_rejection = ValueError(
+                    f"Tool identity cannot be modified: requested '{initial_tool_name}', got '{ctx.tool_name}'"
+                )
+                raise core_rejection
+
+            if ctx.plugin_id != initial_plugin_id:
+                core_rejection = ValueError("Tool attribution cannot be modified")
+                raise core_rejection
+
+            if self.final_validator is not None:
+                try:
+                    val_res = self.final_validator(ctx)
+                    if val_res is not None:
+                        await val_res
+                except BaseException as exc:
+                    core_rejection = exc
+                    raise
+
+            execution_count += 1
+            try:
+                res = core_executor()
+                if hasattr(res, "__await__"):
+                    return await res
+                return res
+            except BaseException as exc:
+                core_rejection = exc
+                raise
+
+        try:
+            result = await dispatch(0)
+        except BaseException as exc:
+            if core_rejection is not None:
+                raise core_rejection from exc
+            raise
+
+        if core_rejection is not None:
+            raise core_rejection
+
+        if execution_count == 0:
+            raise RuntimeError(
+                "Tool execution was bypassed: middleware cannot fabricate success without Core execution"
+            )
+
+        return result

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import inspect
 import re
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, field_validator
@@ -220,7 +220,84 @@ class AccessPolicyMiddleware:
             decision = await decision
         if not decision:
             raise PolicyRejectedError(f"approval denied for Tool '{ctx.tool_name}'")
+        ctx.metadata["approved_arguments"] = dict(ctx.arguments)
         return await next_fn()
+
+
+class FinalCoreToolValidator:
+    """Core-owned final validation gate immediately preceding Tool execution."""
+
+    def __init__(
+        self,
+        *,
+        agent_id: str = "",
+        access_policy: str = "approval-required",
+        capabilities: Collection[str] | None = None,
+        full_access_confirmed: bool = False,
+        tool_effects: Mapping[str, ToolEffect] | None = None,
+        approval_callback: ApprovalCallback | None = None,
+    ) -> None:
+        from mia_middleware.security import SecurityGuardMiddleware
+
+        self.agent_id = agent_id
+        self.access_policy = normalize_access_level(access_policy)
+        self.capabilities = frozenset(capabilities) if capabilities is not None else None
+        self.full_access_confirmed = full_access_confirmed
+        self.tool_effects = dict(tool_effects or {})
+        self.approval_callback = approval_callback
+        self.security_guard = SecurityGuardMiddleware(raise_on_violation=True)
+
+    async def __call__(self, ctx: ToolCallContext) -> None:
+        # 1. Validate capability scope
+        if self.capabilities is not None and ctx.tool_name not in self.capabilities:
+            raise PolicyRejectedError(
+                f"Tool '{ctx.tool_name}' is outside the Agent capability scope"
+            )
+
+        # 2. Check declared effect
+        effect = self.tool_effects.get(ctx.tool_name) or tool_effect(ctx.tool_name, ctx.metadata)
+
+        # 3. Read-only rejection
+        if self.access_policy == "read-only" and effect == "side-effecting":
+            raise PolicyRejectedError(
+                f"Tool '{ctx.tool_name}' is side-effecting under read-only access"
+            )
+
+        # 4. Full-access confirmation check
+        if self.access_policy == "full-access" and not self.full_access_confirmed:
+            raise PolicyRejectedError("full-access requires explicit user confirmation")
+
+        # 5. Security guard check on final arguments
+        async def _noop() -> None:
+            return None
+
+        await self.security_guard(ctx, _noop)
+
+        # 6. Approval on final arguments
+        if self.access_policy == "approval-required" and effect == "side-effecting":
+            approved_args = ctx.metadata.get("approved_arguments")
+            if approved_args is None or approved_args != ctx.arguments:
+                if self.approval_callback is None:
+                    raise PolicyRejectedError(
+                        f"approval is required before side-effecting Tool '{ctx.tool_name}'"
+                    )
+                request = ApprovalRequest(
+                    agent_id=self.agent_id or str(ctx.metadata.get("agent_id", "")),
+                    run_id=str(ctx.metadata.get("run_id", "")),
+                    task_id=str(ctx.metadata.get("task_id", "")),
+                    session_id=ctx.session_id,
+                    tool_name=ctx.tool_name,
+                    effect=effect,
+                    arguments=sanitize_arguments(ctx.arguments),
+                )
+                decision = self.approval_callback(request)
+                if inspect.isawaitable(decision):
+                    decision = await decision
+                if not decision:
+                    raise PolicyRejectedError(
+                        f"Tool '{ctx.tool_name}' was not approved for final arguments"
+                    )
+                ctx.metadata["approved_arguments"] = dict(ctx.arguments)
 
 
 def sanitize_arguments(value: Any, key: str = "") -> Any:
@@ -247,6 +324,7 @@ __all__ = [
     "AccessPolicy",
     "ApprovalRequest",
     "EffectiveAccess",
+    "FinalCoreToolValidator",
     "PolicyRejectedError",
     "TOOL_EFFECTS",
     "ToolEffect",

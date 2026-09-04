@@ -30,7 +30,7 @@ from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.auth.openai_auth import OpenAIOAuthManager
 from mia_agent.events import StepEndEvent, TurnCompleteEvent
 from mia_agent.harness import AgentHarness
-from mia_agent.runtime_events import RunErrorEvent
+from mia_agent.runtime_events import PluginDiagnosticEvent, RunErrorEvent
 from mia_agent.runtime_models import AgentRuntime, RunRequest
 from mia_agent.session.entries import LeafEntry, MessageEntry, SessionInfoEntry
 from mia_agent.session.jsonl import JsonlSessionStore
@@ -850,6 +850,8 @@ class MiaREPL:
                         self.console.print(
                             f"[bold red]Run error ({event.stage}): {event.error}[/bold red]"
                         )
+                        continue
+                    if isinstance(event, PluginDiagnosticEvent):
                         continue
                     self.stream_renderer.on_event(event)
                     if isinstance(event, StepEndEvent):

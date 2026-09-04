@@ -123,7 +123,7 @@ epics:
         tasks_failing: 0
   e07:
     title: Production Runtime Integrity
-    status: planned
+    status: passing
     bcps: 21
     stories:
       e07s01:
@@ -144,12 +144,12 @@ epics:
         tasks_failing: 0
       e07s03:
         title: Final Core Tool Validation and Plugin Boundary
-        status: planned
+        status: passing
         bcps: 6
         risk: P0
         tasks_total: 5
-        tasks_passing: 0
-        tasks_failing: 5
+        tasks_passing: 5
+        tasks_failing: 0
   e08:
     title: Governed Core Extension Host
     status: planned

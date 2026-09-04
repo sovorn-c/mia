@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -153,6 +154,7 @@ class AgentRuntime:
     session_store: JsonlSessionStore
     agent: Agent
     effective_settings: EffectiveSettings | None = None
+    disposers: tuple[Callable[[], Awaitable[None] | None], ...] = ()
 
 
 __all__ = ["AgentRuntime", "EffectiveSettings", "RunRequest", "RuntimeIdentity"]
