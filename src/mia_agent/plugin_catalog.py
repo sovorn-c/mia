@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from mia_agent.plugin_host import PluginContext
 
 from mia_agent.plugin_models import (
     AgentTemplate,
@@ -23,6 +26,17 @@ class NotesPlugin:
     @property
     def manifest(self) -> PluginManifest:
         return notes_manifest()
+
+    async def activate(self, context: PluginContext) -> None:
+        """Activate Notes through the governed host context."""
+        from mia_tools.notes import NoteCreateTool, NoteListTool, NoteReadTool
+
+        for tool in [
+            NoteCreateTool(context.data_dir),
+            NoteListTool(context.data_dir),
+            NoteReadTool(context.data_dir),
+        ]:
+            context.register(tool)
 
     def build_tools(
         self,
