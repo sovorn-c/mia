@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from mia_agent.agents import AgentManager
-from mia_agent.recovery import RecoveryFinding, RecoveryReport, RecoveryVerifier
+from mia_agent.recovery import RecoveryReport, RecoveryVerifier
 
 
 def test_clean_environment_reports_clean(tmp_path: Path) -> None:
@@ -18,7 +16,7 @@ def test_clean_environment_reports_clean(tmp_path: Path) -> None:
 
     agent_json = agents_dir / "mia" / "agent.json"
     agent_json.parent.mkdir(parents=True, exist_ok=True)
-    agent_json.write_text('{"agent_id": "mia", "name": "Mia"}', encoding="utf-8")
+    agent_json.write_text('{"agent_id": "mia", "display_name": "Mia"}', encoding="utf-8")
 
     session_file = agents_dir / "mia" / "sessions" / "s1.jsonl"
     session_file.parent.mkdir(parents=True, exist_ok=True)
