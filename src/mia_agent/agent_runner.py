@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import AsyncGenerator, AsyncIterator, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Sequence
 from pathlib import Path
+from typing import Any
 
 from mia_agent.agents import AgentManager
 from mia_agent.auth.config import ConfigManager
 from mia_agent.events import AgentErrorEvent, AssistantChunkEvent, TurnCompleteEvent
+from mia_agent.plugin_host import PluginActivation
 from mia_agent.plugins import PluginManager
 from mia_agent.runtime_events import (
     AgentEventEnvelope,
@@ -128,13 +130,44 @@ class AgentRunner:
         self.last_runtime = runtime
         return runtime
 
+    @staticmethod
+    async def _notify_observers(
+        observers: Sequence[Any],
+        payload: Any,
+    ) -> None:
+        for obs in observers:
+            try:
+                res = obs(payload)
+                if isinstance(res, Awaitable):
+                    await res
+            except Exception:
+                pass
+
+    async def _emit(
+        self,
+        env: AgentEventEnvelope,
+        activation: PluginActivation | None = None,
+    ) -> AgentEventEnvelope:
+        if activation is not None:
+            await self._notify_observers(activation.observers.get("event_emitted", ()), env)
+        return env
+
     async def _run_cooperative_cleanup(
         self,
         runtime: AgentRuntime | None,
         identity: RuntimeIdentity,
         timeout: float = 2.0,
     ) -> list[AgentEventEnvelope]:
-        if runtime is None or not getattr(runtime, "disposers", None):
+        if runtime is None or getattr(runtime, "cleanup_done", False):
+            return []
+        object.__setattr__(runtime, "cleanup_done", True)
+
+        activation = getattr(runtime, "activation", None)
+        if activation is not None:
+            finished_observers = activation.observers.get("run_finished", ())
+            await self._notify_observers(finished_observers, identity)
+
+        if not getattr(runtime, "disposers", None):
             return []
         diagnostics: list[AgentEventEnvelope] = []
         disposers = runtime.disposers
@@ -221,6 +254,7 @@ class AgentRunner:
                 admitted = False
 
         runtime: AgentRuntime | None = None
+        activation: PluginActivation | None = None
         try:
             if agent.agent_id == "research":
                 async for envelope in self._run_research(
@@ -234,6 +268,15 @@ class AgentRunner:
                     yield envelope
                 return
 
+            if agent.plugins:
+                plan = self.factory.plugin_host.plan(agent, self.factory.plugin_manager)
+                activation = await self.factory.plugin_host.activate(
+                    plan,
+                    agent=agent,
+                    agent_manager=self.agent_manager,
+                    plugin_manager=self.factory.plugin_manager,
+                )
+
             runtime = self.factory.build(
                 identity=identity,
                 provider=provider,
@@ -243,8 +286,12 @@ class AgentRunner:
                 context_window=request.context_window,
                 approval_callback=approval_callback,
                 full_access_confirmed=request.full_access_confirmed,
+                activation=activation,
             )
             self.last_runtime = runtime
+
+            if activation is not None:
+                await self._notify_observers(activation.observers.get("run_started", ()), identity)
 
             async for event in runtime.harness.prompt(request.prompt_text):
                 if lifecycle.terminal_delivered:
@@ -256,9 +303,9 @@ class AgentRunner:
                         cleanup_envelopes = await self._run_cooperative_cleanup(runtime, identity)
                         release_admission()
                         for diag_env in cleanup_envelopes:
-                            yield diag_env
+                            yield await self._emit(diag_env, activation)
                         lifecycle.terminal_delivered = True
-                        yield env
+                        yield await self._emit(env, activation)
                     break
                 elif isinstance(event, AgentErrorEvent):
                     err_env = _error_envelope(
@@ -271,9 +318,9 @@ class AgentRunner:
                         cleanup_envelopes = await self._run_cooperative_cleanup(runtime, identity)
                         release_admission()
                         for diag_env in cleanup_envelopes:
-                            yield diag_env
+                            yield await self._emit(diag_env, activation)
                         lifecycle.terminal_delivered = True
-                        yield err_env
+                        yield await self._emit(err_env, activation)
                     break
                 elif isinstance(event, RunErrorEvent):
                     err_env = AgentEventEnvelope(**identity.model_dump(), event=event)
@@ -281,12 +328,12 @@ class AgentRunner:
                         cleanup_envelopes = await self._run_cooperative_cleanup(runtime, identity)
                         release_admission()
                         for diag_env in cleanup_envelopes:
-                            yield diag_env
+                            yield await self._emit(diag_env, activation)
                         lifecycle.terminal_delivered = True
-                        yield err_env
+                        yield await self._emit(err_env, activation)
                     break
                 else:
-                    yield _envelope(identity, event)
+                    yield await self._emit(_envelope(identity, event), activation)
 
             if not lifecycle.finalized:
                 missing_env = _error_envelope(
@@ -299,9 +346,9 @@ class AgentRunner:
                     cleanup_envelopes = await self._run_cooperative_cleanup(runtime, identity)
                     release_admission()
                     for diag_env in cleanup_envelopes:
-                        yield diag_env
+                        yield await self._emit(diag_env, activation)
                     lifecycle.terminal_delivered = True
-                    yield missing_env
+                    yield await self._emit(missing_env, activation)
 
         except asyncio.CancelledError:
             if not lifecycle.finalized:
@@ -313,7 +360,7 @@ class AgentRunner:
             else:
                 if not lifecycle.terminal_delivered and lifecycle.terminal_envelope is not None:
                     lifecycle.terminal_delivered = True
-                    yield lifecycle.terminal_envelope
+                    yield await self._emit(lifecycle.terminal_envelope, activation)
                 return
         except GeneratorExit:
             if not lifecycle.finalized:
@@ -349,9 +396,9 @@ class AgentRunner:
                     cleanup_envelopes = await self._run_cooperative_cleanup(runtime, identity)
                     release_admission()
                     for diag_env in cleanup_envelopes:
-                        yield diag_env
+                        yield await self._emit(diag_env, activation)
                     lifecycle.terminal_delivered = True
-                    yield err_env
+                    yield await self._emit(err_env, activation)
         finally:
             try:
                 if runtime is not None:

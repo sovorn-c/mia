@@ -1079,4 +1079,3 @@ def test_event_loop_blocking_python_limit_documented() -> None:
     time.sleep(0.01)
     duration = time.monotonic() - start
     assert duration >= 0.009
-

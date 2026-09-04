@@ -157,6 +157,7 @@ class AgentRuntime:
     effective_settings: EffectiveSettings | None = None
     disposers: tuple[Callable[[], Awaitable[None] | None], ...] = ()
     activation: Any | None = None
+    cleanup_done: bool = False
 
 
 __all__ = ["AgentRuntime", "EffectiveSettings", "RunRequest", "RuntimeIdentity"]
