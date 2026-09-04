@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.6.0
-updated_at: '2026-09-04T21:07:11Z'
+updated_at: '2026-09-04T21:55:57Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-09-03T08:22:40Z'
@@ -157,7 +157,7 @@ epics:
     stories:
       e08s01:
         title: Typed Plugin Contract, Trust, and Static Catalog
-        status: completed
+        status: done
         started_at: '2026-09-04T21:16:00Z'
         bcps: 7
         risk: P0
@@ -166,7 +166,7 @@ epics:
         tasks_failing: 0
       e08s02:
         title: Transactional Run Activation and Owned Plugin Lifecycle
-        status: completed
+        status: done
         started_at: '2026-09-04T21:21:00Z'
         bcps: 8
         risk: P0
@@ -175,7 +175,7 @@ epics:
         tasks_failing: 0
       e08s03:
         title: Core Boundary, Notes Migration, and Compatibility
-        status: completed
+        status: done
         bcps: 6
         risk: P0
         tasks_total: 5

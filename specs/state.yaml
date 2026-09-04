@@ -1,15 +1,18 @@
 workflow_mode: solo-git
 session:
-  active_flow: build_epic
-  active_epic_id: e08
-  active_story_id: e08s03
+  active_flow: plan
+  active_epic_id: null
+  active_story_id: null
   target_version: 0.6.0
 handoff:
-  next_skill: verify-work
-  summary: 'e08 (e08s01, e08s02, e08s03) complete with all quality gates passing.'
+  next_skill: survey-context
+  summary: 'Governed Core Extension Host was merged into main and its completed capsule
+    was archived. Release gates passed: 239 tests, 88% overall and 96% business-boundary
+    coverage, clean Ruff/Mypy/build, public-surface and wheel checks, and independent
+    review. The next epic (e09 Local Operations and Recovery) can now be scoped.'
   open_decisions: []
 git:
-  branch: e08-governed-core-extension-host
+  branch: main
 environment:
   package_manager: uv 0.10.11
   python: 3.14.6
@@ -30,19 +33,17 @@ metrics:
       calls: 5
       total_seconds: 10063.0
       avg_seconds: 2012.6
-      _start: '2026-09-04T21:16:44Z'
     verify-work:
       calls: 3
       total_seconds: 1103.0
       avg_seconds: 367.6666666666667
-      _start: '2026-09-02T03:21:45Z'
     audit-code:
       calls: 1
       total_seconds: 342.0
       avg_seconds: 342.0
     release-branch:
-      calls: 2
-      total_seconds: 266.0
+      calls: 3
+      total_seconds: 399.0
       avg_seconds: 133.0
     survey-context:
       calls: 2

@@ -157,8 +157,8 @@ epics:
   - id: e08
     slug: governed-core-extension-host
     title: Governed Core Extension Host
-    status: planned
-    capsule_dir: specs/epics/e08-governed-core-extension-host
+    status: completed
+    capsule_dir: specs/epics/archive/e08-governed-core-extension-host
     outcome: >-
       Developers can extend durable Agents through a small typed Plugin contract that cannot replace
       Core identity, trust, access, Session, attribution, cleanup, or outcome ownership through its
