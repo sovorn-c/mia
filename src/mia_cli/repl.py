@@ -31,7 +31,7 @@ from mia_agent.auth.openai_auth import OpenAIOAuthManager
 from mia_agent.events import StepEndEvent, TurnCompleteEvent
 from mia_agent.harness import AgentHarness
 from mia_agent.runtime_events import RunErrorEvent
-from mia_agent.runtime_models import AgentRuntime
+from mia_agent.runtime_models import AgentRuntime, RunRequest
 from mia_agent.session.entries import LeafEntry, MessageEntry, SessionInfoEntry
 from mia_agent.session.jsonl import JsonlSessionStore
 from mia_agent.session.tree import SessionTree
@@ -829,27 +829,33 @@ class MiaREPL:
 
         try:
             self.stream_renderer.show_thinking_trace = self.show_thinking_trace
-            async for envelope in self.agent_runner.prompt(
-                prompt,
+            request = RunRequest(
+                prompt_text=prompt,
                 agent_id=self.agent_id,
-                provider=self.custom_provider,
                 model_override=self.model_name,
                 session_id=self.session_id,
                 cwd=self.cwd,
-                approval_callback=self._approval_callback,
-            ):
-                event = envelope.event
-                if isinstance(event, RunErrorEvent):
-                    self.stream_renderer._stop_status()
-                    self.console.print(
-                        f"[bold red]Run error ({event.stage}): {event.error}[/bold red]"
-                    )
-                    continue
-                self.stream_renderer.on_event(event)
-                if isinstance(event, StepEndEvent):
-                    self.total_tokens += event.input_tokens + event.output_tokens
-                elif isinstance(event, TurnCompleteEvent):
-                    self.total_cost_usd += event.total_cost_usd
+            )
+            async with contextlib.aclosing(
+                self.agent_runner.run(
+                    request,
+                    provider=self.custom_provider,
+                    approval_callback=self._approval_callback,
+                )
+            ) as stream:
+                async for envelope in stream:
+                    event = envelope.event
+                    if isinstance(event, RunErrorEvent):
+                        self.stream_renderer._stop_status()
+                        self.console.print(
+                            f"[bold red]Run error ({event.stage}): {event.error}[/bold red]"
+                        )
+                        continue
+                    self.stream_renderer.on_event(event)
+                    if isinstance(event, StepEndEvent):
+                        self.total_tokens += event.input_tokens + event.output_tokens
+                    elif isinstance(event, TurnCompleteEvent):
+                        self.total_cost_usd += event.total_cost_usd
             if self.agent_runner.last_runtime is not None:
                 self.agent_runtime = self.agent_runner.last_runtime
                 self.harness = self.agent_runtime.harness

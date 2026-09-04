@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -175,13 +176,14 @@ class DelegationService:
         terminal: str | None = None
         terminal_error: str | None = None
         async with asyncio.timeout(request.timeout):
-            async for event in runtime.harness.prompt(request.prompt):
-                if isinstance(event, AssistantChunkEvent) and event.delta_text:
-                    response.append(event.delta_text)
-                elif isinstance(event, AgentErrorEvent):
-                    terminal_error = event.error
-                elif isinstance(event, TurnCompleteEvent):
-                    terminal = event.stop_reason
+            async with contextlib.aclosing(runtime.harness.prompt(request.prompt)) as stream:
+                async for event in stream:
+                    if isinstance(event, AssistantChunkEvent) and event.delta_text:
+                        response.append(event.delta_text)
+                    elif isinstance(event, AgentErrorEvent):
+                        terminal_error = event.error
+                    elif isinstance(event, TurnCompleteEvent):
+                        terminal = event.stop_reason
 
         content = "".join(response).strip()
         if terminal_error:

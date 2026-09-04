@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from pathlib import Path
 from typing import Annotated
 
@@ -18,6 +19,7 @@ from mia_agent.events import AgentErrorEvent
 from mia_agent.plugins import PluginManager
 from mia_agent.runtime_events import RunErrorEvent
 from mia_agent.runtime_factory import AgentRuntimeFactory
+from mia_agent.runtime_models import RunRequest
 from mia_cli.renderers.rich_stream import RichStreamRenderer
 from mia_middleware.access import ApprovalCallback, ApprovalRequest
 
@@ -69,26 +71,32 @@ async def _run_agent_loop(
         factory=AgentRuntimeFactory(agent_manager=manager),
         agent_manager=manager,
     )
-    async for envelope in runner.prompt(
-        prompt_text,
+    request = RunRequest(
+        prompt_text=prompt_text,
         agent_id=agent_name,
         model_override=model_override,
         session_id=session_id,
-        cwd=cwd,
         compaction_threshold=compaction_threshold,
         context_window=context_window,
-        approval_callback=approval_callback,
-    ):
-        if isinstance(envelope.event, RunErrorEvent):
-            had_error = True
-            renderer._stop_status()
-            console.print(
-                f"[bold red]Run error ({envelope.event.stage}): {envelope.event.error}[/bold red]"
-            )
-            continue
-        if isinstance(envelope.event, AgentErrorEvent):
-            had_error = True
-        renderer.on_event(envelope.event)
+        cwd=cwd,
+    )
+    async with contextlib.aclosing(
+        runner.run(
+            request,
+            approval_callback=approval_callback,
+        )
+    ) as stream:
+        async for envelope in stream:
+            if isinstance(envelope.event, RunErrorEvent):
+                had_error = True
+                renderer._stop_status()
+                console.print(
+                    f"[bold red]Run error ({envelope.event.stage}): {envelope.event.error}[/bold red]"
+                )
+                continue
+            if isinstance(envelope.event, AgentErrorEvent):
+                had_error = True
+            renderer.on_event(envelope.event)
     return not had_error
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from collections.abc import Awaitable
 from pathlib import Path
@@ -19,7 +20,7 @@ from mia_agent.agent_runner import AgentRunner
 from mia_agent.agents import AgentManager
 from mia_agent.events import AssistantChunkEvent, StepEndEvent, TurnCompleteEvent
 from mia_agent.runtime_events import AgentEventEnvelope, error_envelope
-from mia_agent.runtime_models import RuntimeIdentity
+from mia_agent.runtime_models import RunRequest, RuntimeIdentity
 from mia_ai.providers.base import LLMProvider
 from mia_cli.tui.panes import AgentPaneContainer
 from mia_cli.tui.sidebar import AgentSidebar
@@ -229,16 +230,22 @@ class MiaApp(App[None]):
     async def run_agent_turn_worker(self, agent_id: str, prompt_text: str) -> None:
         """Run one Agent prompt through AgentRunner and render its events."""
         try:
-            async for envelope in self.agent_runner.prompt(
-                prompt_text,
+            request = RunRequest(
+                prompt_text=prompt_text,
                 agent_id=agent_id,
-                provider=self.provider,
                 model_override=self.model_name,
                 cwd=self.cwd,
                 session_id=f"tui_{agent_id}",
-                approval_callback=self.approval_callback,
-            ):
-                self._process_event_in_main_thread(envelope)
+            )
+            async with contextlib.aclosing(
+                self.agent_runner.run(
+                    request,
+                    provider=self.provider,
+                    approval_callback=self.approval_callback,
+                )
+            ) as stream:
+                async for envelope in stream:
+                    self._process_event_in_main_thread(envelope)
         except Exception as exc:
             identity = RuntimeIdentity(
                 run_id="tui",
