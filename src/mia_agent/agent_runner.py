@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from pathlib import Path
 
 from mia_agent.agents import AgentManager
@@ -212,6 +212,14 @@ class AgentRunner:
                 yield err_env
             return
 
+        admitted = True
+
+        def release_admission() -> None:
+            nonlocal admitted
+            if admitted:
+                SessionAdmission.release(identity.agent_id, identity.session_id)
+                admitted = False
+
         runtime: AgentRuntime | None = None
         try:
             if agent.agent_id == "research":
@@ -221,6 +229,7 @@ class AgentRunner:
                     provider=provider,
                     cwd=effective_cwd,
                     approval_callback=approval_callback,
+                    release_admission=release_admission,
                 ):
                     yield envelope
                 return
@@ -242,16 +251,16 @@ class AgentRunner:
                     break
 
                 if isinstance(event, TurnCompleteEvent):
-                    for diag_env in await self._run_cooperative_cleanup(runtime, identity):
-                        yield diag_env
                     env = _envelope(identity, event)
                     if lifecycle.finalize("success", env):
+                        cleanup_envelopes = await self._run_cooperative_cleanup(runtime, identity)
+                        release_admission()
+                        for diag_env in cleanup_envelopes:
+                            yield diag_env
                         lifecycle.terminal_delivered = True
                         yield env
                     break
                 elif isinstance(event, AgentErrorEvent):
-                    for diag_env in await self._run_cooperative_cleanup(runtime, identity):
-                        yield diag_env
                     err_env = _error_envelope(
                         _safe_error_identity(identity),
                         stage="agent",
@@ -259,14 +268,20 @@ class AgentRunner:
                         code="agent_error",
                     )
                     if lifecycle.finalize("agent_error", err_env):
+                        cleanup_envelopes = await self._run_cooperative_cleanup(runtime, identity)
+                        release_admission()
+                        for diag_env in cleanup_envelopes:
+                            yield diag_env
                         lifecycle.terminal_delivered = True
                         yield err_env
                     break
                 elif isinstance(event, RunErrorEvent):
-                    for diag_env in await self._run_cooperative_cleanup(runtime, identity):
-                        yield diag_env
                     err_env = AgentEventEnvelope(**identity.model_dump(), event=event)
                     if lifecycle.finalize(event.code, err_env):
+                        cleanup_envelopes = await self._run_cooperative_cleanup(runtime, identity)
+                        release_admission()
+                        for diag_env in cleanup_envelopes:
+                            yield diag_env
                         lifecycle.terminal_delivered = True
                         yield err_env
                     break
@@ -274,8 +289,6 @@ class AgentRunner:
                     yield _envelope(identity, event)
 
             if not lifecycle.finalized:
-                for diag_env in await self._run_cooperative_cleanup(runtime, identity):
-                    yield diag_env
                 missing_env = _error_envelope(
                     _safe_error_identity(identity),
                     stage="runtime",
@@ -283,12 +296,19 @@ class AgentRunner:
                     code="missing_terminal",
                 )
                 if lifecycle.finalize("missing_terminal", missing_env):
+                    cleanup_envelopes = await self._run_cooperative_cleanup(runtime, identity)
+                    release_admission()
+                    for diag_env in cleanup_envelopes:
+                        yield diag_env
                     lifecycle.terminal_delivered = True
                     yield missing_env
 
         except asyncio.CancelledError:
             if not lifecycle.finalized:
                 lifecycle.finalize("cancelled")
+                if runtime is not None:
+                    await self._run_cooperative_cleanup(runtime, identity)
+                release_admission()
                 raise
             else:
                 if not lifecycle.terminal_delivered and lifecycle.terminal_envelope is not None:
@@ -298,11 +318,12 @@ class AgentRunner:
         except GeneratorExit:
             if not lifecycle.finalized:
                 lifecycle.finalize("cancelled")
+                if runtime is not None:
+                    await self._run_cooperative_cleanup(runtime, identity)
+                release_admission()
             return
         except Exception as exc:
             if not lifecycle.finalized:
-                for diag_env in await self._run_cooperative_cleanup(runtime, identity):
-                    yield diag_env
                 err_text = str(exc)
                 code = (
                     "invalid_configuration"
@@ -325,6 +346,10 @@ class AgentRunner:
                     code=code,
                 )
                 if lifecycle.finalize(code, err_env):
+                    cleanup_envelopes = await self._run_cooperative_cleanup(runtime, identity)
+                    release_admission()
+                    for diag_env in cleanup_envelopes:
+                        yield diag_env
                     lifecycle.terminal_delivered = True
                     yield err_env
         finally:
@@ -332,7 +357,7 @@ class AgentRunner:
                 if runtime is not None:
                     await self._run_cooperative_cleanup(runtime, identity)
             finally:
-                SessionAdmission.release(identity.agent_id, identity.session_id)
+                release_admission()
 
     async def prompt(
         self,
@@ -498,7 +523,14 @@ class AgentRunner:
         provider: LLMProvider | None,
         cwd: Path | None,
         approval_callback: ApprovalCallback | None,
+        release_admission: Callable[[], None] | None = None,
     ) -> AsyncGenerator[AgentEventEnvelope, None]:
+        def _do_release_admission() -> None:
+            if release_admission is not None:
+                release_admission()
+            else:
+                SessionAdmission.release(lifecycle.identity.agent_id, lifecycle.identity.session_id)
+
         specialist_identity = RuntimeIdentity(
             run_id=f"run_{uuid.uuid4().hex}",
             task_id="specialist",
@@ -531,12 +563,24 @@ class AgentRunner:
                         code="agent_error",
                     )
                     if lifecycle.finalize("agent_error", err_env):
+                        cleanup_envelopes = await self._run_cooperative_cleanup(
+                            specialist, specialist_identity
+                        )
+                        _do_release_admission()
+                        for diag_env in cleanup_envelopes:
+                            yield diag_env
                         lifecycle.terminal_delivered = True
                         yield err_env
                     return
                 elif isinstance(event, RunErrorEvent):
                     err_env = AgentEventEnvelope(**specialist_identity.model_dump(), event=event)
                     if lifecycle.finalize(event.code, err_env):
+                        cleanup_envelopes = await self._run_cooperative_cleanup(
+                            specialist, specialist_identity
+                        )
+                        _do_release_admission()
+                        for diag_env in cleanup_envelopes:
+                            yield diag_env
                         lifecycle.terminal_delivered = True
                         yield err_env
                     return
@@ -547,10 +591,21 @@ class AgentRunner:
         except asyncio.CancelledError:
             if not lifecycle.finalized:
                 lifecycle.finalize("cancelled")
-            raise
+                if specialist is not None:
+                    await self._run_cooperative_cleanup(specialist, specialist_identity)
+                _do_release_admission()
+                raise
+            else:
+                if not lifecycle.terminal_delivered and lifecycle.terminal_envelope is not None:
+                    lifecycle.terminal_delivered = True
+                    yield lifecycle.terminal_envelope
+                return
         except GeneratorExit:
             if not lifecycle.finalized:
                 lifecycle.finalize("cancelled")
+                if specialist is not None:
+                    await self._run_cooperative_cleanup(specialist, specialist_identity)
+                _do_release_admission()
             return
         except Exception as exc:
             err_env = _error_envelope(
@@ -560,6 +615,12 @@ class AgentRunner:
                 code="provider_error",
             )
             if lifecycle.finalize("provider_error", err_env):
+                cleanup_envelopes = await self._run_cooperative_cleanup(
+                    specialist, specialist_identity
+                )
+                _do_release_admission()
+                for diag_env in cleanup_envelopes:
+                    yield diag_env
                 lifecycle.terminal_delivered = True
                 yield err_env
             return
@@ -593,20 +654,18 @@ class AgentRunner:
                 if lifecycle.terminal_delivered:
                     break
                 if isinstance(event, TurnCompleteEvent):
-                    for diag_env in await self._run_cooperative_cleanup(
-                        coordinator, coordinator_identity
-                    ):
-                        yield diag_env
                     env = _envelope(coordinator_identity, event)
                     if lifecycle.finalize("success", env):
+                        cleanup_envelopes = await self._run_cooperative_cleanup(
+                            coordinator, coordinator_identity
+                        )
+                        _do_release_admission()
+                        for diag_env in cleanup_envelopes:
+                            yield diag_env
                         lifecycle.terminal_delivered = True
                         yield env
                     break
                 elif isinstance(event, AgentErrorEvent):
-                    for diag_env in await self._run_cooperative_cleanup(
-                        coordinator, coordinator_identity
-                    ):
-                        yield diag_env
                     err_env = _error_envelope(
                         _safe_error_identity(coordinator_identity),
                         stage="coordinator",
@@ -614,16 +673,24 @@ class AgentRunner:
                         code="agent_error",
                     )
                     if lifecycle.finalize("agent_error", err_env):
+                        cleanup_envelopes = await self._run_cooperative_cleanup(
+                            coordinator, coordinator_identity
+                        )
+                        _do_release_admission()
+                        for diag_env in cleanup_envelopes:
+                            yield diag_env
                         lifecycle.terminal_delivered = True
                         yield err_env
                     break
                 elif isinstance(event, RunErrorEvent):
-                    for diag_env in await self._run_cooperative_cleanup(
-                        coordinator, coordinator_identity
-                    ):
-                        yield diag_env
                     err_env = AgentEventEnvelope(**coordinator_identity.model_dump(), event=event)
                     if lifecycle.finalize(event.code, err_env):
+                        cleanup_envelopes = await self._run_cooperative_cleanup(
+                            coordinator, coordinator_identity
+                        )
+                        _do_release_admission()
+                        for diag_env in cleanup_envelopes:
+                            yield diag_env
                         lifecycle.terminal_delivered = True
                         yield err_env
                     break
@@ -631,10 +698,6 @@ class AgentRunner:
                     yield _envelope(coordinator_identity, event)
 
             if not lifecycle.finalized:
-                for diag_env in await self._run_cooperative_cleanup(
-                    coordinator, coordinator_identity
-                ):
-                    yield diag_env
                 missing_env = _error_envelope(
                     _safe_error_identity(coordinator_identity),
                     stage="runtime",
@@ -642,24 +705,36 @@ class AgentRunner:
                     code="missing_terminal",
                 )
                 if lifecycle.finalize("missing_terminal", missing_env):
+                    cleanup_envelopes = await self._run_cooperative_cleanup(
+                        coordinator, coordinator_identity
+                    )
+                    _do_release_admission()
+                    for diag_env in cleanup_envelopes:
+                        yield diag_env
                     lifecycle.terminal_delivered = True
                     yield missing_env
 
         except asyncio.CancelledError:
             if not lifecycle.finalized:
                 lifecycle.finalize("cancelled")
-            raise
+                if coordinator is not None:
+                    await self._run_cooperative_cleanup(coordinator, coordinator_identity)
+                _do_release_admission()
+                raise
+            else:
+                if not lifecycle.terminal_delivered and lifecycle.terminal_envelope is not None:
+                    lifecycle.terminal_delivered = True
+                    yield lifecycle.terminal_envelope
+                return
         except GeneratorExit:
             if not lifecycle.finalized:
                 lifecycle.finalize("cancelled")
+                if coordinator is not None:
+                    await self._run_cooperative_cleanup(coordinator, coordinator_identity)
+                _do_release_admission()
             return
         except Exception as exc:
             if not lifecycle.finalized:
-                if coordinator is not None:
-                    for diag_env in await self._run_cooperative_cleanup(
-                        coordinator, coordinator_identity
-                    ):
-                        yield diag_env
                 err_env = _error_envelope(
                     _safe_error_identity(coordinator_identity),
                     stage="coordinator",
@@ -667,6 +742,14 @@ class AgentRunner:
                     code="provider_error",
                 )
                 if lifecycle.finalize("provider_error", err_env):
+                    cleanup_envelopes = []
+                    if coordinator is not None:
+                        cleanup_envelopes = await self._run_cooperative_cleanup(
+                            coordinator, coordinator_identity
+                        )
+                    _do_release_admission()
+                    for diag_env in cleanup_envelopes:
+                        yield diag_env
                     lifecycle.terminal_delivered = True
                     yield err_env
         finally:
