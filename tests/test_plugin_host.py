@@ -234,5 +234,138 @@ def test_catalog_inspection_does_not_invoke_callbacks_or_mutate_state(tmp_path: 
     assert any(s.skill_id == "mock_skill" for s in skills)
     assert mock_plugin.activated is False
 
-    # Ensure no agents or sessions mutated
-    assert agents.list_agents() == []
+    # Ensure no custom agents or sessions mutated
+    from mia_agent.agents import BUILTIN_AGENTS
+
+    assert len(agents.list_agents()) == len(BUILTIN_AGENTS)
+
+
+def test_discover_entry_point_plugins_without_callback_execution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from mia_agent.plugins import MIA_PLUGIN_ENTRY_POINT_GROUP
+
+    class FakeDist:
+        name = "mia-ext-web"
+        version = "0.2.0"
+
+    class FakeEntryPoint:
+        name = "web_tools"
+        value = "mia_ext_web:plugin"
+        group = MIA_PLUGIN_ENTRY_POINT_GROUP
+        dist = FakeDist()
+
+        def load(self) -> object:
+            class MockPlugin:
+                @property
+                def manifest(self) -> PluginManifest:
+                    return PluginManifest(
+                        plugin_id="web_tools",
+                        version="0.2.0",
+                        plugin_type="trusted-code",
+                        display_name="Web Tools",
+                        description="External web tools",
+                        tool_specs=[
+                            PluginToolSpec(
+                                name="web_search",
+                                description="Search web",
+                                effect="non-mutating",
+                            )
+                        ],
+                    )
+
+                async def activate(self, context: object) -> None:
+                    raise RuntimeError("Should not be activated during discovery")
+
+            return MockPlugin()
+
+    monkeypatch.setattr(
+        "mia_agent.plugins.discover_entry_points",
+        lambda: [FakeEntryPoint()],
+    )
+
+    agents = make_agent_manager(tmp_path)
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+
+    manifest = plugins.get_manifest("web_tools")
+    assert manifest.plugin_id == "web_tools"
+    assert manifest.provenance is not None
+    assert manifest.provenance.source == "installed"
+    assert manifest.provenance.package_name == "mia-ext-web"
+    assert manifest.provenance.package_version == "0.2.0"
+    assert manifest.trust is not None
+    assert manifest.trust.status == "untrusted"
+    assert manifest.trust.explicit is False
+
+
+def test_installed_code_requires_explicit_trust_before_enablement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from mia_agent.plugins import MIA_PLUGIN_ENTRY_POINT_GROUP
+
+    class FakeDist:
+        name = "mia-ext-code"
+        version = "1.0.0"
+
+    class FakeEntryPoint:
+        name = "code_tools"
+        value = "mia_ext_code:plugin"
+        group = MIA_PLUGIN_ENTRY_POINT_GROUP
+        dist = FakeDist()
+
+        def load(self) -> object:
+            class MockPlugin:
+                @property
+                def manifest(self) -> PluginManifest:
+                    return PluginManifest(
+                        plugin_id="code_tools",
+                        version="1.0.0",
+                        plugin_type="trusted-code",
+                        display_name="Code Tools",
+                        description="External code tools",
+                        tool_specs=[
+                            PluginToolSpec(
+                                name="run_eval",
+                                description="Run eval",
+                                effect="non-mutating",
+                            )
+                        ],
+                    )
+
+            return MockPlugin()
+
+    monkeypatch.setattr(
+        "mia_agent.plugins.discover_entry_points",
+        lambda: [FakeEntryPoint()],
+    )
+
+    agents = make_agent_manager(tmp_path)
+    alpha = agents.create_agent("alpha", tools=[])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+
+    # Untrusted installed code can be installed
+    installed = plugins.install("code_tools")
+    assert installed.plugin_id == "code_tools"
+
+    # But cannot be enabled without explicit trust
+    assert not plugins.is_trusted("code_tools")
+    with pytest.raises(ValueError, match="trust"):
+        plugins.enable("alpha", "code_tools")
+
+    # Explicitly trust the plugin
+    plugins.trust_plugin("code_tools")
+    assert plugins.is_trusted("code_tools")
+    manifest = plugins.get_manifest("code_tools")
+    assert manifest.trust is not None
+    assert manifest.trust.status == "trusted"
+    assert manifest.trust.explicit is True
+
+    # Now enablement succeeds
+    enabled = plugins.enable("alpha", "code_tools")
+    assert "code_tools" in enabled.plugins
+
+    # Revoke trust
+    plugins.revoke_plugin_trust("code_tools")
+    assert not plugins.is_trusted("code_tools")
+    assert plugins.get_manifest("code_tools").trust.status == "untrusted"
+
