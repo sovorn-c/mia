@@ -15,9 +15,9 @@ classification_rules:
   - "Agent is the only durable configured and addressable intelligent identity."
   - "A Run is one execution of one Agent."
   - "A Skill is reusable instruction or procedure; a Tool is callable capability."
-  - "A Plugin is an installable extension that contributes declared capabilities."
+  - "A Plugin is an installable declarative or trusted-code extension that contributes only declared capabilities."
   - "A Task is bounded work; Delegation routes it between Agents through Mia Core."
-  - "Mia Core owns identity, routing, access, Sessions, event integrity, cancellation, and outcomes."
+  - "Mia Core owns identity, routing, access, Sessions, event integrity, cancellation, outcomes, and Plugin trust and lifecycle."
 
 terms:
   - term: Mia Core
@@ -45,8 +45,29 @@ terms:
   - term: Plugin
     group: Extension
     kind: installable_extension
-    definition: "Installable executable extension contributing declared Tools, Skills, or Templates."
-    responsibility: "Extends an Agent through explicit lifecycle controls"
+    definition: >-
+      Installable declarative or trusted-code extension contributing approved declared capabilities
+      through the governed Core host.
+    responsibility: "Extends an Agent without replacing Core invariants through the supported host API"
+  - term: Plugin Activation
+    group: Extension
+    kind: runtime_entity
+    definition: >-
+      Immutable Run-scoped snapshot of one Agent's planned and transactionally activated runtime Plugin contributions and owned effects.
+    responsibility: "Publishes contributions atomically and owns reverse-order cleanup and timeout decisions"
+  - term: Plugin Contribution
+    group: Extension
+    kind: declared_capability
+    definition: >-
+      Core-approved Tool, Agent Template, static Skill, bounded additive context contributor,
+      notification-only Run observer, or optional Tool middleware registered by one Plugin.
+    responsibility: "Adds bounded behavior with Core-assigned attribution"
+  - term: Plugin Trust
+    group: Trust
+    kind: policy
+    definition: >-
+      Core-assigned effective authority based on bundled or installed provenance; declarative Plugins execute no callback and trusted-code Plugins require explicit trust.
+    responsibility: "Makes executable Plugin authority visible and non-self-asserted"
   - term: Agent Template
     group: Extension
     kind: distributable_definition
@@ -127,10 +148,11 @@ terms:
 relationships:
   - "An Agent selects Skills, Tools, Plugins, Access Policy, and Capability Scope."
   - "One Agent can own multiple Sessions and execute multiple Runs."
+  - "A Plugin Activation belongs to one Agent Run and does not become the Agent."
   - "A Plugin can contribute an Agent Template but does not become the created Agent."
   - "One caller Agent delegates one Task to one recipient Agent through Mia Core."
   - "A Run executes exactly one Agent and may originate from direct input or a delegated Task."
-  - "Mia Core enforces identity, access, attribution, Session integrity, and Terminal Outcomes."
+  - "Mia Core enforces identity, access, attribution, Session integrity, Plugin trust and lifecycle, and Terminal Outcomes."
 
 flagged_ambiguities:
   - term: Agent scope

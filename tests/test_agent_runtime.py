@@ -282,3 +282,101 @@ def test_run_error_event_is_sanitized_and_attributed() -> None:
     assert envelope.event.type == "run_error"
     assert envelope.event.error == "Authorization: [REDACTED]"
     assert envelope.event.cancelled is True
+
+
+def test_run_request_validation_and_immutability() -> None:
+    from mia_agent.runtime_models import RunRequest
+
+    req = RunRequest(prompt_text="hello world", agent_id="mia")
+    assert req.prompt_text == "hello world"
+    assert req.agent_id == "mia"
+    assert req.task_id == "root"
+
+    # Immutability
+    with pytest.raises(ValidationError):
+        req.prompt_text = "new"  # type: ignore[misc]
+
+    # Rejects extra fields
+    with pytest.raises(ValidationError):
+        RunRequest(prompt_text="hello", extra_field="bad")  # type: ignore[call-arg]
+
+    # Rejects blank prompt
+    with pytest.raises(ValidationError):
+        RunRequest(prompt_text="")
+    with pytest.raises(ValidationError):
+        RunRequest(prompt_text="   \t\n  ")
+
+    # Rejects unsafe IDs
+    with pytest.raises(ValidationError):
+        RunRequest(prompt_text="hello", agent_id="../bad")
+    with pytest.raises(ValidationError):
+        RunRequest(prompt_text="hello", agent_id="has/slash")
+    with pytest.raises(ValidationError):
+        RunRequest(prompt_text="hello", session_id="..\\traversal")
+    with pytest.raises(ValidationError):
+        RunRequest(prompt_text="hello", session_id="bad/path")
+    with pytest.raises(ValidationError):
+        RunRequest(prompt_text="hello", run_id="bad/run")
+    with pytest.raises(ValidationError):
+        RunRequest(prompt_text="hello", task_id="   ")
+
+    # Rejects invalid compaction threshold
+    with pytest.raises(ValidationError):
+        RunRequest(prompt_text="hello", compaction_threshold=-0.1)
+    with pytest.raises(ValidationError):
+        RunRequest(prompt_text="hello", compaction_threshold=0.0)
+    with pytest.raises(ValidationError):
+        RunRequest(prompt_text="hello", compaction_threshold=1.5)
+
+    # Valid compaction threshold
+    valid_thresh = RunRequest(prompt_text="hello", compaction_threshold=0.8)
+    assert valid_thresh.compaction_threshold == 0.8
+
+    # Rejects invalid context window
+    with pytest.raises(ValidationError):
+        RunRequest(prompt_text="hello", context_window=0)
+    with pytest.raises(ValidationError):
+        RunRequest(prompt_text="hello", context_window=-10)
+
+    # Valid context window
+    valid_cw = RunRequest(prompt_text="hello", context_window=4096)
+    assert valid_cw.context_window == 4096
+
+
+@pytest.mark.asyncio
+async def test_run_request_first_iteration_acceptance_and_attribution(tmp_path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_events import AgentEventEnvelope
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+
+    provider = MockProvider()
+    provider.queue_text_response("first iteration response")
+    runner = AgentRunner(agent_manager=AgentManager(agents_dir=tmp_path / "agents"))
+
+    request = RunRequest(
+        prompt_text="plan work",
+        agent_id="mia",
+        session_id="session-e07",
+        task_id="task-1",
+    )
+
+    stream = runner.run(request, provider=provider, cwd=tmp_path)
+    # Generator created, but not iterated yet — no provider calls made yet
+    assert len(provider.sent_messages) == 0
+
+    events: list[AgentEventEnvelope] = []
+    async for env in stream:
+        events.append(env)
+
+    assert events
+    assert all(isinstance(e, AgentEventEnvelope) for e in events)
+    for e in events:
+        assert e.agent_id == "mia"
+        assert e.session_id == "session-e07"
+        assert e.task_id == "task-1"
+        assert e.run_id is not None
+        assert e.run_id == events[0].run_id
+    assert events[-1].event.type == "turn_complete"
+

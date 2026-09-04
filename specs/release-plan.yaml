@@ -1,36 +1,259 @@
-# specs/release-plan.yaml — release index
+# specs/release-plan.yaml — complete v0.6.0 production release index
 version: "0.6.0"
-target_release: "v0.6.0-agent-core"
+target_release: v0.6.0-agent-core
+release:
+  version: "0.6.0"
+  codename: Production Agent Core
+  status: planning
+  semantic_release: true
+  bump_hint: minor
+  scope: specs/product/SCOPE_LATEST.yaml
+  ordering: dependency-ready WSJF; completed historical sequence is preserved
+  dependency_satisfied_statuses: [completed, passing]
+  status_note: passing means implemented and verified but not yet released; completed means the historical release item is closed
 
-# Completed releases remain listed only when their capsule still exists.
+wsjf_scale:
+  business_value: 1-10
+  time_criticality: 1-10
+  risk_reduction: 1-10
+  job_size: 1, 2, 3, 5, 8
+  formula: (business_value + time_criticality + risk_reduction) / job_size
+  note: Scores prioritize epics only after dependencies are satisfied.
+
 epics:
-  - id: "e01"
-    slug: "minimal-stream-repl"
-    title: "Minimal Stream REPL and Authentication"
-    status: "completed"
-    directory: "specs/epics/e01-minimal-stream-repl"
-  - id: "e02"
-    slug: "stream-repl-polish"
-    title: "Stream-First REPL Polish"
-    status: "completed"
-    directory: "specs/epics/e02-stream-repl-polish"
-  - id: "e03"
-    slug: "native-orchestration"
-    title: "Native Orchestration Runtime"
-    status: "completed"
-    directory: "specs/epics/archive/e03-native-orchestration"
-  - id: "e04"
-    slug: "agent-centric-foundation"
-    title: "Agent-Centric Foundation"
-    status: "completed"
-    directory: "specs/epics/archive/e04-agent-centric-foundation"
-  - id: "e05"
-    slug: "plugin-agent-template-foundation"
-    title: "Plugin and Agent Template Foundation"
-    status: "completed"
-    directory: "specs/epics/archive/e05-plugin-agent-template-foundation"
-  - id: "e06"
-    slug: "zero-legacy-agent-core"
-    title: "Agent Core Clean Break"
-    status: "completed"
-    directory: "specs/epics/archive/e06-zero-legacy-agent-core"
+  - id: e01
+    slug: minimal-stream-repl
+    title: Minimal Stream REPL and Authentication
+    status: completed
+    capsule_dir: specs/epics/e01-minimal-stream-repl
+    outcome: Users can authenticate a supported provider and complete a streamed terminal interaction.
+    boundaries:
+      includes: Provider setup, connection diagnostics, initial REPL, model controls, and stream rendering.
+      excludes: Durable named Agents, Plugins, release automation, and production diagnostics.
+    depends_on: []
+    wsjf:
+      business_value: 9
+      time_criticality: 9
+      risk_reduction: 7
+      job_size: 4
+      score: 6.25
+    bcps: 16
+
+  - id: e02
+    slug: stream-repl-polish
+    title: Stream-First REPL Polish
+    status: completed
+    capsule_dir: specs/epics/e02-stream-repl-polish
+    outcome: Users can operate, inspect, cancel, resume, and navigate interactive terminal work reliably.
+    boundaries:
+      includes: Keyboard workflow, prompt controls, inspection, Session navigation, and context discovery.
+      excludes: Agent identity, Plugin lifecycle, and package release operations.
+    depends_on: [e01]
+    wsjf:
+      business_value: 7
+      time_criticality: 7
+      risk_reduction: 4
+      job_size: 4
+      score: 4.5
+    bcps: 18
+
+  - id: e03
+    slug: native-orchestration
+    title: Native Orchestration Runtime
+    status: completed
+    capsule_dir: specs/epics/archive/e03-native-orchestration
+    outcome: Specialist sequencing and essential commands execute through an attributable local runtime.
+    boundaries:
+      includes: Prompt-scoped specialist execution and command contract alignment.
+      excludes: A public graph model, scheduler, or autonomous swarm.
+    depends_on: [e02]
+    wsjf:
+      business_value: 8
+      time_criticality: 8
+      risk_reduction: 8
+      job_size: 3
+      score: 8.0
+    bcps: 12
+
+  - id: e04
+    slug: agent-centric-foundation
+    title: Agent-Centric Foundation
+    status: passing
+    capsule_dir: specs/epics/archive/e04-agent-centric-foundation
+    outcome: Durable named Agents own configuration and Sessions and delegate bounded Tasks under enforced access.
+    boundaries:
+      includes: Agent identity, persistence, access policy, credential separation, and one-hop Delegation.
+      excludes: Plugin installation, remote Agents, background scheduling, and OS sandboxing.
+    depends_on: [e03]
+    wsjf:
+      business_value: 10
+      time_criticality: 10
+      risk_reduction: 10
+      job_size: 5
+      score: 6.0
+    bcps: 29
+
+  - id: e05
+    slug: plugin-agent-template-foundation
+    title: Plugin and Agent Template Foundation
+    status: passing
+    capsule_dir: specs/epics/archive/e05-plugin-agent-template-foundation
+    outcome: Guarded per-Agent Plugins and portable Templates extend Mia without owning core trust controls.
+    boundaries:
+      includes: Bundled Notes Plugin, lifecycle, contribution validation, attribution, and Template instantiation.
+      excludes: Remote catalogs, arbitrary package installation, and unrestricted extension execution.
+    depends_on: [e04]
+    wsjf:
+      business_value: 8
+      time_criticality: 7
+      risk_reduction: 8
+      job_size: 4
+      score: 5.75
+    bcps: 21
+
+  - id: e06
+    slug: zero-legacy-agent-core
+    title: Agent Core Clean Break
+    status: passing
+    capsule_dir: specs/epics/archive/e06-zero-legacy-agent-core
+    outcome: Every supported frontend and package surface presents one Agent-native execution model.
+    boundaries:
+      includes: Canonical runtime composition, Textual Adapter, active vocabulary, package surface, and legacy removal.
+      excludes: New product capabilities, user-data migration, and TUI redesign.
+    depends_on: [e04, e05]
+    wsjf:
+      business_value: 10
+      time_criticality: 10
+      risk_reduction: 10
+      job_size: 4
+      score: 7.5
+    bcps: 25
+
+  - id: e07
+    slug: production-runtime-integrity
+    title: Production Runtime Integrity
+    status: planned
+    capsule_dir: specs/epics/e07-production-runtime-integrity
+    outcome: All callers receive one validated, deterministic, safeguarded, and truthful Agent Run contract.
+    boundaries:
+      includes: >-
+        Selected Run Interface, terminal semantics, permanent runtime safeguards, effective Agent provider
+        settings, same-Session admission, cancellation, safe Plugin extension ordering, and trust-boundary regression evidence.
+      excludes: Lifecycle handles, schedulers, remote execution, new providers, and compatibility frameworks.
+    depends_on: [e06]
+    wsjf:
+      business_value: 10
+      time_criticality: 10
+      risk_reduction: 10
+      job_size: 5
+      score: 6.0
+    bcps: 21
+    architecture:
+      - specs/tech-architecture/REFACTOR_LATEST.md
+      - specs/tech-architecture/DESIGN_PLAN_LATEST.md
+      - specs/adr/0002-canonical-run-request-stream.md
+      - specs/adr/0003-governed-core-extension-host.md
+
+  - id: e08
+    slug: governed-core-extension-host
+    title: Governed Core Extension Host
+    status: planned
+    capsule_dir: specs/epics/e08-governed-core-extension-host
+    outcome: >-
+      Developers can extend durable Agents through a small typed Plugin contract that cannot replace
+      Core identity, trust, access, Session, attribution, cleanup, or outcome ownership through its
+      supported API; trusted Python process authority remains explicit.
+    boundaries:
+      includes: >-
+        Inspectable declarative Templates/static Skills; trusted installed-code Plugins; transactional
+        dependency-ready Run activation; Tools, bounded additive context, Run observers, optional Tool
+        middleware; owned effects; final Core validation; Notes migration; explicit trust/provenance;
+        and Plugin-free compatibility.
+      excludes: >-
+        Generic services, Core/provider replacement, commands or UI contributions, hot reload, background work,
+        remote catalogs, automatic package installation, Tool overrides, and sandbox guarantees.
+    depends_on: [e07]
+    wsjf:
+      business_value: 9
+      time_criticality: 8
+      risk_reduction: 10
+      job_size: 5
+      score: 5.4
+    bcps: 21
+    architecture:
+      - specs/IMPACT_LATEST.md
+      - specs/tech-architecture/REFACTOR_LATEST.md
+      - specs/tech-architecture/DESIGN_PLAN_LATEST.md
+      - specs/adr/0003-governed-core-extension-host.md
+
+  - id: e09
+    slug: local-operations-recovery
+    title: Local Operations and Recovery
+    status: planned
+    capsule_dir: specs/epics/e09-local-operations-recovery
+    outcome: Operators can diagnose Runs and Plugin lifecycles, protect local data, and recover safely from expected failures.
+    boundaries:
+      includes: >-
+        Attributed secret-free Run, Tool, and Plugin diagnostics; bounded retention; truthful telemetry and cleanup
+        failure behavior; data-location guidance; backup/restore; interrupted-write handling; and recovery verification.
+      excludes: Remote telemetry, dashboards, hosted monitoring, automatic destructive repair, and support services.
+    depends_on: [e07, e08]
+    wsjf:
+      business_value: 8
+      time_criticality: 8
+      risk_reduction: 9
+      job_size: 3
+      score: 8.33
+    bcps: 13
+
+  - id: e10
+    slug: accessible-product-documentation
+    title: Accessible Product Experience and Documentation
+    status: planned
+    capsule_dir: specs/epics/e10-accessible-product-documentation
+    outcome: >-
+      Users can operate essential workflows and make informed Plugin trust decisions without color,
+      animation, or undocumented product knowledge.
+    boundaries:
+      includes: >-
+        Keyboard operation, plain and non-interactive output, non-color status cues, motion-safe behavior,
+        installation, configuration, Plugin trust/lifecycle, accessibility, data, recovery, troubleshooting,
+        author guidance, and supported-limit documentation.
+      excludes: Visual redesign, web documentation platform, localization, and new interaction modes.
+    depends_on: [e07, e08, e09]
+    wsjf:
+      business_value: 8
+      time_criticality: 7
+      risk_reduction: 7
+      job_size: 3
+      score: 7.33
+    bcps: 13
+
+  - id: e11
+    slug: release-distribution-assurance
+    title: Release and Distribution Assurance
+    status: planned
+    capsule_dir: specs/epics/e11-release-distribution-assurance
+    outcome: Maintainers can reproducibly verify, package, publish, install-smoke, and supersede v0.6.0 artifacts.
+    boundaries:
+      includes: >-
+        Automated quality and security-sensitive gates, clean-environment wheel and Plugin API verification,
+        artifact integrity and provenance, authorized publication, release notes, failure handling,
+        and withdrawal/supersession runbook.
+      excludes: Container/server deployment, additional package registries, hosted runtime operations, and auto-publish without approval.
+    depends_on: [e07, e08, e09, e10]
+    wsjf:
+      business_value: 10
+      time_criticality: 10
+      risk_reduction: 9
+      job_size: 3
+      score: 9.67
+    bcps: 13
+
+bugs:
+  total: 1
+  fixed: 1
+  deferred: 0
+  wontfix: 0
+  open: 0
+  registry: specs/bugs/registry.yaml
