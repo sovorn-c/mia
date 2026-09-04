@@ -258,3 +258,148 @@ def test_agent_manager_diagnostics_path(tmp_path: Path) -> None:
     diag_path = manager.get_diagnostics_path()
     assert diag_dir == tmp_path / "diagnostics"
     assert diag_path == tmp_path / "diagnostics" / "diagnostics.jsonl"
+
+
+
+@pytest.mark.asyncio
+async def test_tool_execution_produces_diagnostic_record(tmp_path: Path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+    from mia_ai.types import ToolCall
+
+    manager = AgentManager(agents_dir=tmp_path / "agents", diagnostics_dir=tmp_path / "diagnostics")
+    factory = AgentRuntimeFactory(agent_manager=manager)
+    runner = AgentRunner(factory=factory, agent_manager=manager)
+
+    (tmp_path / "test.txt").write_text("hello tool")
+
+    provider = MockProvider(
+        chunks=[
+            "I will read the file.",
+            ToolCall(id="call-1", name="read_file", arguments={"path": "test.txt"}),
+            "File read successfully.",
+        ]
+    )
+
+    req = RunRequest(
+        prompt_text="read test.txt",
+        agent_id="mia",
+        session_id="test-tool-session",
+        cwd=tmp_path,
+    )
+
+    events = [env async for env in runner.run(req, provider=provider, cwd=tmp_path)]
+    assert any(env.event.__class__.__name__ == "TurnCompleteEvent" for env in events)
+
+    store = DiagnosticStore(path=manager.get_diagnostics_path())
+    tool_records = store.read_records(source="tool")
+    assert len(tool_records) >= 1
+    rec = tool_records[0]
+    assert rec.tool_name == "read_file"
+    assert rec.outcome == "success"
+    assert rec.agent_id == "mia"
+    assert rec.session_id == "test-tool-session"
+
+
+@pytest.mark.asyncio
+async def test_run_lifecycle_records_terminal_outcome(tmp_path: Path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+
+    manager = AgentManager(agents_dir=tmp_path / "agents", diagnostics_dir=tmp_path / "diagnostics")
+    factory = AgentRuntimeFactory(agent_manager=manager)
+    runner = AgentRunner(factory=factory, agent_manager=manager)
+
+    provider = MockProvider(chunks=["Just a reply."])
+    req = RunRequest(
+        prompt_text="hello",
+        agent_id="mia",
+        session_id="session-terminal-test",
+        cwd=tmp_path,
+    )
+
+    events = [env async for env in runner.run(req, provider=provider, cwd=tmp_path)]
+    assert any(env.event.__class__.__name__ == "TurnCompleteEvent" for env in events)
+
+    store = DiagnosticStore(path=manager.get_diagnostics_path())
+    run_records = store.read_records(source="run")
+    assert len(run_records) >= 1
+    rec = [r for r in run_records if r.action == "finalize"][0]
+    assert rec.outcome == "success"
+    assert rec.agent_id == "mia"
+    assert rec.session_id == "session-terminal-test"
+
+
+@pytest.mark.asyncio
+async def test_plugin_cleanup_failure_records_diagnostic_and_preserves_run(tmp_path: Path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+
+    manager = AgentManager(agents_dir=tmp_path / "agents", diagnostics_dir=tmp_path / "diagnostics")
+    factory = AgentRuntimeFactory(agent_manager=manager)
+    runner = AgentRunner(factory=factory, agent_manager=manager)
+
+    def failing_disposer():
+        raise RuntimeError("simulated plugin disposal failure")
+
+    failing_disposer.plugin_id = "failing_plugin"
+
+    provider = MockProvider(chunks=["Done."])
+    req = RunRequest(
+        prompt_text="hello",
+        agent_id="mia",
+        session_id="session-plugin-fail",
+        cwd=tmp_path,
+    )
+
+    orig_build = factory.build
+
+    def build_with_failing_disposer(*args, **kwargs):
+        rt = orig_build(*args, **kwargs)
+        object.__setattr__(rt, "disposers", (failing_disposer,))
+        return rt
+
+    factory.build = build_with_failing_disposer
+
+    events = [env async for env in runner.run(req, provider=provider, cwd=tmp_path)]
+    assert any(env.event.__class__.__name__ == "TurnCompleteEvent" for env in events)
+
+    store = DiagnosticStore(path=manager.get_diagnostics_path())
+    plugin_records = store.read_records(source="plugin")
+    assert len(plugin_records) >= 1
+    assert any(r.plugin_id == "failing_plugin" and r.outcome == "failed" for r in plugin_records)
+
+
+@pytest.mark.asyncio
+async def test_store_failure_does_not_break_tool_or_run(tmp_path: Path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+
+    not_dir = tmp_path / "blocking_file"
+    not_dir.write_text("block")
+    manager = AgentManager(agents_dir=tmp_path / "agents", diagnostics_dir=not_dir / "diagnostics")
+    factory = AgentRuntimeFactory(agent_manager=manager)
+    runner = AgentRunner(factory=factory, agent_manager=manager)
+
+    provider = MockProvider(chunks=["Execution continues even if diagnostics store fails."])
+    req = RunRequest(
+        prompt_text="test resilience",
+        agent_id="mia",
+        session_id="session-resilience",
+        cwd=tmp_path,
+    )
+
+    events = [env async for env in runner.run(req, provider=provider, cwd=tmp_path)]
+    assert any(env.event.__class__.__name__ == "TurnCompleteEvent" for env in events)
