@@ -1079,3 +1079,203 @@ def test_event_loop_blocking_python_limit_documented() -> None:
     time.sleep(0.01)
     duration = time.monotonic() - start
     assert duration >= 0.009
+
+
+@pytest.mark.asyncio
+async def test_plugin_middleware_transform_and_final_validation_agreement(tmp_path: Path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.plugin_host import PluginContext, PluginHost
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+    from mia_middleware.access import ApprovalRequest
+    from mia_middleware.pipeline import ToolCallContext
+    from mia_tools.base import BaseTool
+
+    received_approval_args: list[dict[str, Any]] = []
+    executed_args: list[dict[str, Any]] = []
+
+    class DummySideEffectTool(BaseTool):
+        name = "side_tool"
+        description = "Side effect tool"
+        parameters = {"type": "object", "properties": {"target": {"type": "string"}}}
+        effect = "side-effecting"
+
+        async def execute(self, target: str, **kwargs: Any) -> Any:
+            executed_args.append({"target": target, **kwargs})
+            return f"executed for {target}"
+
+    async def rewrite_middleware(ctx: ToolCallContext, next_fn):
+        if ctx.tool_name == "side_tool":
+            ctx.arguments["target"] = "rewritten_target"
+        return await next_fn()
+
+    class TransformPlugin:
+        @property
+        def manifest(self) -> PluginManifest:
+            return PluginManifest(
+                plugin_id="transform_plugin",
+                version="1.0.0",
+                display_name="Transform Plugin",
+                description="Transforms arguments",
+                tool_specs=[
+                    PluginToolSpec(
+                        name="side_tool", description="Side effect tool", effect="side-effecting"
+                    )
+                ],
+            )
+
+        async def activate(self, context: PluginContext) -> None:
+            context.register(DummySideEffectTool())
+            context.register(rewrite_middleware)
+
+    agents = make_agent_manager(tmp_path)
+    alpha = agents.create_agent("alpha", tools=[], access_policy="approval-required")
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+
+    tp = TransformPlugin()
+    plugins._catalog["transform_plugin"] = tp.manifest
+    plugins.install("transform_plugin")
+    plugins.trust_plugin("transform_plugin")
+    plugins.enable(alpha.agent_id, "transform_plugin")
+
+    host = PluginHost()
+    host.register_implementation("transform_plugin", tp)
+
+    def approval_cb(req: ApprovalRequest) -> bool:
+        received_approval_args.append(dict(req.arguments))
+        return True
+
+    factory = AgentRuntimeFactory(agent_manager=agents, plugin_manager=plugins, plugin_host=host)
+    runner = AgentRunner(agent_manager=agents, factory=factory)
+
+    provider = MockProvider()
+    provider.queue_tool_call_response(
+        tool_name="side_tool",
+        arguments={"target": "initial_target"},
+    )
+    provider.queue_text_response("Done after tool")
+
+    req = RunRequest(prompt_text="do work", agent_id="alpha")
+    events = [
+        env
+        async for env in runner.run(
+            req, provider=provider, approval_callback=approval_cb, cwd=tmp_path
+        )
+    ]
+
+    assert events
+    assert events[-1].event.type == "turn_complete"
+
+    # Approval callback received the transformed arguments!
+    assert received_approval_args == [{"target": "rewritten_target"}]
+    # Executor received the transformed arguments!
+    assert executed_args == [{"target": "rewritten_target"}]
+
+
+@pytest.mark.asyncio
+async def test_rejected_tool_call_non_execution_and_terminal_error(tmp_path: Path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.plugin_host import PluginContext, PluginHost
+    from mia_agent.runtime_events import RunErrorEvent
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+    from mia_middleware.access import ApprovalRequest
+    from mia_tools.base import BaseTool
+
+    executed_calls: list[str] = []
+
+    class CriticalTool(BaseTool):
+        name = "critical_tool"
+        description = "Critical tool"
+        parameters = {"type": "object", "properties": {"action": {"type": "string"}}}
+        effect = "side-effecting"
+
+        async def execute(self, action: str, **kwargs: Any) -> Any:
+            executed_calls.append(action)
+            return "executed"
+
+    class CriticalPlugin:
+        @property
+        def manifest(self) -> PluginManifest:
+            return PluginManifest(
+                plugin_id="crit_plugin",
+                version="1.0.0",
+                display_name="Critical Plugin",
+                description="Tests rejection",
+                tool_specs=[
+                    PluginToolSpec(
+                        name="critical_tool", description="Critical tool", effect="side-effecting"
+                    )
+                ],
+            )
+
+        async def activate(self, context: PluginContext) -> None:
+            context.register(CriticalTool())
+
+    agents = make_agent_manager(tmp_path)
+    alpha = agents.create_agent("alpha", tools=[], access_policy="approval-required")
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+
+    cp = CriticalPlugin()
+    plugins._catalog["crit_plugin"] = cp.manifest
+    plugins.install("crit_plugin")
+    plugins.trust_plugin("crit_plugin")
+    plugins.enable(alpha.agent_id, "crit_plugin")
+
+    host = PluginHost()
+    host.register_implementation("crit_plugin", cp)
+
+    def deny_approval(req: ApprovalRequest) -> bool:
+        return False  # REJECT!
+
+    factory = AgentRuntimeFactory(agent_manager=agents, plugin_manager=plugins, plugin_host=host)
+    runner = AgentRunner(agent_manager=agents, factory=factory)
+
+    provider = MockProvider()
+    provider.queue_tool_call_response(
+        tool_name="critical_tool",
+        arguments={"action": "delete_all"},
+    )
+
+    req = RunRequest(prompt_text="delete everything", agent_id="alpha")
+    events = [
+        env
+        async for env in runner.run(
+            req, provider=provider, approval_callback=deny_approval, cwd=tmp_path
+        )
+    ]
+
+    # Tool executor was NEVER called!
+    assert executed_calls == []
+    # Rejection produced run_error terminal envelope
+    assert isinstance(events[-1].event, RunErrorEvent)
+    assert events[-1].event.code == "agent_error"
+
+
+@pytest.mark.asyncio
+async def test_plugin_free_agent_compatibility(tmp_path: Path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.runtime_factory import AgentRuntimeFactory
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+
+    agents = make_agent_manager(tmp_path)
+    # Agent with NO plugins
+    agents.create_agent("bare_agent", tools=["read_file"])
+    plugins = PluginManager(agent_manager=agents, plugins_dir=tmp_path / "plugins")
+
+    factory = AgentRuntimeFactory(agent_manager=agents, plugin_manager=plugins)
+    runner = AgentRunner(agent_manager=agents, factory=factory)
+
+    provider = MockProvider()
+    provider.queue_text_response("Hello from plugin-free agent")
+
+    req = RunRequest(prompt_text="hello", agent_id="bare_agent")
+    events = [env async for env in runner.run(req, provider=provider, cwd=tmp_path)]
+
+    assert events
+    assert events[-1].event.type == "turn_complete"
+
+
