@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import time
 import uuid
+from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -149,10 +150,169 @@ class DiagnosticRecord(BaseModel):
         return cls(**kwargs)
 
 
+def default_diagnostics_path() -> Path:
+    from mia_agent.agents.manager import default_diagnostics_dir
+
+    return default_diagnostics_dir() / "diagnostics.jsonl"
+
+
+class DiagnosticStoreError(RuntimeError):
+    """Raised when reading or persisting diagnostic records fails."""
+
+
+class DiagnosticHealth(BaseModel):
+    """Sanitized diagnostic persistence health state."""
+
+    model_config = ConfigDict(frozen=True)
+
+    healthy: bool = True
+    total_records: int = 0
+    total_bytes: int = 0
+    last_error: str | None = None
+    path: str = ""
+
+
+class DiagnosticStore:
+    """Core-owned append-only local diagnostic record store with bounded retention."""
+
+    def __init__(
+        self,
+        path: Path | None = None,
+        max_records: int = 1000,
+        max_bytes: int = 10 * 1024 * 1024,
+    ) -> None:
+        self.path = (path or default_diagnostics_path()).expanduser().absolute()
+        self.max_records = max_records
+        self.max_bytes = max_bytes
+        self._last_error: str | None = None
+        self._healthy: bool = True
+
+    def get_health(self) -> DiagnosticHealth:
+        """Inspect the current health and metrics of the diagnostic store."""
+        total_records = 0
+        total_bytes = 0
+        try:
+            if self.path.exists():
+                total_bytes = self.path.stat().st_size
+                with self.path.open("r", encoding="utf-8") as f:
+                    total_records = sum(1 for line in f if line.strip())
+        except Exception as exc:
+            self._healthy = False
+            self._last_error = sanitize_diagnostic_error(exc)
+        return DiagnosticHealth(
+            healthy=self._healthy,
+            total_records=total_records,
+            total_bytes=total_bytes,
+            last_error=self._last_error,
+            path=str(self.path),
+        )
+
+    def append(self, record: DiagnosticRecord) -> bool:
+        """Append one record to the store; enforce bounded retention and capture health."""
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            serialized = record.model_dump_json() + "\n"
+            with self.path.open("a", encoding="utf-8") as f:
+                f.write(serialized)
+                f.flush()
+                import os
+
+                os.fsync(f.fileno())
+            self._healthy = True
+            self._last_error = None
+            self._enforce_retention()
+            return True
+        except Exception as exc:
+            self._healthy = False
+            self._last_error = sanitize_diagnostic_error(exc)
+            return False
+
+    def _enforce_retention(self) -> None:
+        """Deterministically trim oldest records if over count or byte bound."""
+        try:
+            if not self.path.exists():
+                return
+            stat = self.path.stat()
+            with self.path.open("r", encoding="utf-8") as f:
+                lines = [line for line in f if line.strip()]
+            if len(lines) <= self.max_records and stat.st_size <= self.max_bytes:
+                return
+
+            trimmed = lines[-self.max_records :]
+            total_bytes = sum(len(line.encode("utf-8")) for line in trimmed)
+            while trimmed and total_bytes > self.max_bytes:
+                removed = trimmed.pop(0)
+                total_bytes -= len(removed.encode("utf-8"))
+
+            from mia_agent.agents.storage import atomic_write_text
+
+            atomic_write_text(self.path, "".join(trimmed))
+        except Exception as exc:
+            self._healthy = False
+            self._last_error = sanitize_diagnostic_error(exc)
+
+    def read_records(
+        self,
+        *,
+        limit: int | None = None,
+        source: str | None = None,
+        agent_id: str | None = None,
+        session_id: str | None = None,
+        run_id: str | None = None,
+        plugin_id: str | None = None,
+        reverse: bool = False,
+    ) -> list[DiagnosticRecord]:
+        """Read and filter diagnostic records in deterministic order."""
+        if not self.path.exists():
+            return []
+        records: list[DiagnosticRecord] = []
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                for line_no, raw_line in enumerate(f, start=1):
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    try:
+                        import json
+
+                        data = json.loads(line)
+                        record = DiagnosticRecord.model_validate(data)
+                    except Exception as exc:
+                        raise DiagnosticStoreError(
+                            f"Malformed diagnostic record at line {line_no} in '{self.path}': {exc}"
+                        ) from exc
+
+                    if source is not None and record.source != source:
+                        continue
+                    if agent_id is not None and record.agent_id != agent_id:
+                        continue
+                    if session_id is not None and record.session_id != session_id:
+                        continue
+                    if run_id is not None and record.run_id != run_id:
+                        continue
+                    if plugin_id is not None and record.plugin_id != plugin_id:
+                        continue
+                    records.append(record)
+        except OSError as exc:
+            raise DiagnosticStoreError(
+                f"Failed to read diagnostic records from '{self.path}': {exc}"
+            ) from exc
+
+        if reverse:
+            records.reverse()
+        if limit is not None and limit > 0:
+            records = records[:limit]
+        return records
+
+
 __all__ = [
+    "DiagnosticHealth",
     "DiagnosticRecord",
     "DiagnosticSeverity",
     "DiagnosticSource",
+    "DiagnosticStore",
+    "DiagnosticStoreError",
+    "default_diagnostics_path",
     "sanitize_diagnostic_data",
     "sanitize_diagnostic_error",
     "sanitize_diagnostic_path",

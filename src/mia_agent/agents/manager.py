@@ -15,6 +15,10 @@ def default_agents_dir() -> Path:
     return Path.home() / ".mia" / "agents"
 
 
+def default_diagnostics_dir() -> Path:
+    return Path.home() / ".mia" / "diagnostics"
+
+
 DEFAULT_AGENT_HOME = default_agents_dir()
 DEFAULT_SELECTION_FILE = ".default-agent"
 AGENT_DEFINITION_FILE = "agent.json"
@@ -23,11 +27,30 @@ AGENT_DEFINITION_FILE = "agent.json"
 class AgentManager:
     """Resolve, persist, and select built-in or native Agents."""
 
-    def __init__(self, agents_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        agents_dir: Path | None = None,
+        diagnostics_dir: Path | None = None,
+    ) -> None:
         configured = (agents_dir or default_agents_dir()).expanduser().absolute()
         if configured.is_symlink():
             raise ValueError("Agent storage root must not be a symlink")
         self.agents_dir = configured.parent.resolve() / configured.name
+
+        diag_configured = (
+            (diagnostics_dir or (self.agents_dir.parent / "diagnostics")).expanduser().absolute()
+        )
+        if diag_configured.is_symlink():
+            raise ValueError("Diagnostics storage root must not be a symlink")
+        self.diagnostics_dir = diag_configured.parent.resolve() / diag_configured.name
+
+    def get_diagnostics_dir(self) -> Path:
+        """Return the configured diagnostics storage directory."""
+        return self.diagnostics_dir
+
+    def get_diagnostics_path(self) -> Path:
+        """Return the canonical path for diagnostic records."""
+        return self.diagnostics_dir / "diagnostics.jsonl"
 
     def get_agent(self, agent_id: str | None = None) -> Agent:
         """Resolve one Agent, defaulting to the selected or built-in Mia Agent."""

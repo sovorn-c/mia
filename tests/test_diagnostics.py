@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-import time
+from pathlib import Path
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
+from mia_agent.agents import AgentManager
 from mia_agent.diagnostics import (
     DiagnosticRecord,
-    DiagnosticSource,
+    DiagnosticStore,
+    DiagnosticStoreError,
     sanitize_diagnostic_data,
     sanitize_diagnostic_error,
     sanitize_diagnostic_path,
@@ -180,10 +182,6 @@ def test_diagnostic_record_auto_sanitization() -> None:
     assert "[REDACTED]" in (rec.error or "")
 
 
-from mia_agent.agents import AgentManager
-from mia_agent.diagnostics import DiagnosticHealth, DiagnosticStore, DiagnosticStoreError
-
-
 def test_diagnostic_store_append_and_read(tmp_path: Path) -> None:
     store_file = tmp_path / "diagnostics.jsonl"
     store = DiagnosticStore(path=store_file)
@@ -203,7 +201,9 @@ def test_diagnostic_store_retention_bounded_by_count(tmp_path: Path) -> None:
     store_file = tmp_path / "diagnostics.jsonl"
     store = DiagnosticStore(path=store_file, max_records=3)
     records = [
-        DiagnosticRecord.create(source="tool", tool_name=f"tool_{i}", action="run", outcome="success")
+        DiagnosticRecord.create(
+            source="tool", tool_name=f"tool_{i}", action="run", outcome="success"
+        )
         for i in range(5)
     ]
     for r in records:
@@ -219,7 +219,9 @@ def test_diagnostic_store_retention_bounded_by_bytes(tmp_path: Path) -> None:
     store_file = tmp_path / "diagnostics.jsonl"
     store = DiagnosticStore(path=store_file, max_records=100, max_bytes=600)
     for i in range(10):
-        store.append(DiagnosticRecord.create(source="run", details={"index": i, "payload": "x" * 50}))
+        store.append(
+            DiagnosticRecord.create(source="run", details={"index": i, "payload": "x" * 50})
+        )
 
     assert store_file.stat().st_size <= 700
     loaded = store.read_records()
