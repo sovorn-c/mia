@@ -1,85 +1,61 @@
-# Impact — Governed Core Extension Host
+# Impact — Local Operations and Recovery
 
 ## Target
 
-Introduce a typed, lifecycle-managed Plugin extension host after e07 establishes the constitutional Run and safeguard boundary. The change deepens the existing bundled `PluginManager` rather than adding a second execution root or adopting DeepSeek Harness as a dependency.
+Plan e09 as the local operations boundary for the already-delivered e07 Run contract and e08 governed Plugin host. The change adds durable, bounded diagnostics, an explicit non-credential data layout and backup/restore boundary, and read-only recovery verification. It must not create a second execution root, event bus, hosted telemetry system, or automatic repair path.
 
 Primary implementation seams:
 
-- `src/mia_agent/plugin_models.py` — manifest, API compatibility, contribution, trust, and dependency contracts.
-- `src/mia_agent/plugins.py` and `src/mia_agent/plugin_catalog.py` — Plugin discovery, activation, owned registrations, disposal, and Notes migration.
-- `src/mia_agent/runtime_factory.py` — compose validated immutable Run-scoped Plugin contributions inside permanent Core safeguards.
-- `src/mia_agent/agent_runner.py` — expose only approved Run lifecycle observation points after e07 establishes terminal truth.
-- `src/mia_middleware/pipeline.py` — preserve Core-owned final access/security validation around optional Plugin middleware.
+- `src/mia_agent/diagnostics.py` — new validated, sanitized diagnostic records and bounded local store.
+- `src/mia_middleware/telemetry.py` — preserve Tool audit behavior while forwarding only sanitized records.
+- `src/mia_agent/agent_runner.py` and `src/mia_agent/plugin_host.py` — expose existing Run/Plugin lifecycle diagnostics without moving terminal or cleanup ownership.
+- `src/mia_agent/agents/manager.py` and `src/mia_agent/auth/credentials.py` — preserve existing Agent/Session root and separate credential path contracts.
+- `src/mia_agent/operations.py` — new Core-owned data layout and versioned archive/restore boundary.
+- `src/mia_agent/session/jsonl.py` and `src/mia_agent/recovery.py` — preserve append-only Session validation and add non-destructive corruption classification.
+- `src/mia_cli/main.py` — add read-only diagnostic, data-location, backup/restore, and recovery verification commands.
 
-## Requirement delta
+## Dependents (shared boundaries)
 
-- **ADDED:** A governed Plugin lifecycle with deterministic activation, attribution, failure, and disposal.
-- **ADDED:** Inspectable strict manifest contributions for Agent Templates and static Skills, plus a small Run registration context for Tools, bounded additive context contributors, notification-only Run observers, and optional Tool middleware.
-- **ADDED:** Declarative-extension and trusted-code Plugin trust classes with explicit provenance and compatibility inspection.
-- **MODIFIED:** The current bundled Tool/Template Plugin contract becomes the first implementation of the broader extension host; Notes remains the proof and keeps its existing behavior.
-- **MODIFIED:** The v0.6 release scope now includes the minimum extension spine while continuing to exclude Plugin commands/UI, remote catalogs, automatic package installation, hot reload, generic event/service containers, Core/provider replacement, and OS sandbox claims.
-- **PRESERVED:** Agent identity, credential isolation, access policy, permanent security/audit safeguards, append-only Sessions, Run admission, terminal truth, and Plugin loading policy remain owned by Mia Core.
+- `AgentRuntimeFactory` constructs `AuditLogMiddleware`, resolves Agent/Session paths, and composes Plugin data paths for every direct and delegated Run.
+- `AgentRunner` owns terminal finalization, Plugin cleanup, quarantine, and admission release; e09 must observe these decisions rather than alter them.
+- `ToolPipeline` and `ToolCallContext` provide attempted Tool identity, effect, arguments, and middleware metadata to audit records.
+- `PluginHost` and `PluginManager` own Plugin activation, attribution, cleanup diagnostics, and Agent-owned Plugin directories.
+- `AgentManager`, `JsonlSessionStore`, `SessionTree`, and atomic storage helpers own Agent definitions, append-only Sessions, and local writes.
+- `FileCredentialStore` owns provider credentials under `~/.mia/credentials.json`; its values must remain outside diagnostics and backups.
+- CLI, REPL, TUI, and tests are the operator-facing or regression callers that must retain existing Agent/Run behavior.
 
-## Dependents
+This is a high-risk shared trust/data-boundary change. The test plan covers the fan-in and preserves e04-e08 contracts.
 
-### Production callers
+## Affected stories
 
-- `src/mia_agent/runtime_factory.py` constructs `PluginManager`, resolves Plugin Tools, filters capabilities, and creates `ToolPipeline` for direct and delegated Runs.
-- `src/mia_agent/agent_runner.py` and `src/mia_agent/delegation.py` both build runtimes through `AgentRuntimeFactory`.
-- `src/mia_cli/main.py` exposes Plugin and Template inspection/lifecycle commands.
-- `src/mia_agent/__init__.py` exports the current Plugin contracts.
-- `src/mia_agent/harness.py` executes every visible Tool through `ToolPipeline` and emits Plugin-attributed events.
-- `src/mia_middleware/access.py`, `security.py`, and `telemetry.py` consume `ToolCallContext` and depend on middleware ordering.
-- `src/mia_agent/agents/model.py` persists per-Agent enabled Plugins and validated Plugin configuration.
+- **e09s01 — Attributed Local Diagnostics and Bounded Retention:** new Tool, Run, and Plugin operational record boundary and inspection command.
+- **e09s02 — Supported Data Locations and Backup/Restore:** new data-layout descriptor, non-credential archive manifest, path/digest validation, staging, and CLI operations.
+- **e09s03 — Non-Destructive Interrupted-Write and Corrupt-Data Recovery:** read-only detection and truthful status for temporary, truncated, corrupt, unsupported, or unsafe data, with explicit restore guidance.
 
-Cymbal reports 46 impact groups and 66 callers across `PluginManager`, `PluginManifest`, `AgentRuntimeFactory._build_pipeline`, `ToolPipeline`, and the planned canonical Run seam. This is a shared trust-boundary change, not an isolated catalog addition.
+Preserve delivered contracts from e04, e05, e06, e07, and e08: Agent identity, credential isolation, access/security/audit safeguards, append-only Session history, terminal truth, Plugin attribution, and Core-owned lifecycle cleanup.
 
-## Affected stories and epics
+## Test coverage and gaps
 
-### Delivered contracts to preserve
+Existing coverage exercises the affected foundations:
 
-- **e04 Agent-Centric Foundation:** Agent ownership, credentials, access, Sessions, and Delegation cannot be transferred to Plugins.
-- **e05s01 Notes Plugin Vertical Slice:** install/enable/use, Agent-owned data, declared effects, and normal Tool policy remain compatible.
-- **e05s02 Plugin Lifecycle Integrity:** fail-closed activation, attribution, configuration, disablement, and secret-free errors become baseline behavior.
-- **e05s03 Portable Notes Agent Template:** Template privacy and independent Agent ownership remain unchanged.
-- **e06s01 Canonical Agent Run Runtime:** `AgentRunner → AgentRuntimeFactory → AgentHarness` remains the only execution path.
+- `tests/test_middleware_pipeline.py`, `tests/test_access_policy.py`, and `tests/test_plugins.py` cover Tool audit context, sanitation, attribution, Plugin lifecycle, and cleanup diagnostics.
+- `tests/test_agent_runtime.py`, `tests/test_agent_loop.py`, and `tests/test_e2e_scenarios.py` cover terminal outcomes, Session admission, cleanup ordering, and failure propagation.
+- `tests/test_sessions.py` covers JSONL storage, tree reconstruction, branching, and compaction.
+- `tests/test_agents.py`, `tests/test_credentials.py`, and `tests/test_notes_plugin.py` cover Agent-owned storage, credentials, and Plugin-owned data.
+- `tests/test_cli_print_mode.py`, `tests/test_plugin_cli.py`, and `tests/test_agent_template_cli.py` cover current CLI boundaries.
 
-### Planned blueprint impact
+Required new coverage is specified in `specs/tech-architecture/e09-TEST_PLAN_LATEST.md`:
 
-- **e07 Production Runtime Integrity:** must define the constitutional Core and safe extension ordering before the host is implemented.
-- **e08 Governed Core Extension Host:** owns the lifecycle/context contract, installed-code trust seam, and Notes migration.
-- **e09 Local Operations and Recovery:** must include Plugin activation/disposal failures, provenance, diagnostics, and Plugin-owned data recovery.
-- **e10 Accessible Product Experience and Documentation:** must explain Plugin trust, installation, compatibility, permissions, lifecycle, author contract, and limits.
-- **e11 Release and Distribution Assurance:** must verify Plugin API/version compatibility, package surface, clean installation, installed Plugin discovery, and trust-safe diagnostics.
+- `tests/test_diagnostics.py` and `tests/test_diagnostics_cli.py` for attribution, recursive sanitation, retention, persistence-health separation, and truthful inspection.
+- `tests/test_operations.py` and `tests/test_operations_cli.py` for data ownership, credential exclusion, manifest/digest integrity, path confinement, staged restore, and non-overwrite behavior.
+- `tests/test_recovery.py` and `tests/test_recovery_cli.py` for interrupted writes, corrupt/unsupported data, deterministic status, byte preservation, and explicit restore guidance.
 
-## Test coverage
-
-Existing coverage:
-
-- `tests/test_plugins.py` — strict state, installation, enable/configure/disable, fail-closed contribution validation, runtime composition, access approval, audit attribution, and read-only filtering.
-- `tests/test_notes_plugin.py` — Agent-owned Notes persistence and Tool behavior.
-- `tests/test_plugin_cli.py` — current Plugin lifecycle commands.
-- `tests/test_agent_templates.py` and `tests/test_agent_template_cli.py` — Template privacy and instantiation.
-- `tests/test_agent_runtime.py`, `tests/test_agents.py`, and `tests/test_delegation.py` — shared runtime composition and Agent boundaries.
-- `tests/test_middleware_pipeline.py`, `tests/test_access_policy.py`, and `tests/test_e2e_scenarios.py` — onion ordering, argument transformation, access, security, telemetry, and failure propagation.
-- `tests/test_agent_loop.py`, `tests/test_cli_print_mode.py`, `tests/test_cli_repl.py`, and `tests/test_tui_app.py` — event and frontend regressions.
-
-Required new coverage:
-
-- Plugin activation state and deterministic dependency handling.
-- Owned registration cleanup, including partial activation and async disposal failure.
-- Duplicate/undeclared contribution rejection across all supported contribution types.
-- Final Core policy/security validation after any Plugin Tool argument transformation.
-- Mandatory audit and terminal truth that Plugin hooks cannot suppress or forge.
-- Declarative versus trusted-code trust presentation and explicit activation.
-- Notes behavior through the new host with no Plugin-free Agent regression.
-- Plugin API compatibility and packaged clean-install smoke.
+Known gaps are intentional planning targets: no durable diagnostic store, unified data-layout API, archive/restore contract, or read-only recovery verifier currently exists.
 
 ## Risk: High
 
-The change introduces a public extension API across shared runtime, Plugin, middleware, persistence, CLI, and packaging boundaries. Incorrect ordering or excessive authority could bypass approval, lose audit evidence, corrupt Session truth, leak credentials, or make Plugin cleanup nondeterministic.
+The change crosses local persistence, security sanitation, shared runtime callbacks, Plugin-owned data, archive extraction, CLI exit status, and append-only history. A faulty implementation could leak credentials, follow an archive path escape, overwrite valid data, suppress a real Run outcome, or manufacture a false clean/recovered state.
 
 ## Recommended action
 
-Proceed through e08 after e07 using the selected narrow registration-context design in ADR 0003. Keep the executable public surface to three author operations, expose only typed capabilities rather than mutable runtime internals, and preserve a final Core validation gate that supported Plugin hooks cannot reorder or replace. Trusted same-process Python remains outside any sandbox claim. Rerun the plan audit before story slicing.
+Proceed with the three vertical slices in dependency order: e09s01 diagnostic evidence first, e09s02 supported archive/restore second, and e09s03 read-only recovery verification last. Use standard-library/Pydantic facilities only, keep credentials excluded, require byte-preservation and path-security regression tests, and run `bash scripts/lib/plan-consistency-check.sh specs/epics/e09-local-operations-recovery` before implementation.

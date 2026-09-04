@@ -1,18 +1,18 @@
 workflow_mode: solo-git
 session:
-  active_flow: plan
-  active_epic_id: null
-  active_story_id: null
+  active_flow: build
+  active_epic_id: e09
+  active_story_id: e09s01
   target_version: 0.6.0
 handoff:
-  next_skill: survey-context
-  summary: 'Governed Core Extension Host was merged into main and its completed capsule
-    was archived. Release gates passed: 239 tests, 88% overall and 96% business-boundary
-    coverage, clean Ruff/Mypy/build, public-surface and wheel checks, and independent
-    review. The next epic (e09 Local Operations and Recovery) can now be scoped.'
+  next_skill: bp-build
+  summary: e09 Local Operations and Recovery is fully planned in dependency order.
+    Three implementation-ready vertical stories cover attributed diagnostics and bounded
+    retention, supported non-credential backup/restore, and non-destructive interrupted-write/corrupt-data
+    recovery. The next step is one whole-epic bp-build on branch e09-local-operations-recovery.
   open_decisions: []
 git:
-  branch: main
+  branch: e09-local-operations-recovery
 environment:
   package_manager: uv 0.10.11
   python: 3.14.6
@@ -26,13 +26,14 @@ metrics:
   story_start: '2026-09-01T08:57:36Z'
   skill_timings:
     plan-work:
-      calls: 6
-      total_seconds: 13217.0
-      avg_seconds: 2202.8333333333335
+      calls: 7
+      total_seconds: 13584.0
+      avg_seconds: 1940.5714285714287
     develop-tdd:
       calls: 5
       total_seconds: 10063.0
       avg_seconds: 2012.6
+      _start: '2026-09-04T22:18:18Z'
     verify-work:
       calls: 3
       total_seconds: 1103.0

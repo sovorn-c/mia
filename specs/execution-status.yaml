@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.6.0
-updated_at: '2026-09-04T21:55:57Z'
+updated_at: '2026-09-04T22:15:36Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-09-03T08:22:40Z'
@@ -185,7 +185,31 @@ epics:
     title: Local Operations and Recovery
     status: planned
     bcps: 13
-    stories: {}
+    stories:
+      e09s01:
+        title: Attributed Local Diagnostics and Bounded Retention
+        status: planned
+        bcps: 5
+        risk: P0
+        tasks_total: 5
+        tasks_passing: 0
+        tasks_failing: 5
+      e09s02:
+        title: Supported Data Locations and Backup/Restore
+        status: planned
+        bcps: 5
+        risk: P0
+        tasks_total: 6
+        tasks_passing: 0
+        tasks_failing: 6
+      e09s03:
+        title: Non-Destructive Interrupted-Write and Corrupt-Data Recovery
+        status: planned
+        bcps: 3
+        risk: P0
+        tasks_total: 4
+        tasks_passing: 0
+        tasks_failing: 4
   e10:
     title: Accessible Product Experience and Documentation
     status: planned
