@@ -183,17 +183,17 @@ epics:
         tasks_failing: 0
   e09:
     title: Local Operations and Recovery
-    status: planned
+    status: in-progress
     bcps: 13
     stories:
       e09s01:
         title: Attributed Local Diagnostics and Bounded Retention
-        status: planned
+        status: completed
         bcps: 5
         risk: P0
         tasks_total: 5
-        tasks_passing: 0
-        tasks_failing: 5
+        tasks_passing: 5
+        tasks_failing: 0
       e09s02:
         title: Supported Data Locations and Backup/Restore
         status: planned
