@@ -6,7 +6,7 @@ session:
   target_version: 0.6.0
 handoff:
   next_skill: verify-work
-  summary: 'All three stories of epic e07 Production Runtime Integrity are complete and passing: e07s01 (Canonical Closeable Agent Run Stream), e07s02 (Safeguarded Runtime Settings and Session Admission), and e07s03 (Final Core Tool Validation and Plugin Boundary). All 205 tests pass, code is strictly typed with mypy, formatted with ruff, and offline build succeeds.'
+  summary: 'All three stories of epic e07 Production Runtime Integrity are complete and passing with review findings resolved: e07s01 (Canonical Closeable Agent Run Stream), e07s02 (Safeguarded Runtime Settings and Session Admission), and e07s03 (Final Core Tool Validation and Plugin Boundary). Lifecycle execution order aligned to atomic finalization, cleanup, admission release, and terminal delivery with ordering regression tests. All 207 tests pass, code is strictly typed with mypy, formatted with ruff, and offline build succeeds.'
   open_decisions: []
 git:
   branch: e07-production-runtime-integrity
