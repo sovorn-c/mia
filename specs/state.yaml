@@ -6,7 +6,7 @@ session:
   target_version: 0.6.0
 handoff:
   next_skill: survey-context
-  summary: Epic e09 Local Operations and Recovery was merged into local main and its reviewed capsule was archived. Release gates passed: 300 tests, Ruff, mypy, offline build, coverage, public-surface, wheel-surface, CLI, and diff checks. The next epic can now be planned.
+  summary: 'Epic e09 Local Operations and Recovery was merged into local main and its reviewed capsule was archived. Release gates passed: 300 tests, Ruff, mypy, offline build, coverage, public-surface, wheel-surface, CLI, and diff checks. The next epic can now be planned.'
   open_decisions: []
 git:
   branch: main
