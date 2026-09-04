@@ -380,3 +380,36 @@ async def test_run_request_first_iteration_acceptance_and_attribution(tmp_path) 
         assert e.run_id == events[0].run_id
     assert events[-1].event.type == "turn_complete"
 
+
+@pytest.mark.asyncio
+async def test_agent_runner_run_executes_research_sequencing(tmp_path) -> None:
+    from mia_agent.agent_runner import AgentRunner
+    from mia_agent.agents import AgentManager
+    from mia_agent.runtime_models import RunRequest
+    from mia_ai.providers.mock import MockProvider
+
+    provider = MockProvider()
+    provider.queue_text_response("architecture findings")
+    provider.queue_text_response("research final summary")
+
+    runner = AgentRunner(agent_manager=AgentManager(agents_dir=tmp_path / "agents"))
+    request = RunRequest(
+        prompt_text="investigate microservices",
+        agent_id="research",
+        session_id="session-res-1",
+    )
+
+    events = [event async for event in runner.run(request, provider=provider, cwd=tmp_path)]
+    assert events
+
+    # Check that both specialist (architect) and coordinator (research) envelopes were emitted
+    specialist_events = [e for e in events if e.task_id == "specialist"]
+    coordinator_events = [e for e in events if e.task_id == "root"]
+
+    assert specialist_events
+    assert coordinator_events
+    assert specialist_events[0].agent_id == "architect"
+    assert coordinator_events[0].agent_id == "research"
+    assert coordinator_events[-1].event.type == "turn_complete"
+
+
