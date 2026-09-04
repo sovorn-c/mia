@@ -14,25 +14,47 @@ from mia_agent.events import (
     TurnStartEvent,
 )
 from mia_agent.harness import AgentHarness
+from mia_agent.plugin_host import (
+    ActivationPlan,
+    PluginActivation,
+    PluginContext,
+    PluginHost,
+)
+from mia_agent.plugin_models import (
+    CORE_PLUGIN_API_VERSION,
+    PluginManifest,
+    PluginProvenance,
+    PluginToolSpec,
+    PluginTrust,
+)
 from mia_agent.plugins import AgentTemplate, NotesPlugin, PluginManager
 
 __all__ = [
+    "ActivationPlan",
     "Agent",
     "AgentEvent",
+    "AgentHarness",
     "AgentManager",
     "AgentRunner",
     "AgentTemplate",
-    "NotesPlugin",
-    "PluginManager",
-    "DelegationService",
-    "AgentHarness",
     "AssistantChunkEvent",
+    "CORE_PLUGIN_API_VERSION",
+    "DelegationService",
+    "NotesPlugin",
+    "PluginActivation",
+    "PluginContext",
+    "PluginHost",
+    "PluginManager",
+    "PluginManifest",
+    "PluginProvenance",
+    "PluginToolSpec",
+    "PluginTrust",
     "StepEndEvent",
     "StepStartEvent",
-    "ToolCallEvent",
-    "ToolResultEvent",
     "TaskRequest",
     "TaskResult",
+    "ToolCallEvent",
+    "ToolResultEvent",
     "TurnCompleteEvent",
     "TurnStartEvent",
 ]
