@@ -109,11 +109,13 @@ class RecoveryVerifier:
                     )
                 return
 
-            # 4. Check session JSONL files
+            # 4. Check JSONL files (session or diagnostics)
             if name.endswith(".jsonl"):
+                is_diag = name == "diagnostics.jsonl" or rel.startswith("diagnostics/")
+                cat = "diagnostics" if is_diag else "session"
+                target_label = "diagnostic record" if is_diag else "session append"
                 try:
                     raw_lines = file_path.read_bytes().split(b"\n")
-                    # Filter trailing empty element from split if file ended with newline
                     non_empty_indices = [i for i, line in enumerate(raw_lines) if line.strip()]
                     for pos, idx in enumerate(non_empty_indices):
                         line_bytes = raw_lines[idx]
@@ -124,30 +126,30 @@ class RecoveryVerifier:
                             if is_last_item:
                                 findings.append(
                                     RecoveryFinding(
-                                        category="session",
+                                        category=cat,
                                         status="attention",
                                         path=rel,
-                                        evidence=f"Truncated final session append detected at line {idx + 1}: {exc}",
-                                        action="Preserve session file and restore from verified backup if needed",
+                                        evidence=f"Truncated final {target_label} detected at line {idx + 1}: {exc}",
+                                        action=f"Preserve {cat} file and restore from verified backup if needed",
                                     )
                                 )
                             else:
                                 findings.append(
                                     RecoveryFinding(
-                                        category="session",
+                                        category=cat,
                                         status="blocked",
                                         path=rel,
-                                        evidence=f"Interior corruption detected at line {idx + 1}: {exc}",
-                                        action="Restore session from verified backup using 'mia data restore'",
+                                        evidence=f"Interior corruption detected in {cat} at line {idx + 1}: {exc}",
+                                        action=f"Restore {cat} from verified backup using 'mia data restore'",
                                     )
                                 )
                 except OSError as exc:
                     findings.append(
                         RecoveryFinding(
-                            category="session",
+                            category=cat,
                             status="blocked",
                             path=rel,
-                            evidence=f"Failed to read session file: {exc}",
+                            evidence=f"Failed to read {cat} file: {exc}",
                             action="Check disk permissions or restore from backup",
                         )
                     )
@@ -207,3 +209,8 @@ class RecoveryVerifier:
             files_scanned=scanned_count,
             clean_files=clean_count,
         )
+
+
+def verify_recovery(manager: AgentManager | None = None) -> RecoveryReport:
+    """Run deterministic read-only recovery verification over supported local data."""
+    return RecoveryVerifier(manager=manager).verify()

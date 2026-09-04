@@ -157,7 +157,10 @@ def test_status_precedence_blocked_over_attention(tmp_path: Path) -> None:
 
     # Blocked condition: malformed interior session line
     session_file = agents_dir / "mia" / "sessions" / "s1.jsonl"
-    session_file.write_text('{"event": "start"}\nCORRUPT_INTERIOR\n{"event": "end"}\n', encoding="utf-8")
+    session_file.parent.mkdir(parents=True, exist_ok=True)
+    session_file.write_text(
+        '{"event": "start"}\nCORRUPT_INTERIOR\n{"event": "end"}\n', encoding="utf-8"
+    )
 
     report = verify_recovery(manager)
     assert report.status == "blocked"
@@ -196,13 +199,17 @@ def test_diagnostics_store_corruption_classification(tmp_path: Path) -> None:
     diag_file.parent.mkdir(parents=True, exist_ok=True)
 
     # 1. Truncated final line -> attention
-    diag_file.write_text('{"source": "run", "outcome": "success"}\n{"source": "to', encoding="utf-8")
+    diag_file.write_text(
+        '{"source": "run", "outcome": "success"}\n{"source": "to', encoding="utf-8"
+    )
     report = verify_recovery(manager)
     assert report.status == "attention"
     assert any(f.category == "diagnostics" and f.status == "attention" for f in report.findings)
 
     # 2. Interior corrupt line -> blocked
-    diag_file.write_text('{"source": "run"}\nBOGUS_INTERIOR_LINE\n{"source": "plugin"}\n', encoding="utf-8")
+    diag_file.write_text(
+        '{"source": "run"}\nBOGUS_INTERIOR_LINE\n{"source": "plugin"}\n', encoding="utf-8"
+    )
     report2 = verify_recovery(manager)
     assert report2.status == "blocked"
     assert any(f.category == "diagnostics" and f.status == "blocked" for f in report2.findings)
@@ -217,7 +224,7 @@ def test_recovery_verification_is_strictly_byte_preserving(tmp_path: Path) -> No
     files_and_contents = {
         agents_dir / "mia" / "agent.json": '{"agent_id": "mia", "display_name": "Mia"}',
         agents_dir / "mia" / "sessions" / "s1.jsonl": '{"event": "start"}\n{"event": "incomp',
-        agents_dir / "mia" / ".atomic_tmp_1": 'temporary artifact data',
+        agents_dir / "mia" / ".atomic_tmp_1": "temporary artifact data",
         diagnostics_dir / "diagnostics.jsonl": '{"source": "run", "outcome": "success"}\n',
     }
 
@@ -237,4 +244,3 @@ def test_recovery_verification_is_strictly_byte_preserving(tmp_path: Path) -> No
     for p, expected_content in files_and_contents.items():
         assert p.exists()
         assert p.read_text(encoding="utf-8") == expected_content
-
