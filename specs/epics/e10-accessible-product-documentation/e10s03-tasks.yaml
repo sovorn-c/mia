@@ -1,0 +1,87 @@
+story_id: e10s03
+title: Complete User, Operator, and Plugin Documentation
+spec: e10s03-complete-user-operator-plugin-documentation.md
+status: passing
+bcps: 4
+risk: P1
+delta: ADDED
+scenarios:
+  - SC-e10s03-P1-01
+  - SC-e10s03-P1-02
+  - SC-e10s03-P1-03
+  - SC-e10s03-P2-04
+tasks:
+  - id: e10s03t01
+    title: Publish README navigation and user guide
+    description: Expand the entrypoint and add installation, credentials, first Run, Agent/Session/model, access, keyboard, and plain output guidance.
+    status: passing
+    risk: P1
+    security: low
+    scenarios: [SC-e10s03-P1-01]
+    files:
+      - README.md
+      - docs/README.md
+      - docs/user-guide.md
+    verify: test -s README.md && test -s docs/README.md && test -s docs/user-guide.md && rg -n 'uv sync|mia run|mia agent|NO_COLOR|--plain' README.md docs/user-guide.md
+    allure:
+      severity: high
+      categories: [Documentation, User Experience]
+  - id: e10s03t02
+    title: Publish operator data and recovery guide
+    description: Document diagnostics, ownership/sensitivity, backup/restore, recovery, troubleshooting, integrity, and non-destructive limits.
+    status: passing
+    risk: P1
+    security: medium
+    scenarios: [SC-e10s03-P1-02]
+    files:
+      - docs/operator-guide.md
+      - specs/epics/archive/e09-local-operations-recovery/
+    verify: test -s docs/operator-guide.md && rg -n 'diagnostics|data locations|backup|restore|recovery|non-destructive|credential' docs/operator-guide.md && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: high
+      categories: [Documentation, Security Review, Operations]
+  - id: e10s03t03
+    title: Publish Plugin author and trust guide
+    description: Document Plugin provenance/trust, static resources, typed contributions, lifecycle, compatibility, data ownership, and unsandboxed trusted code.
+    status: passing
+    risk: P1
+    security: medium
+    scenarios: [SC-e10s03-P1-03]
+    files:
+      - docs/plugin-author-guide.md
+      - specs/adr/0003-governed-core-extension-host.md
+    verify: test -s docs/plugin-author-guide.md && rg -n 'trust|provenance|static|contribution|lifecycle|sandbox|Core' docs/plugin-author-guide.md && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: high
+      categories: [Documentation, Security Review, Plugins]
+  - id: e10s03t04
+    title: Add deterministic documentation consistency validation
+    description: Validate required guides, local links, supported command examples, canonical terms, forbidden placeholders, and secret-shaped values offline.
+    status: passing
+    risk: P1
+    security: medium
+    scenarios: [SC-e10s03-P2-04]
+    files:
+      - tests/test_documentation.py
+      - docs/
+      - README.md
+    verify: uv run --offline pytest tests/test_documentation.py && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: high
+      categories: [Documentation, Security Review, unit]
+  - id: e10s03t05
+    title: Run complete documentation and frontend regression
+    description: Confirm the documentation matches current CLI help and e10s01/e10s02 frontend contracts without changing runtime semantics.
+    status: passing
+    risk: P1
+    security: low
+    scenarios: [SC-e10s03-P1-01, SC-e10s03-P1-02, SC-e10s03-P1-03, SC-e10s03-P2-04]
+    files:
+      - tests/test_documentation.py
+      - tests/test_cli_print_mode.py
+      - tests/test_cli_repl.py
+      - tests/test_tui_app.py
+    verify: uv run --offline pytest tests/test_documentation.py tests/test_cli_print_mode.py tests/test_cli_repl.py tests/test_tui_app.py
+    allure:
+      severity: high
+      categories: [Documentation, Accessibility, Compatibility]

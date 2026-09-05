@@ -21,7 +21,7 @@ from mia_agent.plugins import PluginManager
 from mia_agent.runtime_events import PluginDiagnosticEvent, RunErrorEvent
 from mia_agent.runtime_factory import AgentRuntimeFactory
 from mia_agent.runtime_models import RunRequest
-from mia_cli.renderers.rich_stream import RichStreamRenderer
+from mia_cli.renderers.rich_stream import RichStreamRenderer, resolve_plain_mode
 from mia_middleware.access import ApprovalCallback, ApprovalRequest
 
 app = typer.Typer(
@@ -68,8 +68,15 @@ async def _run_agent_loop(
     context_window: int | None = None,
     cwd: Path | None = None,
     approval_callback: ApprovalCallback | None = None,
+    plain: bool = False,
 ) -> bool:
-    renderer = RichStreamRenderer(console=console)
+    effective_plain = resolve_plain_mode(plain_option=plain, console=console)
+    output_console = (
+        Console(no_color=True, highlight=False, force_terminal=False)
+        if effective_plain
+        else console
+    )
+    renderer = RichStreamRenderer(console=output_console, plain_mode=effective_plain)
     had_error = False
     manager = AgentManager()
     runner = AgentRunner(
@@ -127,6 +134,13 @@ def run_command(
         int | None,
         typer.Option("--context-window", "-w", help="Context window token limit (e.g. 128000)"),
     ] = None,
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Emit static plain text output without ANSI color or live animations",
+        ),
+    ] = False,
 ) -> None:
     """Execute one prompt through a named Agent in headless streaming mode."""
     if not prompt:
@@ -140,6 +154,7 @@ def run_command(
             compaction_threshold=compaction_threshold,
             context_window=context_window,
             approval_callback=_confirm_tool,
+            plain=plain,
         )
     )
     if not succeeded:

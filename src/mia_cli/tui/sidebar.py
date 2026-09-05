@@ -6,6 +6,7 @@ from typing import Any
 
 from rich.text import Text
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
 from textual.message import Message
 from textual.widgets import Static
@@ -15,6 +16,15 @@ from mia_agent.agents import Agent
 
 class AgentListItem(Vertical):
     """Visual card for one Agent in the roster."""
+
+    can_focus = True
+
+    BINDINGS = [
+        Binding("enter", "select_agent", "Select", show=False),
+    ]
+
+    def action_select_agent(self) -> None:
+        self.post_message(AgentSidebar.AgentSelected(self.agent.agent_id))
 
     def __init__(self, agent: Agent, is_active: bool = False, **kwargs: Any) -> None:
         super().__init__(**kwargs)

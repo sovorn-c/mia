@@ -1,0 +1,74 @@
+story_id: e10s01
+title: Keyboard-Operable Essential Terminal Workflows
+spec: e10s01-keyboard-operable-terminal-workflows.md
+status: passing
+bcps: 5
+risk: P0
+delta: MODIFIED
+scenarios:
+  - SC-e10s01-P0-01
+  - SC-e10s01-P0-02
+  - SC-e10s01-P1-03
+tasks:
+  - id: e10s01t01
+    title: Specify and test the essential REPL interaction matrix
+    description: Add public tests for prompt submission, clear/cancel, help, Agent/model selection, inspection, quit, focus, and bounded non-TTY behavior.
+    status: passing
+    risk: P0
+    security: low
+    scenarios: [SC-e10s01-P0-01]
+    files:
+      - src/mia_cli/interactive_input.py
+      - src/mia_cli/repl.py
+      - tests/test_cli_repl.py
+      - tests/test_pty_prompt_layout.py
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_pty_prompt_layout.py -k 'keybinding or shortcut or escape or prompt or select or help or quit'
+    allure:
+      severity: critical
+      categories: [Accessibility, REPL, unit]
+  - id: e10s01t02
+    title: Align REPL help and selector discovery
+    description: Make essential commands and keyboard/text alternatives visible while preserving aliases and non-TTY selectors.
+    status: passing
+    risk: P0
+    security: low
+    scenarios: [SC-e10s01-P1-03]
+    files:
+      - src/mia_cli/interactive_input.py
+      - src/mia_cli/repl.py
+      - tests/test_cli_repl.py
+    verify: uv run --offline pytest tests/test_cli_repl.py -k 'slash or command or help or non_tty or select'
+    allure:
+      severity: critical
+      categories: [Accessibility, Discovery, integration]
+  - id: e10s01t03
+    title: Harden TUI focus, bindings, and textual labels
+    description: Test and implement Textual prompt focus, Agent switching, new-Agent, approval, help, quit, and visible labels through Pilot.
+    status: passing
+    risk: P0
+    security: low
+    scenarios: [SC-e10s01-P0-02]
+    files:
+      - src/mia_cli/tui/app.py
+      - src/mia_cli/tui/widgets/
+      - tests/test_tui_app.py
+    verify: uv run --offline pytest tests/test_tui_app.py -k 'prompt or agent or approval or help or quit or focus'
+    allure:
+      severity: critical
+      categories: [Accessibility, TUI, integration]
+  - id: e10s01t04
+    title: Run cross-frontend accessibility regression
+    description: Verify the keyboard contract does not change canonical runtime routing or existing CLI/REPL/TUI behavior.
+    status: passing
+    risk: P1
+    security: low
+    scenarios: [SC-e10s01-P0-01, SC-e10s01-P0-02, SC-e10s01-P1-03]
+    files:
+      - tests/test_cli_repl.py
+      - tests/test_pty_prompt_layout.py
+      - tests/test_tui_app.py
+      - tests/test_cli_print_mode.py
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_pty_prompt_layout.py tests/test_tui_app.py tests/test_cli_print_mode.py
+    allure:
+      severity: high
+      categories: [Accessibility, Compatibility, regression]

@@ -41,7 +41,6 @@ htmlcov/
 # Mia local sessions, environment, and agent workspace files
 .mia/
 .env
-docs/
 
 # Local agent cockpit
 specs/

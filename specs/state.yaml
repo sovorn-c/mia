@@ -1,15 +1,15 @@
 workflow_mode: solo-git
 session:
-  active_flow: plan
-  active_epic_id: null
-  active_story_id: null
+  active_flow: verify-work
+  active_epic_id: e10
+  active_story_id: e10s03
   target_version: 0.6.0
 handoff:
-  next_skill: survey-context
-  summary: 'Epic e09 Local Operations and Recovery was merged into local main and its reviewed capsule was archived. Release gates passed: 300 tests, Ruff, mypy, offline build, coverage, public-surface, wheel-surface, CLI, and diff checks. The next epic can now be planned.'
+  next_skill: verify-work
+  summary: 'e10 Accessible Product Experience and Documentation is completely built and internally complete across all three stories (e10s01 keyboard terminal workflows, e10s02 plain semantic status and motion safety, e10s03 comprehensive documentation) with verification evidence persisted in specs/verifications/e10-verify.yaml.'
   open_decisions: []
 git:
-  branch: main
+  branch: e10-accessible-product-documentation
 environment:
   package_manager: uv 0.10.11
   python: 3.14.6

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 import time
 from typing import Any
 
@@ -24,6 +26,32 @@ from mia_agent.events import (
     TurnCompleteEvent,
     TurnStartEvent,
 )
+
+
+def resolve_plain_mode(
+    plain_option: bool = False,
+    console: Console | None = None,
+    environ: dict[str, str] | None = None,
+) -> bool:
+    """Determine whether plain, non-animated, accessible output should be used.
+
+    Returns True if:
+    1. plain_option is True (explicit --plain flag)
+    2. NO_COLOR environment variable is set and non-empty
+    3. The target console/stream is not an interactive terminal
+    """
+    if plain_option:
+        return True
+    env = os.environ if environ is None else environ
+    if env.get("NO_COLOR"):
+        return True
+    if console is not None:
+        if not console.is_terminal or console.no_color:
+            return True
+    elif not sys.stdout.isatty():
+        return True
+    return False
+
 
 spinners_dict = getattr(rich.spinner, "SPINNERS", {})
 if "dot_cycle" not in spinners_dict:
@@ -91,8 +119,12 @@ class RichStreamRenderer:
         self,
         console: Console | None = None,
         show_thinking_trace: bool = False,
+        plain_mode: bool | None = None,
     ) -> None:
         self.console = console or Console()
+        self.plain_mode = (
+            plain_mode if plain_mode is not None else resolve_plain_mode(console=self.console)
+        )
         self.show_thinking_trace = show_thinking_trace
         self._in_thought = False
         self._in_text = False
@@ -115,7 +147,7 @@ class RichStreamRenderer:
 
     def _start_status(self, action: str, style: str = "bold #FF7A00") -> None:
         """Start or update live animated working status with dynamic cycling dots and live timer."""
-        if not self.console.is_terminal:
+        if self.plain_mode or not self.console.is_terminal:
             return
         if self._active_status is None:
             self._status_widget = AnimatedWorkingStatus(
@@ -165,13 +197,19 @@ class RichStreamRenderer:
                         if self._in_text:
                             self.console.print()
                             self._in_text = False
-                        self.console.print(
-                            Text("💭 Thinking: ", style="dim italic #FF7A00"), end=""
-                        )
+                        if self.plain_mode:
+                            self.console.print("Thinking: ", end="", markup=False)
+                        else:
+                            self.console.print(
+                                Text("💭 Thinking: ", style="dim italic #FF7A00"), end=""
+                            )
                         self._in_thought = True
-                    self.console.print(
-                        Text(event.thought_delta, style="dim italic #9CA3AF"), end=""
-                    )
+                    if self.plain_mode:
+                        self.console.print(event.thought_delta, end="", markup=False)
+                    else:
+                        self.console.print(
+                            Text(event.thought_delta, style="dim italic #9CA3AF"), end=""
+                        )
                 else:
                     self._start_status("Thinking")
 
@@ -181,9 +219,15 @@ class RichStreamRenderer:
                     self.console.print("\n")
                     self._in_thought = False
                 if not self._in_text:
-                    self.console.print("[bold #FF7A00]🥕 mia ›[/bold #FF7A00] ", end="")
+                    if self.plain_mode:
+                        self.console.print("mia > ", end="", markup=False)
+                    else:
+                        self.console.print("[bold #FF7A00]🥕 mia ›[/bold #FF7A00] ", end="")
                 self._in_text = True
-                self.console.print(Text(event.delta_text), end="")
+                if self.plain_mode:
+                    self.console.print(event.delta_text, end="", markup=False)
+                else:
+                    self.console.print(Text(event.delta_text), end="")
 
         elif isinstance(event, ToolCallEvent):
             self._stop_status()
@@ -201,10 +245,13 @@ class RichStreamRenderer:
             else:
                 tool_summary = event.tool_name
 
-            self._start_status(
-                f"Running {tool_summary}",
-                style="bold #38BDF8",
-            )
+            if self.plain_mode:
+                self.console.print(f"[running] {tool_summary}", markup=False)
+            else:
+                self._start_status(
+                    f"Running {tool_summary}",
+                    style="bold #38BDF8",
+                )
             self.turn_audit_log.append(
                 {
                     "tool_name": event.tool_name,
@@ -230,13 +277,26 @@ class RichStreamRenderer:
             else:
                 result_desc = "✓ Succeeded"
 
-            if event.is_error:
-                self.console.print(f"[bold red]✗ {event.tool_name}[/bold red] [dim]{dur_str}[/dim]")
-                self.console.print(f"  [dim red]↳ {output_str[:250]}[/dim red]")
+            if self.plain_mode:
+                if event.is_error:
+                    self.console.print(f"[error] {event.tool_name} {dur_str}", markup=False)
+                    if output_str.strip():
+                        self.console.print(f"  ↳ {output_str[:250]}", markup=False)
+                else:
+                    clean_desc = result_desc.replace("✓ ", "")
+                    self.console.print(
+                        f"[ok] {event.tool_name} {clean_desc} {dur_str}", markup=False
+                    )
             else:
-                self.console.print(
-                    f"[bold green]✓[/bold green] [bold white]{event.tool_name}[/bold white] [dim green]{result_desc}[/dim green] [dim]{dur_str}[/dim]"
-                )
+                if event.is_error:
+                    self.console.print(
+                        f"[bold red]✗ {event.tool_name}[/bold red] [dim]{dur_str}[/dim]"
+                    )
+                    self.console.print(f"  [dim red]↳ {output_str[:250]}[/dim red]")
+                else:
+                    self.console.print(
+                        f"[bold green]✓[/bold green] [bold white]{event.tool_name}[/bold white] [dim green]{result_desc}[/dim green] [dim]{dur_str}[/dim]"
+                    )
 
             # Update audit log entry
             if self.turn_audit_log:
@@ -253,7 +313,10 @@ class RichStreamRenderer:
         elif isinstance(event, AgentErrorEvent):
             self._stop_status()
             self._end_streams()
-            self.console.print(f"[bold red]Agent error: {event.error}[/bold red]")
+            if self.plain_mode:
+                self.console.print(f"[error] Agent error: {event.error}", markup=False)
+            else:
+                self.console.print(f"[bold red]Agent error: {event.error}[/bold red]")
 
         elif isinstance(event, TurnCompleteEvent):
             self._stop_status()
@@ -261,9 +324,15 @@ class RichStreamRenderer:
             cost_str = f" | ${event.total_cost_usd:.4f}" if event.total_cost_usd > 0 else ""
             elapsed = time.time() - self.turn_start_time if self.turn_start_time > 0 else 0.0
             step_word = "1 step" if event.total_steps == 1 else f"{event.total_steps} steps"
-            self.console.print(
-                f"\n[dim green]✓ Turn completed in {elapsed:.1f}s, [{step_word}]{cost_str}[/dim green]\n"
-            )
+            if self.plain_mode:
+                self.console.print(
+                    f"\n[ok] Turn completed in {elapsed:.1f}s, [{step_word}]{cost_str}\n",
+                    markup=False,
+                )
+            else:
+                self.console.print(
+                    f"\n[dim green]✓ Turn completed in {elapsed:.1f}s, [{step_word}]{cost_str}[/dim green]\n"
+                )
 
     def render_audit_log(self) -> None:
         """Render detailed post-turn tool execution logs and diffs."""

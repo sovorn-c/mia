@@ -173,3 +173,92 @@ async def test_tui_uses_run_request_and_closeable_stream(tmp_path: Path) -> None
     assert received_requests[0].prompt_text == "Test TUI prompt"
     assert received_requests[0].agent_id == "mia"
     assert closed is True
+
+
+@pytest.mark.asyncio
+async def test_tui_approval_modal_keyboard_bindings_and_focus(tmp_path: Path) -> None:
+    from mia_cli.tui.widgets.approval_modal import ApprovalModal
+
+    app = MiaApp(
+        agent_manager=AgentManager(agents_dir=tmp_path / "agents"),
+        model_name="mock-model",
+        cwd=tmp_path,
+    )
+
+    async with app.run_test() as pilot:
+        results: list[bool | None] = []
+
+        # Test 'y' keypress approves
+        modal = ApprovalModal(action_name="write_file", details="test details", agent_id="mia")
+        app.push_screen(modal, callback=lambda res: results.append(res))
+        await pilot.pause()
+        assert modal.query_one("#btn-approve").has_focus
+        await pilot.press("y")
+        await pilot.pause()
+        assert results[-1] is True
+
+        # Test 'n' keypress rejects
+        modal2 = ApprovalModal(action_name="delete_file", details="test details", agent_id="mia")
+        app.push_screen(modal2, callback=lambda res: results.append(res))
+        await pilot.pause()
+        assert modal2.query_one("#btn-approve").has_focus
+        await pilot.press("n")
+        await pilot.pause()
+        assert results[-1] is False
+
+        # Test 'escape' keypress rejects
+        modal3 = ApprovalModal(action_name="run_command", details="test details", agent_id="mia")
+        app.push_screen(modal3, callback=lambda res: results.append(res))
+        await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+        assert results[-1] is False
+
+
+@pytest.mark.asyncio
+async def test_tui_keyboard_focus_agent_switch_help_and_quit(tmp_path: Path) -> None:
+    from mia_cli.tui.widgets.message_card import AssistantMessageCard
+
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    manager.create_agent("helper", display_name="Helper", tools=[])
+    app = MiaApp(
+        agent_manager=manager,
+        model_name="mock-model",
+        cwd=tmp_path,
+    )
+
+    async with app.run_test() as pilot:
+        # Initial focus is on prompt textarea
+        textarea = app.query_one("#prompt-textarea")
+        assert textarea.has_focus
+
+        # Shift focus away to an item in sidebar, then press escape to return focus to prompt
+        app.query(AgentListItem).first().focus()
+        await pilot.pause()
+        assert not textarea.has_focus
+        await pilot.press("escape")
+        await pilot.pause()
+        assert textarea.has_focus
+
+        # Press F1 to show help
+        await pilot.press("f1")
+        await pilot.pause()
+        cards = list(app.query(AssistantMessageCard))
+        assert len(cards) >= 1
+
+        # Press Alt+2 to switch to second agent
+        agents = manager.list_agents()
+        assert len(agents) >= 2
+        await pilot.press("alt+2")
+        await pilot.pause()
+        assert app.active_agent_id == agents[1].agent_id
+
+        # Press Ctrl+N to create worker
+        await pilot.press("ctrl+n")
+        await pilot.pause()
+        assert app.active_agent_id.startswith("worker")
+
+        # Press Ctrl+Q to quit
+        await pilot.press("ctrl+q")
+        await pilot.pause()
+        assert not app.is_running
