@@ -1,0 +1,59 @@
+id: e10
+slug: accessible-product-documentation
+title: Accessible Product Experience and Documentation
+type: production-readiness
+status: planned
+planning_stage: planned
+target_version: "0.6.0"
+wsjf:
+  business_value: 8
+  time_criticality: 7
+  risk_reduction: 7
+  job_size: 3
+  score: 7.33
+total_bcps: 13
+depends_on: [e07, e08, e09]
+outcome: >-
+  Users can operate essential workflows and make informed Plugin trust decisions without color,
+  animation, or undocumented product knowledge.
+boundaries:
+  includes:
+    - Keyboard-operable essential CLI, REPL, and Textual workflows
+    - Status and error meaning that does not depend on color alone
+    - Motion-safe working feedback and usable plain/non-interactive output
+    - Installation, provider configuration, Plugin trust/provenance, data, recovery, and diagnostics documentation
+    - Plugin author and user guidance for lifecycle, permissions, compatibility, and supported extension limits
+    - Accessibility, troubleshooting, upgrade expectations, and known-limit guidance
+  excludes:
+    - Full visual redesign or new interaction model
+    - Web documentation platform
+    - Localization
+stories:
+  - id: e10s01
+    title: Keyboard-Operable Essential Terminal Workflows
+    status: planned
+    bcps: 5
+    risk: P0
+    delta: MODIFIED
+    depends_on: []
+    spec_file: e10s01-keyboard-operable-terminal-workflows.md
+    tasks_file: e10s01-tasks.yaml
+  - id: e10s02
+    title: Plain Output, Semantic Status, and Motion Safety
+    status: planned
+    bcps: 4
+    risk: P0
+    delta: MODIFIED
+    depends_on: [e10s01]
+    spec_file: e10s02-plain-output-semantic-status-and-motion-safety.md
+    tasks_file: e10s02-tasks.yaml
+  - id: e10s03
+    title: Complete User, Operator, and Plugin Documentation
+    status: planned
+    bcps: 4
+    risk: P1
+    delta: ADDED
+    depends_on: [e10s01, e10s02]
+    spec_file: e10s03-complete-user-operator-plugin-documentation.md
+    tasks_file: e10s03-tasks.yaml
+next_skill: bp-build

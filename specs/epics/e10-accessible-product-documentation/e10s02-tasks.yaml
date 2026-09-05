@@ -1,0 +1,76 @@
+story_id: e10s02
+title: Plain Output, Semantic Status, and Motion Safety
+spec: e10s02-plain-output-semantic-status-and-motion-safety.md
+status: failing
+bcps: 4
+risk: P0
+delta: MODIFIED
+scenarios:
+  - SC-e10s02-P0-01
+  - SC-e10s02-P0-02
+  - SC-e10s02-P1-03
+  - SC-e10s02-P1-04
+tasks:
+  - id: e10s02t01
+    title: Specify presentation mode selection
+    description: Add tests and a small contract for --plain, NO_COLOR, and non-TTY detection without changing Core execution.
+    status: failing
+    risk: P0
+    security: medium
+    scenarios: [SC-e10s02-P0-01]
+    files:
+      - src/mia_cli/main.py
+      - src/mia_cli/renderers/rich_stream.py
+      - tests/test_cli_print_mode.py
+      - tests/test_cli_repl.py
+    verify: uv run --offline pytest tests/test_cli_print_mode.py tests/test_cli_repl.py -k 'plain or color or ansi or non_tty' && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: [Accessibility, Security Review, CLI]
+  - id: e10s02t02
+    title: Thread plain mode through the renderer
+    description: Pass the selected mode from the public run command to RichStreamRenderer and keep event ordering unchanged.
+    status: failing
+    risk: P0
+    security: medium
+    scenarios: [SC-e10s02-P0-01, SC-e10s02-P1-03]
+    files:
+      - src/mia_cli/main.py
+      - src/mia_cli/renderers/rich_stream.py
+      - tests/test_cli_print_mode.py
+    verify: uv run --offline pytest tests/test_cli_print_mode.py -k 'run or renderer or plain or output' && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: [Accessibility, Security Review, Renderer]
+  - id: e10s02t03
+    title: Emit semantic static status labels and disable motion
+    description: Replace color/emoji-only cues in plain mode with stable labels and suppress Live/spinner updates while preserving interactive defaults.
+    status: failing
+    risk: P0
+    security: medium
+    scenarios: [SC-e10s02-P0-02]
+    files:
+      - src/mia_cli/renderers/rich_stream.py
+      - src/mia_cli/main.py
+      - tests/test_cli_print_mode.py
+      - tests/test_cli_repl.py
+    verify: uv run --offline pytest tests/test_cli_print_mode.py tests/test_cli_repl.py -k 'status or error or cancel or spinner or animation or plain' && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: [Accessibility, Security Review, Motion Safety]
+  - id: e10s02t04
+    title: Prove interactive compatibility and truthful exits
+    description: Exercise plain and interactive presentation across runtime, CLI, REPL, and recovery paths without changing terminal truth or policy.
+    status: failing
+    risk: P1
+    security: medium
+    scenarios: [SC-e10s02-P0-02, SC-e10s02-P1-03, SC-e10s02-P1-04]
+    files:
+      - tests/test_agent_runtime.py
+      - tests/test_cli_print_mode.py
+      - tests/test_cli_repl.py
+      - tests/test_recovery_cli.py
+    verify: uv run --offline pytest tests/test_agent_runtime.py tests/test_cli_print_mode.py tests/test_cli_repl.py tests/test_recovery_cli.py && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: high
+      categories: [Accessibility, Security Review, Compatibility]

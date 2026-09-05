@@ -1,15 +1,15 @@
 workflow_mode: solo-git
 session:
-  active_flow: plan
-  active_epic_id: null
-  active_story_id: null
+  active_flow: build
+  active_epic_id: e10
+  active_story_id: e10s01
   target_version: 0.6.0
 handoff:
-  next_skill: survey-context
-  summary: 'Epic e09 Local Operations and Recovery was merged into local main and its reviewed capsule was archived. Release gates passed: 300 tests, Ruff, mypy, offline build, coverage, public-surface, wheel-surface, CLI, and diff checks. The next epic can now be planned.'
+  next_skill: bp-build
+  summary: 'e10 Accessible Product Experience and Documentation is fully planned in dependency order. Three implementation-ready vertical stories cover keyboard-operable terminal workflows, plain semantic motion-safe output, and complete user/operator/Plugin documentation. The next step is one whole-epic bp-build on branch e10-accessible-product-documentation.'
   open_decisions: []
 git:
-  branch: main
+  branch: e10-accessible-product-documentation
 environment:
   package_manager: uv 0.10.11
   python: 3.14.6

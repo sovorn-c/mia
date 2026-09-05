@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.6.0
-updated_at: '2026-09-04T23:53:35Z'
+updated_at: '2026-09-05T01:46:26Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-09-03T08:22:40Z'
@@ -214,7 +214,31 @@ epics:
     title: Accessible Product Experience and Documentation
     status: planned
     bcps: 13
-    stories: {}
+    stories:
+      e10s01:
+        title: Keyboard-Operable Essential Terminal Workflows
+        status: planned
+        bcps: 5
+        risk: P0
+        tasks_total: 4
+        tasks_passing: 0
+        tasks_failing: 4
+      e10s02:
+        title: Plain Output, Semantic Status, and Motion Safety
+        status: planned
+        bcps: 4
+        risk: P0
+        tasks_total: 4
+        tasks_passing: 0
+        tasks_failing: 4
+      e10s03:
+        title: Complete User, Operator, and Plugin Documentation
+        status: planned
+        bcps: 4
+        risk: P1
+        tasks_total: 5
+        tasks_passing: 0
+        tasks_failing: 5
   e11:
     title: Release and Distribution Assurance
     status: planned
