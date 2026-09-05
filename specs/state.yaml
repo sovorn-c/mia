@@ -5,8 +5,8 @@ session:
   active_story_id: e10s03
   target_version: 0.6.0
 handoff:
-  next_skill: bp-build
-  summary: 'e10 Accessible Product Experience and Documentation is fully planned in dependency order. Three implementation-ready vertical stories cover keyboard-operable terminal workflows, plain semantic motion-safe output, and complete user/operator/Plugin documentation. The next step is one whole-epic bp-build on branch e10-accessible-product-documentation.'
+  next_skill: verify-work
+  summary: 'e10 Accessible Product Experience and Documentation is completely built and passing across all three stories (e10s01 keyboard terminal workflows, e10s02 plain semantic status and motion safety, e10s03 comprehensive documentation).'
   open_decisions: []
 git:
   branch: e10-accessible-product-documentation

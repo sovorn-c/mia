@@ -212,7 +212,7 @@ epics:
         tasks_failing: 0
   e10:
     title: Accessible Product Experience and Documentation
-    status: planned
+    status: completed
     bcps: 13
     stories:
       e10s01:
@@ -233,12 +233,12 @@ epics:
         tasks_failing: 0
       e10s03:
         title: Complete User, Operator, and Plugin Documentation
-        status: planned
+        status: passing
         bcps: 4
         risk: P1
         tasks_total: 5
-        tasks_passing: 0
-        tasks_failing: 5
+        tasks_passing: 5
+        tasks_failing: 0
   e11:
     title: Release and Distribution Assurance
     status: planned

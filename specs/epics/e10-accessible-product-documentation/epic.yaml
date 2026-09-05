@@ -2,7 +2,7 @@ id: e10
 slug: accessible-product-documentation
 title: Accessible Product Experience and Documentation
 type: production-readiness
-status: planned
+status: completed
 planning_stage: planned
 target_version: "0.6.0"
 wsjf:
@@ -49,7 +49,7 @@ stories:
     tasks_file: e10s02-tasks.yaml
   - id: e10s03
     title: Complete User, Operator, and Plugin Documentation
-    status: planned
+    status: passing
     bcps: 4
     risk: P1
     delta: ADDED
