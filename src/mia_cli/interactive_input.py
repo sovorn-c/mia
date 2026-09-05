@@ -256,6 +256,8 @@ class LivePromptSession:
         if not sys.stdin.isatty() and not getattr(self.session, "_input", None):
             try:
                 return input(prompt_prefix).strip()
+            except KeyboardInterrupt:
+                return ""
             except EOFError:
                 raise
 
@@ -282,6 +284,8 @@ class LivePromptSession:
         if not sys.stdin.isatty() and not getattr(self.session, "_input", None):
             try:
                 return input(prompt_prefix).strip()
+            except KeyboardInterrupt:
+                return ""
             except EOFError:
                 raise
 
@@ -444,6 +448,8 @@ def interactive_select(
             raw = input(prompt_str).strip()
             if not raw:
                 return options[default_idx][0]
+            if raw.lower() in ("0", "q", "quit", "cancel", "esc"):
+                return None
             if raw.isdigit() and 1 <= int(raw) <= num_options:
                 return options[int(raw) - 1][0]
             for opt in options:
