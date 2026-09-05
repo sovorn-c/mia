@@ -276,4 +276,17 @@ def test_plain_mode_emits_semantic_status_labels_for_success_and_error() -> None
     assert "\x1b[" not in output
 
 
+def test_run_command_plain_mode_preserves_exit_codes_on_failure_and_success() -> None:
+    from unittest.mock import AsyncMock
+
+    with patch("mia_cli.main._run_agent_loop", new_callable=AsyncMock) as mock_loop:
+        mock_loop.return_value = False
+        res_fail = runner.invoke(app, ["run", "-p", "Fail test", "--plain"])
+        assert res_fail.exit_code == 1
+
+        mock_loop.return_value = True
+        res_ok = runner.invoke(app, ["run", "-p", "Ok test", "--plain"])
+        assert res_ok.exit_code == 0
+
+
 
