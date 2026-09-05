@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 from mia_agent.agents import AgentManager
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.events import (
+    AgentErrorEvent,
     AssistantChunkEvent,
     StepEndEvent,
     StepStartEvent,
@@ -222,5 +223,57 @@ def test_run_command_threads_plain_mode_flag(tmp_path: Path) -> None:
         assert res.exit_code == 0
         assert mock_loop.call_args is not None
         assert mock_loop.call_args.kwargs.get("plain") is True
+
+
+def test_plain_mode_emits_semantic_status_labels_for_success_and_error() -> None:
+    from rich.console import Console
+
+    from mia_cli.renderers.rich_stream import RichStreamRenderer
+
+    rec_console = Console(record=True, force_terminal=False, no_color=True, highlight=False)
+    renderer = RichStreamRenderer(console=rec_console, plain_mode=True)
+
+    renderer.on_event(TurnStartEvent(turn_index=1, user_prompt="Read and execute"))
+    renderer.on_event(StepStartEvent(step_index=1))
+    renderer.on_event(
+        ToolCallEvent(call_id="c1", tool_name="read_file", arguments={"path": "README.md"})
+    )
+    renderer.on_event(
+        ToolResultEvent(
+            call_id="c1",
+            tool_name="read_file",
+            output="line 1\nline 2",
+            is_error=False,
+            duration_ms=10.0,
+        )
+    )
+    renderer.on_event(
+        ToolCallEvent(call_id="c2", tool_name="bash", arguments={"command": "cat non_existent"})
+    )
+    renderer.on_event(
+        ToolResultEvent(
+            call_id="c2",
+            tool_name="bash",
+            output="file not found",
+            is_error=True,
+            duration_ms=12.0,
+        )
+    )
+    renderer.on_event(AgentErrorEvent(error="failed to complete step"))
+    renderer.on_event(TurnCompleteEvent(total_steps=2, total_cost_usd=0.001, stop_reason="error"))
+
+    output = rec_console.export_text()
+
+    # Plain output must contain explicit semantic labels
+    assert "[running] read_file" in output
+    assert "[ok] read_file" in output
+    assert "[running] bash" in output
+    assert "[error] bash" in output
+    assert "[error] Agent error: failed to complete step" in output
+    assert "[ok] Turn completed" in output
+
+    # Must contain no ANSI escape sequences
+    assert "\x1b[" not in output
+
 
 
