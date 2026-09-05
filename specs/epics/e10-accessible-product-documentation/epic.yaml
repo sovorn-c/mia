@@ -40,7 +40,7 @@ stories:
     tasks_file: e10s01-tasks.yaml
   - id: e10s02
     title: Plain Output, Semantic Status, and Motion Safety
-    status: planned
+    status: passing
     bcps: 4
     risk: P0
     delta: MODIFIED
