@@ -57,7 +57,9 @@ def _create_minimal_spec_tree(base: Path) -> dict[str, Path]:
             }
         },
     }
-    (specs_dir / "execution-status.yaml").write_text(yaml.safe_dump(execution_status), encoding="utf-8")
+    (specs_dir / "execution-status.yaml").write_text(
+        yaml.safe_dump(execution_status), encoding="utf-8"
+    )
 
     epic_yaml = {
         "id": "e01",
@@ -127,7 +129,9 @@ def test_spec_consistency_valid_fixture(tmp_path: Path) -> None:
 
 def test_spec_consistency_real_repo() -> None:
     result = _run_spec_checker(ROOT)
-    assert result.returncode == 0, f"Repository spec consistency failed:\n{result.stderr}\n{result.stdout}"
+    assert result.returncode == 0, (
+        f"Repository spec consistency failed:\n{result.stderr}\n{result.stdout}"
+    )
 
 
 def test_spec_consistency_rejects_malformed_yaml(tmp_path: Path) -> None:
@@ -235,7 +239,9 @@ def test_spec_consistency_distinguishes_archived_capsules(tmp_path: Path) -> Non
                 "title": "Hist Story",
                 "status": "passing",
                 "bcps": 2,
-                "tasks": [{"id": "e00s01t01", "title": "T1", "status": "passing", "verify": "echo 1"}],
+                "tasks": [
+                    {"id": "e00s01t01", "title": "T1", "status": "passing", "verify": "echo 1"}
+                ],
             }
         ),
         encoding="utf-8",
