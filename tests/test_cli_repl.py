@@ -838,3 +838,107 @@ async def test_repl_uses_run_request_and_closeable_stream(tmp_path: Path) -> Non
     assert len(received_requests) == 1
     assert received_requests[0].prompt_text == "Test prompt"
     assert closed is True
+
+
+def test_essential_repl_interaction_matrix_keybindings_and_shortcuts() -> None:
+    from prompt_toolkit.keys import Keys
+
+    session = LivePromptSession()
+
+    # Essential shortcuts map to expected commands
+    expected_shortcuts = {
+        Keys.ControlO: "/inspect",
+        Keys.ControlT: "/thinking",
+        Keys.BackTab: "/thinking",
+        Keys.ControlL: "/model",
+        Keys.ControlP: "/model next",
+    }
+    for key, expected_command in expected_shortcuts.items():
+        binding = session.bindings.get_bindings_for_keys((key,))[-1]
+        buffer = MagicMock()
+        event = MagicMock(current_buffer=buffer)
+        binding.handler(event)
+        assert buffer.text == expected_command
+        buffer.validate_and_handle.assert_called_once()
+
+    # Clear/cancel: Ctrl+C resets current buffer
+    c_c_binding = session.bindings.get_bindings_for_keys((Keys.ControlC,))[-1]
+    buf_c = MagicMock()
+    c_c_binding.handler(MagicMock(current_buffer=buf_c))
+    buf_c.reset.assert_called_once()
+
+    # Newline: Ctrl+J and Escape+Enter insert literal newline
+    c_j_binding = session.bindings.get_bindings_for_keys((Keys.ControlJ,))[-1]
+    buf_j = MagicMock()
+    c_j_binding.handler(MagicMock(current_buffer=buf_j))
+    buf_j.insert_text.assert_called_once_with("\n")
+
+    esc_enter_binding = session.bindings.get_bindings_for_keys((Keys.Escape, Keys.Enter))[-1]
+    buf_esc_enter = MagicMock()
+    esc_enter_binding.handler(MagicMock(current_buffer=buf_esc_enter))
+    buf_esc_enter.insert_text.assert_called_once_with("\n")
+
+
+def test_essential_repl_non_tty_prompt_and_selectors(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = LivePromptSession()
+
+    # 1. Non-TTY read_prompt returns stripped input without hanging
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "  my non-tty prompt  \n")
+    assert session.read_prompt("› ") == "my non-tty prompt"
+
+    # 2. Non-TTY read_prompt propagates EOFError
+    def raise_eof(prompt=""):
+        raise EOFError()
+
+    monkeypatch.setattr("builtins.input", raise_eof)
+    with pytest.raises(EOFError):
+        session.read_prompt("› ")
+
+    # 3. Non-TTY read_prompt handles KeyboardInterrupt cleanly
+    def raise_sigint(prompt=""):
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr("builtins.input", raise_sigint)
+    assert session.read_prompt("› ") == ""
+
+    # 4. Non-TTY interactive_select supports default, selection by number/name, and explicit cancellation
+    options = [("opt_1", "First Option", "Desc 1"), ("opt_2", "Second Option", "Desc 2")]
+
+    # Default on empty Enter
+    monkeypatch.setattr("builtins.input", lambda prompt="": "")
+    assert interactive_select("Choose", options, default_idx=0) == "opt_1"
+
+    # Number selection
+    monkeypatch.setattr("builtins.input", lambda prompt="": "2")
+    assert interactive_select("Choose", options, default_idx=0) == "opt_2"
+
+    # Name selection
+    monkeypatch.setattr("builtins.input", lambda prompt="": "second option")
+    assert interactive_select("Choose", options, default_idx=0) == "opt_2"
+
+    # Explicit cancel with 'q' or 'cancel' returns None
+    monkeypatch.setattr("builtins.input", lambda prompt="": "q")
+    assert interactive_select("Choose", options, default_idx=0) is None
+
+    monkeypatch.setattr("builtins.input", lambda prompt="": "cancel")
+    assert interactive_select("Choose", options, default_idx=0) is None
+
+
+def test_essential_repl_commands_and_quit_contract(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+
+    # Help and aliases return True and do not exit
+    assert repl.handle_slash_command("/help") is True
+    assert repl.handle_slash_command("/?") is True
+
+    # Quit and aliases return False (signals exit)
+    assert repl.handle_slash_command("/quit") is False
+    assert repl.handle_slash_command("/exit") is False
+
+    # Inspect calls audit log renderer
+    with patch.object(repl.stream_renderer, "render_audit_log") as mock_render:
+        assert repl.handle_slash_command("/inspect") is True
+        mock_render.assert_called_once()
+
