@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from zipfile import ZipFile
 
-REQUIRED_PREFIXES = ("mia_cli/tui/",)
+REQUIRED_PREFIXES: tuple[str, ...] = ()
 FORBIDDEN_PREFIXES = (
     "mia_agent/profiles/",
     "mia_agent/profiles.py",

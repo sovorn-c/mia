@@ -43,7 +43,6 @@ htmlcov/
 .env
 
 # Local agent cockpit
-specs/
 CLAUDE.md
 AGENTS.md
 CONVENTIONS.md

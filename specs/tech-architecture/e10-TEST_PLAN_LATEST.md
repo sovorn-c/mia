@@ -5,12 +5,12 @@
 | Scenario ID | Behavior Description | Risk | Test Level | Target File/Module |
 |---|---|---:|---|---|
 | SC-e10s01-P0-01 | Essential REPL prompt, completion, submit, clear/cancel, command discovery, and quit actions are keyboard-operable and deterministic in TTY and non-TTY contexts | P0 | Integration | `tests/test_cli_repl.py`, `tests/test_pty_prompt_layout.py`, `src/mia_cli/interactive_input.py` |
-| SC-e10s01-P0-02 | Textual prompt focus, Agent switching, new-Agent, quit, and approval actions have keyboard bindings, visible textual labels, and accessible focus order | P0 | Integration | `tests/test_tui_app.py`, `src/mia_cli/tui/app.py`, `src/mia_cli/tui/widgets/` |
-| SC-e10s01-P1-03 | Help and shortcut discovery exposes the same essential actions without requiring a mouse, color, or hidden icon meaning | P1 | E2E | `tests/test_cli_repl.py`, `tests/test_tui_app.py`, `src/mia_cli/repl.py` |
+| SC-e10s01-P0-02 | REPL prompt focus, Agent switching, new-Agent, quit, and approval actions have keyboard bindings and an accessible focus order | P0 | Integration | `tests/test_cli_repl.py`, `src/mia_cli/repl.py`, `src/mia_cli/interactive_input.py` |
+| SC-e10s01-P1-03 | Help and shortcut discovery exposes the same essential actions without requiring a mouse, color, or hidden icon meaning | P1 | E2E | `tests/test_cli_repl.py`, `src/mia_cli/repl.py` |
 | SC-e10s02-P0-01 | Explicit plain mode, `NO_COLOR`, and non-TTY execution emit readable output without ANSI/control sequences or live-only updates | P0 | Integration | `tests/test_cli_print_mode.py`, `tests/test_cli_repl.py`, `src/mia_cli/main.py`, `src/mia_cli/renderers/rich_stream.py` |
 | SC-e10s02-P0-02 | Running, success, error, cancellation, attention, and blocked states have text labels that remain meaningful without color or emoji | P0 | Integration | `tests/test_cli_print_mode.py`, `tests/test_recovery_cli.py`, `src/mia_cli/renderers/rich_stream.py` |
 | SC-e10s02-P1-03 | Plain and accessible presentation never changes Agent/Run terminal truth, Tool policy, or exit-code semantics | P1 | Integration | `tests/test_agent_runtime.py`, `tests/test_cli_print_mode.py`, `src/mia_cli/main.py` |
-| SC-e10s02-P1-04 | Existing interactive Rich/REPL/TUI presentation remains compatible when accessible plain mode is not selected | P1 | Regression | `tests/test_cli_repl.py`, `tests/test_tui_app.py`, `tests/test_cli_print_mode.py` |
+| SC-e10s02-P1-04 | Existing interactive Rich/REPL presentation remains compatible when accessible plain mode is not selected | P1 | Regression | `tests/test_cli_repl.py`, `tests/test_cli_print_mode.py` |
 | SC-e10s03-P1-01 | A fresh user can find installation, provider configuration, first Run, Agent, Session, and access guidance with executable examples | P1 | E2E | `README.md`, `docs/README.md`, `docs/user-guide.md` |
 | SC-e10s03-P1-02 | Operators can find diagnostics, data locations, backup/restore, recovery, troubleshooting, and non-destructive limits | P1 | E2E | `docs/operator-guide.md`, `specs/epics/archive/e09-local-operations-recovery/` |
 | SC-e10s03-P1-03 | Plugin authors can find trust, provenance, lifecycle, contribution, compatibility, data ownership, and unsandboxed-code limits | P1 | E2E | `docs/plugin-author-guide.md`, `specs/adr/0003-governed-core-extension-host.md` |
@@ -20,7 +20,6 @@
 
 - **CLI fixtures:** Use Typer invocation or direct public command functions with `Console(record=True)` and `tmp_path`; capture stdout as text and assert no escape sequences in plain mode.
 - **REPL fixtures:** Reuse `LivePromptSession`, prompt-toolkit `create_pipe_input`, `DummyOutput`, and existing `MiaREPL` fixtures. No real terminal, network, provider, or home directory is required.
-- **TUI fixtures:** Reuse `MiaApp.run_test()` and Textual Pilot. Assert focus, bindings, labels, action routing, and rendered text through public widgets.
 - **Runtime fixtures:** Use `MockProvider`, `AgentRunner`, and `contextlib.aclosing` only where output-mode tests must prove terminal truth is unchanged.
 - **Documentation fixtures:** Use repository-relative path checks and a small standard-library validator for required headings, links, supported command examples, and forbidden placeholders. Do not fetch the network.
 - **Isolation:** Tests use temporary Agent roots and synthetic data. They must not read credentials, mutate user Sessions, or depend on terminal dimensions, color support, or animation timing.
@@ -33,7 +32,7 @@ P0 scenarios stay at integration boundaries because keyboard and presentation be
 
 | NFR Type | Requirement | Verification Command |
 |---|---|---|
-| Keyboard | Essential prompt, selection, help, Agent, and quit actions work without a mouse in REPL and TUI | `uv run --offline pytest tests/test_cli_repl.py tests/test_pty_prompt_layout.py tests/test_tui_app.py -k 'keybinding or shortcut or escape or prompt or select or agent or quit'` |
+| Keyboard | Essential prompt, selection, help, Agent, and quit actions work without a mouse in the REPL | `uv run --offline pytest tests/test_cli_repl.py tests/test_pty_prompt_layout.py -k 'keybinding or shortcut or escape or prompt or select or agent or quit'` |
 | Plain output | Plain, non-TTY, and `NO_COLOR` output contains readable semantic text and no ANSI control sequences | `uv run --offline pytest tests/test_cli_print_mode.py tests/test_cli_repl.py -k 'plain or color or ansi or non_tty or status or error'` |
 | Motion safety | Accessible output does not start live animation or require timing-sensitive updates; interactive mode remains compatible | `uv run --offline pytest tests/test_cli_print_mode.py tests/test_cli_repl.py -k 'motion or spinner or animation or plain or render'` |
 | Truthfulness | Presentation mode does not alter terminal outcomes, Tool policy, diagnostics, or exit codes | `uv run --offline pytest tests/test_agent_runtime.py tests/test_cli_print_mode.py tests/test_recovery_cli.py -k 'terminal or error or cancel or exit or status'` |

@@ -15,7 +15,7 @@
 | SC-e07s03-P0-01 | Existing enabled Plugin Tool contributions are staged, attributed, deterministic, and rejected on duplicate or undeclared names/effects before execution | P0 | Integration | `tests/test_plugins.py`, `tests/test_agent_runtime.py` |
 | SC-e07s03-P0-02 | Final Core validation runs after Plugin argument transformation and preserves access, security, effect, and approval truth | P0 | Integration | `tests/test_plugins.py`, `tests/test_access_policy.py` |
 | SC-e07s03-P0-03 | Plugin observer/disposal failures are sanitized diagnostics; cooperative cleanup reaches a completion-or-timeout decision without rewriting domain-work truth | P0 | Integration | `tests/test_plugins.py`, `tests/test_agent_loop.py` |
-| SC-e07s03-P1-04 | Plugin-free Agents retain existing Tool sets, event discriminators, CLI/REPL/TUI behavior, and Session output | P1 | E2E/Regression | `tests/test_agent_loop.py`, `tests/test_cli_print_mode.py`, `tests/test_cli_repl.py`, `tests/test_tui_app.py` |
+| SC-e07s03-P1-04 | Plugin-free Agents retain existing Tool sets, event discriminators, CLI/REPL behavior, and Session output | P1 | E2E/Regression | `tests/test_agent_loop.py`, `tests/test_cli_print_mode.py`, `tests/test_cli_repl.py` |
 
 ## 2. Fixture Architecture & Isolation
 
@@ -31,7 +31,7 @@
 
 - **Unit:** Request validation, identity sanitization, settings precedence, effect mapping, terminal-state transition guards, and final argument/schema checks.
 - **Integration:** AgentRunner/factory/harness composition, Session admission, middleware ordering, Plugin staging/attribution/cleanup, and MockProvider streaming behavior.
-- **E2E:** CLI print mode, REPL cancellation/closure, Textual adapter rendering, and Plugin-free compatibility through the canonical public entry point.
+- **E2E:** CLI print mode, REPL cancellation/closure, and Plugin-free compatibility through the canonical public entry point.
 - **P0 policy:** Every P0 scenario must be deterministic, offline, and run in the targeted test command before a story can be marked complete.
 
 ## 4. NFR Verification
@@ -41,7 +41,7 @@
 | Safety | No visible Tool bypasses access, security, audit, or execution-limit middleware | `uv run --offline pytest tests/test_access_policy.py tests/test_middleware_pipeline.py tests/test_e2e_scenarios.py -q` |
 | Truthfulness | Every supported Run has one Core-owned terminal outcome and no post-terminal event | `uv run --offline pytest tests/test_agent_runtime.py tests/test_agent_loop.py -q` |
 | Isolation | Same-Session conflicts fail fast and Session history remains append-only | `uv run --offline pytest tests/test_sessions.py tests/test_agent_runtime.py -q` |
-| Compatibility | Plugin-free CLI, REPL, TUI, and event serialization remain valid | `uv run --offline pytest tests/test_cli_print_mode.py tests/test_cli_repl.py tests/test_tui_app.py tests/test_agent_loop.py -q` |
+| Compatibility | Plugin-free CLI, REPL, and event serialization remain valid | `uv run --offline pytest tests/test_cli_print_mode.py tests/test_cli_repl.py tests/test_agent_loop.py -q` |
 | Security | Affected paths produce no new security findings and contain no secret-shaped diagnostics | `uv run --offline pytest tests/test_plugins.py tests/test_agent_runtime.py tests/test_access_policy.py -q && printf 'no new security findings in affected paths\n'` |
 | Quality | Formatting, lint, strict types, full tests, and coverage remain green | `uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest && ./scripts/check-coverage.sh` |
 

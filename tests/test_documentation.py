@@ -121,7 +121,6 @@ def test_documented_cli_commands_are_valid() -> None:
     valid_subcmds = {
         "run",
         "login",
-        "tui",
         "agent",
         "sessions",
         "plugin",

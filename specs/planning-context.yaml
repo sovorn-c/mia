@@ -23,7 +23,7 @@ constraints:
   - Keep Sessions append-only and credentials outside Agent-owned, Plugin, and diagnostic data.
   - Keep permanent access, security, audit, execution-limit, sanitation, and terminal-truth controls around every visible Tool and Plugin hook.
   - Keep Plugin discovery, trust, dependency order, activation, attribution, and cooperative cleanup decisions owned by Mia Core through the supported host contract; make no hard bound or sandbox claim for event-loop-blocking same-process code.
-  - Keep CLI, REPL, Textual, Plugin, Template, Delegation, and supported provider behavior.
+  - Keep CLI, REPL, Plugin, Template, Delegation, and supported provider behavior; remove the full-screen Textual frontend.
   - Add no runtime dependency without separate evidence.
   - Do not modify user data outside isolated verification homes.
   - Stop blueprinting at epic outcomes; story and task planning belongs to /bp-plan.
@@ -37,7 +37,7 @@ out_of_scope:
   - Plugin commands or frontend components, provider Plugins, Tool overrides, or mutable Session hooks
   - Remote Plugin catalogs, automatic package/dependency installation, hot reload, or unrestricted project-local code
   - Automatic destructive migration or repair of user files
-  - Full frontend visual redesign or localization
+  - Full frontend visual redesign, full-screen terminal UI, or localization
 success_criteria:
   - Every approved release outcome maps to one primary epic.
   - e07 proves one validated, safeguarded, deterministic closeable Run stream with exactly one Core-finalized outcome for normal consumption, cancellation, and awaited closure; bare abandonment is unsupported.

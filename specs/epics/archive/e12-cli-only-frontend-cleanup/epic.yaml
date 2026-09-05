@@ -1,0 +1,61 @@
+id: e12
+slug: cli-only-frontend-cleanup
+title: CLI-Only Frontend Cleanup
+type: maintenance
+status: completed
+planning_stage: delivered
+target_version: "0.6.0"
+risk: P1
+wsjf:
+  business_value: 8
+  time_criticality: 5
+  risk_reduction: 8
+  job_size: 2
+  score: 10.5
+total_bcps: 5
+depends_on: [e11]
+outcome: >-
+  Mia provides one supported interactive terminal surface through the inline CLI/REPL; the unused
+  full-screen Textual frontend, command, dependency, and stale documentation are removed without
+  changing the Agent Core execution path.
+boundaries:
+  includes:
+    - Remove the full-screen Textual frontend and `mia tui` command
+    - Remove its direct dependency, tests, packaging checks, and release-surface expectations
+    - Reconcile current product, architecture, security, user, quality, and verification documentation with the CLI/REPL-only surface
+    - Preserve the headless Agent Core and inline CLI/REPL behavior
+  excludes:
+    - REPL visual redesign or new interaction modes
+    - Web, desktop, or alternative frontend SDKs
+    - Changes to AgentRunner, Providers, Sessions, Tools, Plugins, or middleware behavior
+requirement_deltas:
+  - story_id: e12s01
+    type: REMOVED
+    requirement: Supported full-screen Textual frontend
+    before: Mia packages and supports the full-screen Textual frontend through `mia tui`.
+    after: Mia has no full-screen Textual frontend or `mia tui` command; the inline CLI/REPL is the supported interactive terminal surface.
+  - story_id: e12s02
+    type: MODIFIED
+    requirement: Product and release documentation names the supported terminal frontends
+    before: Current product, user, packaging, and verification documents describe Textual as supported.
+    after: Current documentation and checks describe the CLI/REPL as supported and retain full-screen Textual references only in historical archived evidence.
+stories:
+  - id: e12s01
+    title: Remove Full-Screen Textual Frontend
+    status: done
+    bcps: 3
+    risk: P1
+    delta: REMOVED
+    depends_on: []
+    spec_file: e12s01-remove-full-screen-textual-frontend.md
+    tasks_file: e12s01-tasks.yaml
+  - id: e12s02
+    title: Reconcile CLI/REPL-Only Product Surface
+    status: done
+    bcps: 2
+    risk: P1
+    delta: MODIFIED
+    depends_on: [e12s01]
+    spec_file: e12s02-reconcile-cli-repl-only-product-surface.md
+    tasks_file: e12s02-tasks.yaml
+next_skill: survey-context

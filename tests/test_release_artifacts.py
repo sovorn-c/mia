@@ -24,7 +24,6 @@ def _create_synthetic_dist(dist_dir: Path, version: str = "0.6.0") -> tuple[Path
 
     # Minimal valid wheel
     with zipfile.ZipFile(wheel_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("mia_cli/tui/__init__.py", "# tui\n")
         zf.writestr("mia_agent/__init__.py", "__version__ = '0.6.0'\n")
         zf.writestr("mia_agent/plugin_models.py", "CORE_PLUGIN_API_VERSION = 1\n")
         zf.writestr(
@@ -224,7 +223,6 @@ def test_artifact_forbidden_package_member_rejected(tmp_path: Path) -> None:
 
     # Wheel containing forbidden path
     with zipfile.ZipFile(wheel_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("mia_cli/tui/__init__.py", "# tui\n")
         zf.writestr("mia_agent/profiles.py", "# forbidden\n")
         zf.writestr(
             "mia_ai-0.6.0.dist-info/METADATA",
@@ -237,24 +235,15 @@ def test_artifact_forbidden_package_member_rejected(tmp_path: Path) -> None:
 
 
 def test_wheel_surface_plugin_api_check(tmp_path: Path) -> None:
-    # 1. Wheel missing required TUI prefix
-    wheel_bad_prefix = tmp_path / "bad_prefix.whl"
-    with zipfile.ZipFile(wheel_bad_prefix, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("mia_agent/__init__.py", "")
-    res = _run_integrity(["check-surface", "--wheel", str(wheel_bad_prefix)])
-    assert res.returncode != 0
-    assert "missing" in res.stderr.lower()
-
-    # 2. Wheel with incompatible Plugin API version
+    # 1. Wheel with incompatible Plugin API version
     wheel_bad_api = tmp_path / "bad_api.whl"
     with zipfile.ZipFile(wheel_bad_api, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("mia_cli/tui/__init__.py", "")
         zf.writestr("mia_agent/plugin_models.py", "CORE_PLUGIN_API_VERSION = 99\n")
     res = _run_integrity(["check-surface", "--wheel", str(wheel_bad_api)])
     assert res.returncode != 0
     assert "api" in res.stderr.lower() or "version" in res.stderr.lower()
 
-    # 3. Built wheel in repo dist/ (if present) passes surface check
+    # 2. Built wheel in repo dist/ (if present) passes surface check
     dist_wheels = list((ROOT / "dist").glob("*.whl"))
     if dist_wheels:
         res = _run_integrity(["check-surface", "--wheel", str(dist_wheels[0])])
@@ -387,9 +376,8 @@ def test_manifest_verification_rejects_untracked_artifacts_in_dist(tmp_path: Pat
 def test_wheel_surface_rejects_duplicate_archive_members(tmp_path: Path) -> None:
     wheel_dup = tmp_path / "dup-0.6.0-py3-none-any.whl"
     with zipfile.ZipFile(wheel_dup, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("mia_cli/tui/__init__.py", "# 1\n")
-        zf.writestr("mia_cli/tui/__init__.py", "# 2 duplicate\n")
-        zf.writestr("mia_agent/__init__.py", "")
+        zf.writestr("mia_agent/__init__.py", "# 1\n")
+        zf.writestr("mia_agent/__init__.py", "# 2 duplicate\n")
 
     res = _run_integrity(["check-surface", "--wheel", str(wheel_dup)])
     assert res.returncode != 0
@@ -399,7 +387,7 @@ def test_wheel_surface_rejects_duplicate_archive_members(tmp_path: Path) -> None
 def test_wheel_surface_rejects_directory_traversing_archive_entries(tmp_path: Path) -> None:
     wheel_trav = tmp_path / "trav-0.6.0-py3-none-any.whl"
     with zipfile.ZipFile(wheel_trav, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("mia_cli/tui/__init__.py", "# 1\n")
+        zf.writestr("mia_agent/__init__.py", "# 1\n")
         zf.writestr("../evil.py", "# traversal payload\n")
 
     res = _run_integrity(["check-surface", "--wheel", str(wheel_trav)])

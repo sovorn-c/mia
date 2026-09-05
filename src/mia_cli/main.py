@@ -14,7 +14,6 @@ from rich.table import Table
 
 from mia_agent.agent_runner import AgentRunner
 from mia_agent.agents import AgentManager
-from mia_agent.auth.config import ConfigManager
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.events import AgentErrorEvent
 from mia_agent.plugins import PluginManager
@@ -734,19 +733,6 @@ def data_verify() -> None:
             "[bold red]Restore required: Use 'mia data restore <archive> --destination <dir>' to recover from a verified backup.[/bold red]"
         )
         raise typer.Exit(code=1)
-
-
-@app.command(name="tui")
-def tui_command(
-    model: Annotated[str | None, typer.Option("--model", "-m", help="Default model")] = None,
-) -> None:
-    """Launch the full-screen Mia Textual TUI."""
-    from mia_cli.tui.app import MiaApp
-
-    config_mgr = ConfigManager()
-    target_model = model or config_mgr.config.default_model
-    tui_app = MiaApp(model_name=target_model)
-    tui_app.run()
 
 
 @app.callback(invoke_without_command=True)

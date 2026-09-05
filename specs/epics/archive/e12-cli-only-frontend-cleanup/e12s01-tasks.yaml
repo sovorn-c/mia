@@ -1,0 +1,49 @@
+story_id: e12s01
+title: Remove Full-Screen Textual Frontend
+spec: e12s01-remove-full-screen-textual-frontend.md
+status: passing
+bcps: 3
+risk: P1
+delta: REMOVED
+scenarios:
+  - SC-e12s01-P1-01
+  - SC-e12s01-P1-02
+  - SC-e12s01-P1-03
+tasks:
+  - id: e12s01t01
+    title: Remove Textual implementation and command
+    description: Delete src/mia_cli/tui, remove the tui command and Textual dependency, and update the CLI package description.
+    status: passing
+    risk: P1
+    scenarios: [SC-e12s01-P1-01]
+    files:
+      - src/mia_cli/tui/
+      - src/mia_cli/main.py
+      - src/mia_cli/__init__.py
+      - pyproject.toml
+      - uv.lock
+    verify: test ! -d src/mia_cli/tui && ! grep -q 'textual>=' pyproject.toml && ! grep -q 'def tui_command' src/mia_cli/main.py
+  - id: e12s01t02
+    title: Remove Textual release-surface requirements
+    description: Remove Textual-only tests and change package and artifact checks so the wheel validates the remaining supported surface.
+    status: passing
+    risk: P1
+    scenarios: [SC-e12s01-P1-03]
+    files:
+      - tests/test_tui_app.py
+      - tests/test_release_artifacts.py
+      - tests/test_release_process.py
+      - tests/test_surface_checks.py
+      - scripts/check-wheel-surface.py
+      - scripts/check-artifact-integrity.py
+    verify: uv run --offline pytest tests/test_release_artifacts.py tests/test_release_process.py tests/test_surface_checks.py
+  - id: e12s01t03
+    title: Verify the inline CLI and REPL path
+    description: Confirm the remaining interactive and print-mode entry points still execute through the existing Agent runtime contracts.
+    status: passing
+    risk: P1
+    scenarios: [SC-e12s01-P1-02]
+    files:
+      - tests/test_cli_repl.py
+      - tests/test_cli_print_mode.py
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py

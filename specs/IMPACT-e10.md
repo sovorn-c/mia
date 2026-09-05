@@ -1,5 +1,7 @@
 # Impact — e10 Accessible Product Experience and Documentation
 
+> Historical planning artifact. Its Textual paths describe the pre-e12 implementation; the current supported terminal surface is the inline CLI/REPL.
+
 ## Target
 
 Deliver e10 by hardening the existing terminal presentation boundaries and documenting the supported Agent product. The work covers keyboard-operable CLI/REPL/Textual workflows, explicit non-color/plain output and motion-safe behavior, and user/operator/Plugin author documentation. It must preserve the canonical `AgentRunner → AgentRuntimeFactory → AgentHarness` execution path and must not introduce a visual redesign, hosted documentation platform, or new runtime dependency.

@@ -9,8 +9,9 @@ core_value: >-
   without ambiguity about identity, access, outcomes, or supported interfaces.
 summary: >-
   This scope covers the complete v0.6.0 release rather than one feature increment. It preserves the
-  functional Agent, Session, Tool, Plugin, Delegation, CLI, REPL, and Textual capabilities delivered by
-  e01-e06, then closes the runtime-integrity, governed-extensibility, operational-visibility,
+  functional Agent, Session, Tool, Plugin, Delegation, CLI, and REPL capabilities delivered by
+  e01-e06, then removes the unused full-screen Textual frontend and closes the runtime-integrity,
+  governed-extensibility, operational-visibility,
   accessibility, documentation, and distribution gaps required for a production release.
 
   Production-ready means the supported local package has one truthful execution contract, permanent
@@ -53,8 +54,8 @@ in_scope:
     maps_to: e06
     name: One Agent-native runtime and supported frontend/package surface
     outcome: >-
-      CLI, REPL, and Textual use one Agent execution path; obsolete public identities are absent; the
-      supported TUI and package contents remain present and tested.
+      CLI and REPL use one Agent execution path; obsolete public identities are absent; the unused
+      full-screen Textual frontend is removed from the supported package surface.
   - id: release-runtime-integrity
     maps_to: e07
     name: Truthful and deterministic production Run contract
@@ -94,6 +95,12 @@ in_scope:
       Maintainers can produce, verify, install-smoke, publish, and if necessary withdraw or supersede the
       Python distribution and Plugin API through an automated, documented gate with artifact provenance
       and no secrets.
+  - id: cli-only-frontend
+    maps_to: e12
+    name: CLI/REPL-only interactive terminal surface
+    outcome: >-
+      Mia has one supported interactive terminal entry point through the inline CLI/REPL; the full-screen
+      Textual frontend, command, dependency, and stale current documentation are removed.
 
 out_of_scope:
   - id: oos-01
@@ -117,8 +124,8 @@ out_of_scope:
     name: Automatic migration, deletion, or rewriting of unsupported user files
     rationale: Release work must not risk data loss; supported recovery remains explicit and non-destructive.
   - id: oos-07
-    name: Full visual redesign of the REPL or Textual frontend
-    rationale: Accessibility and correctness are required, but a new visual language is not needed to ship.
+    name: Full visual redesign of the REPL
+    rationale: Accessibility and correctness are required, but a new visual language is not needed for this cleanup.
   - id: oos-08
     name: Unbounded extension distribution or Core replacement framework
     rationale: >-
@@ -140,7 +147,7 @@ constraints:
   - Keep Sessions append-only and credentials outside Agent, Session, diagnostic, and package artifacts.
   - Preserve read-only, approval-required, and explicitly confirmed full-access semantics.
   - Keep every visible Tool inside permanent access, security, audit, and execution-control safeguards.
-  - Preserve supported CLI, REPL, Textual, Plugin, Template, Delegation, and provider behavior.
+  - Preserve supported CLI, REPL, Plugin, Template, Delegation, and provider behavior; do not reintroduce a full-screen Textual frontend.
   - Keep static Plugin Skills/Templates inspectable outside Runs and runtime Plugin activation behind AgentRuntimeFactory, transactional and immutable per Run, with explicit trust and Core-owned cleanup deadlines.
   - Use Pydantic at external, configuration, event, and persistence trust boundaries.
   - Prefer the standard library and installed dependencies; add no runtime dependency without separate evidence.
@@ -150,7 +157,7 @@ constraints:
 success_criteria:
   - All in-scope outcomes map to exactly one primary epic in the release roadmap.
   - A fresh supported Python environment can build, install, launch, and complete deterministic smoke workflows.
-  - CLI, REPL, and TUI consume one validated closeable Run stream; every supported Run finalizes exactly once through an atomic idempotent finalizer, normal consumption emits one matching terminal envelope, pre-finalization cancellation/closure records cancellation, late cancellation after finalization returns the existing terminal envelope, and awaited closure after delivery preserves the outcome.
+  - CLI and REPL consume one validated closeable Run stream; every supported Run finalizes exactly once through an atomic idempotent finalizer, normal consumption emits one matching terminal envelope, pre-finalization cancellation/closure records cancellation, late cancellation after finalization returns the existing terminal envelope, and awaited closure after delivery preserves the outcome.
   - Failed, rejected, cancelled, timed-out, and conflicting Runs cannot be reported as success.
   - Agent configuration cannot disable permanent safeguards or silently ignore supported execution settings.
   - Concurrent work cannot corrupt or nondeterministically select one Agent-owned Session lineage.
@@ -163,9 +170,9 @@ success_criteria:
   - Declarative Plugins execute no code; trusted-code Plugins require explicit trust, carry no sandbox claim, and may act outside the supported API with normal Python process authority.
   - Local diagnostics cover attempted Tool actions, Plugin lifecycle failures, and terminal Run outcomes with bounded retention and clear failure behavior.
   - Backup, restore, interrupted-write recovery, and unsupported/corrupt-data behavior are documented and verified.
-  - Essential workflows are keyboard-operable and understandable without color, animation, or an interactive TUI.
+  - Essential workflows are keyboard-operable and understandable without color, animation, or a full-screen interface.
   - User, operator, and Plugin author documentation covers installation, configuration, lifecycle, compatibility, trust boundaries, data locations, recovery, diagnostics, accessibility, troubleshooting, upgrade expectations, and known limitations.
-  - Automated checks cover formatting, lint, strict typing, tests, coverage, security-sensitive surfaces, YAML consistency, public/package surface, build, clean install, CLI/TUI smoke, and artifact integrity.
+  - Automated checks cover formatting, lint, strict typing, tests, coverage, security-sensitive surfaces, YAML consistency, public/package surface, build, clean install, CLI/REPL smoke, and artifact integrity.
   - The release process defines artifact provenance, publication authorization, failure handling, and withdrawal/supersession steps without exposing secrets.
   - No unresolved critical or high security finding, failing required gate, unmapped approved scope item, or undocumented production exception remains at release approval.
 
@@ -193,7 +200,7 @@ prior_art: |
   | Runtime and persistence contracts | `src/mia_agent/runtime_*.py`, `src/mia_agent/session/` | extend | Existing attributed events and append-only history remain the base; no second model is required. |
   | Access and middleware | `src/mia_middleware/`; historical DSH reference in pre-purge `docs/initial_plan/REFERENCES.md` | deepen | Preserve the DeepSeek Harness onion/waterfall `pre-execute → execute → post-execute` pattern through the existing ToolPipeline; permanent safeguards and durable local diagnostics must become production behavior. |
   | Plugin lifecycle and effects | `src/mia_agent/plugins.py`, Pi Extensions, DSH/Cordis lifecycle and service composition | deepen selectively | Use Pi-like registration ergonomics plus DSH dependency-ready activation, owned effects, rollback, and teardown; reject generic Core replacement and service/event containers. |
-  | Retained frontends | `src/mia_cli/` | adapt | CLI, REPL, and Textual remain shallow Adapters to the selected Run Interface. |
+  | Supported frontend | `src/mia_cli/` | adapt | CLI and REPL remain shallow Adapters to the selected Run Interface. |
   | Deterministic test seam | `src/mia_ai/providers/mock.py`, `tests/` | adopt | MockProvider remains the offline verification seam. |
   | Packaging | `pyproject.toml`, Hatchling, uv | adopt | The existing Python distribution model is the release and deployment target. |
 

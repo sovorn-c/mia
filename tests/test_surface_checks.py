@@ -40,7 +40,6 @@ def test_wheel_surface_rejects_flattened_removed_module(tmp_path: Path) -> None:
     wheel = tmp_path / "fixture.whl"
     removed_module = "profiles" + ".py"
     with ZipFile(wheel, "w", ZIP_DEFLATED) as archive:
-        archive.writestr("mia_cli/tui/__init__.py", "")
         archive.writestr("mia_agent/" + removed_module, "")
 
     result = subprocess.run(
@@ -57,7 +56,7 @@ def test_wheel_surface_rejects_removed_symbol(tmp_path: Path) -> None:
     wheel = tmp_path / "fixture.whl"
     removed_symbol = "Mode" + "Runtime"
     with ZipFile(wheel, "w", ZIP_DEFLATED) as archive:
-        archive.writestr("mia_cli/tui/reintroduced.py", f"class {removed_symbol}: pass")
+        archive.writestr("mia_cli/reintroduced.py", f"class {removed_symbol}: pass")
 
     result = subprocess.run(
         [sys.executable, str(ROOT / "scripts/check-wheel-surface.py"), str(wheel)],
@@ -73,7 +72,6 @@ def test_wheel_surface_rejects_removed_module(tmp_path: Path) -> None:
     wheel = tmp_path / "fixture.whl"
     removed_module = "mia_agent/" + "orchestration.py"
     with ZipFile(wheel, "w", ZIP_DEFLATED) as archive:
-        archive.writestr("mia_cli/tui/__init__.py", "")
         archive.writestr(removed_module, "")
 
     result = subprocess.run(

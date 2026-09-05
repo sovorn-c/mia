@@ -6,7 +6,7 @@ session:
   target_version: 0.6.0
 handoff:
   next_skill: survey-context
-  summary: 'Epic e11 Release and Distribution Assurance was merged into local main and its reviewed capsule was archived. Release gates passed: 366 tests, Ruff, mypy, offline build, coverage, public-surface, artifact-integrity, clean-install, and publication checks. All 3 stories (e11s01, e11s02, e11s03) and 15 tasks are marked done and epic e11 is complete.'
+  summary: 'Epic e12 CLI-Only Frontend Cleanup was completed and archived. The full-screen Textual frontend, `mia tui` command, dependency, tests, package checks, and current documentation promises were removed. The inline CLI/REPL remains supported; the full offline release gate passed with 358 tests.'
   open_decisions: []
 git:
   branch: main

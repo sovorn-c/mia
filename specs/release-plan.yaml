@@ -1,4 +1,4 @@
-# specs/release-plan.yaml — complete v0.6.0 production release index
+# specs/release-plan.yaml — v0.6.0 production release index with e12 CLI-only cleanup
 version: "0.6.0"
 target_release: v0.6.0-agent-core
 release:
@@ -249,6 +249,27 @@ epics:
       job_size: 3
       score: 9.67
     bcps: 13
+
+  - id: e12
+    slug: cli-only-frontend-cleanup
+    title: CLI-Only Frontend Cleanup
+    status: completed
+    capsule_dir: specs/epics/archive/e12-cli-only-frontend-cleanup
+    outcome: >-
+      Mia provides one supported interactive terminal surface through the inline CLI/REPL; the unused
+      full-screen Textual frontend, command, dependency, and stale documentation are removed without
+      changing the Agent Core execution path.
+    boundaries:
+      includes: Full-screen Textual removal, CLI/REPL-only documentation, package checks, and verification evidence.
+      excludes: REPL redesign, new interaction modes, web or desktop frontends, and Core runtime changes.
+    depends_on: [e11]
+    wsjf:
+      business_value: 8
+      time_criticality: 5
+      risk_reduction: 8
+      job_size: 2
+      score: 10.5
+    bcps: 5
 
 bugs:
   total: 1

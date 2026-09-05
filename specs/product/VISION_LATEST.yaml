@@ -167,13 +167,14 @@ core_boundary:
     - Private configuration and state
     - Enabled Skills, Tools, and Plugins
     - Default collaboration strategy
-  packaging_rule: "Keep the default Agent, current Tools, Plugins, CLI, REPL, and Textual frontend packaged together."
+  packaging_rule: "Keep the default Agent, current Tools, Plugins, CLI, and REPL packaged together; additional frontends are external adapters."
 
 current_reality:
   status: >-
     The implementation provides named built-in and persisted Agents, Agent-owned Sessions, enforced
-    access policy, bounded Delegation, Plugin lifecycle, Notes Tools, Agent Templates, Agent-first CLI/REPL,
-    and a shallow Textual frontend. Its current Plugin implementation is a bundled catalog; the governed
+    access policy, bounded Delegation, Plugin lifecycle, Notes Tools, Agent Templates, and Agent-first CLI/REPL.
+    The full-screen Textual frontend is intentionally not part of the supported product surface. Its current
+    Plugin implementation is a bundled catalog; the governed
     developer extension host is approved v0.6.0 work, not yet delivered.
   supported_tools: [read_file, write_file, edit_file, bash, note_create, note_list, note_read]
   known_limits:
@@ -181,7 +182,7 @@ current_reality:
     - Plugin catalog and provider support are intentionally small.
     - Trusted Python Plugin code is not an operating-system or process sandbox.
     - v0.6.0 does not include remote Plugin catalogs, automatic dependency installation, generic Core services, Plugin commands/UI, or provider replacement.
-    - Textual is a shallow adapter, not a separate runtime.
+    - The inline CLI/REPL is the supported interactive terminal surface; full-screen terminal frontends are out of scope.
 
 settled_decisions:
   - id: VISION-01
@@ -193,11 +194,15 @@ settled_decisions:
   - id: VISION-04
     decision: "Notes Plugin and Notes Agent Template migrate as the compatibility proof for the governed extension host."
   - id: VISION-05
-    decision: "Textual remains installed and `mia tui` remains supported."
+    decision: "Historical v0.6.0 decision: Textual remained installed and `mia tui` was supported; superseded by VISION-08."
   - id: VISION-06
     decision: >-
       Plugin authors receive a small Pi-like registration context with DSH-inspired dependency-ready
       activation, owned effects, rollback, and Core-owned cleanup deadlines; Mia Core services remain non-replaceable.
+  - id: VISION-08
+    decision: >-
+      Mia supports one built-in interactive terminal surface through the inline CLI/REPL. The full-screen
+      Textual frontend and `mia tui` command are removed; future web or desktop interfaces use the UI-independent Core contract.
 
 open_decisions:
   - id: VISION-07

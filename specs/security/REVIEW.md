@@ -1,5 +1,7 @@
 # Security Review — Agent Core Clean Break
 
+> Historical e06 review record. The TUI references below describe the implementation at that time and are not current product requirements.
+
 - **Scope:** Agent, runtime, Session, access, Plugin, Delegation, CLI, REPL, TUI, and package surfaces
 - **Review round:** 2
 - **Verdict:** PASS — prior findings are fixed and verified.
@@ -24,3 +26,10 @@
 - Isolated CLI/TUI UAT — passed.
 
 No new unsafe shell interpolation, deserialization, SQL/HTTP sink, authentication endpoint, dependency, or secret-bearing log was found in the changed paths.
+
+## e12 follow-up — CLI-Only Frontend Cleanup (2026-09-05)
+
+- **Scope:** CLI/REPL, package metadata, wheel/artifact surface, documentation, and deleted frontend boundaries.
+- **Verdict:** PASS — no new security finding was introduced.
+- **Review:** The removed `mia tui` command and Textual dependency do not add an execution path. Artifact checks reject unexpected package members, and the supported CLI/REPL continues through the existing Agent runtime and security middleware.
+- **Verification:** `bash scripts/check-release-gate.sh`, `uv build --offline`, wheel-surface checks, and the full test suite passed. No credentials or secret-bearing values were added.

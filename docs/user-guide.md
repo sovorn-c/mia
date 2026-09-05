@@ -174,12 +174,6 @@ Start the full interactive REPL by running `mia` without a subcommand:
 uv run mia
 ```
 
-Or launch the full-screen terminal user interface:
-
-```bash
-uv run mia tui
-```
-
 ### Essential Keyboard Controls
 
 | Context | Key / Command | Action |
@@ -188,11 +182,6 @@ uv run mia tui
 | **REPL** | `Esc` or `/help` | Open slash command menu |
 | **REPL** | `Ctrl+C` or `/stop` | Cancel active turn without exiting |
 | **REPL** | `Ctrl+D` | Exit REPL cleanly |
-| **TUI** | `Esc` | Return focus to prompt input |
-| **TUI** | `F1` | Show keyboard help modal |
-| **TUI** | `Alt+1` .. `Alt+9` | Fast switch between active Agents |
-| **TUI** | `Ctrl+N` | Start a new Session |
-| **TUI** | `Ctrl+Q` | Quit TUI |
 | **Approval Modal** | `y` | Approve Tool execution |
 | **Approval Modal** | `n` or `Esc` | Reject Tool execution |
 

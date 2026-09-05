@@ -1,0 +1,59 @@
+story_id: e12s02
+title: Reconcile CLI/REPL-Only Product Surface
+spec: e12s02-reconcile-cli-repl-only-product-surface.md
+status: passing
+bcps: 2
+risk: P1
+delta: MODIFIED
+scenarios:
+  - SC-e12s02-P1-01
+  - SC-e12s02-P1-02
+  - SC-e12s02-P1-03
+  - SC-e12s02-P1-04
+tasks:
+  - id: e12s02t01
+    title: Update current user and package guidance
+    description: Remove mia tui instructions and describe uv run mia as the supported interactive CLI/REPL entry point.
+    status: passing
+    risk: P1
+    scenarios: [SC-e12s02-P1-01]
+    files:
+      - README.md
+      - docs/user-guide.md
+      - src/mia_cli/__init__.py
+    verify: '! grep -R -nE "mia tui|full-screen.*Textual|Textual frontend" README.md docs src/mia_cli --exclude-dir=tui'
+  - id: e12s02t02
+    title: Update current product and planning records
+    description: Record the CLI-only frontend decision in current scope, vision, planning, release, and execution records while leaving archived evidence unchanged.
+    status: passing
+    risk: P1
+    scenarios: [SC-e12s02-P1-02, SC-e12s02-P1-03, SC-e12s02-P1-04]
+    files:
+      - specs/product/SCOPE_LATEST.yaml
+      - specs/product/VISION_LATEST.yaml
+      - specs/planning-context.yaml
+      - specs/release-plan.yaml
+      - specs/execution-status.yaml
+      - specs/state.yaml
+      - specs/tech-architecture/tech-stack.md
+      - specs/tech-architecture/DESIGN_PLAN_LATEST.md
+      - specs/tech-architecture/REFACTOR_LATEST.md
+      - specs/tech-architecture/e07-TEST_PLAN_LATEST.md
+      - specs/tech-architecture/e10-TEST_PLAN_LATEST.md
+      - specs/tech-architecture/e11-TEST_PLAN_LATEST.md
+      - specs/IMPACT-e07.md
+      - specs/IMPACT-e10.md
+      - specs/PLAN-AUDIT_LATEST.md
+      - specs/security/REVIEW.md
+      - specs/security/EXCEPTIONS.md
+    verify: uv run --offline python -c "import pathlib,yaml; [yaml.safe_load(p.read_text()) for p in pathlib.Path('specs').rglob('*.yaml') if 'archive' not in p.parts]"
+  - id: e12s02t03
+    title: Record e12 verification evidence
+    description: Persist the removal verification and run the specification consistency check against the archived capsule.
+    status: passing
+    risk: P1
+    scenarios: [SC-e12s02-P1-04]
+    files:
+      - specs/verifications/e12-verify.yaml
+      - specs/IMPACT_LATEST.md
+    verify: uv run --offline python scripts/check-spec-consistency.py && bash scripts/lib/plan-consistency-check.sh specs/epics/archive/e12-cli-only-frontend-cleanup && test -s specs/verifications/e12-verify.yaml

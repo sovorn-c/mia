@@ -7,14 +7,13 @@
 - AnyIO and async generators for provider and Agent execution
 - Typer and Rich for the CLI
 - prompt-toolkit for the REPL
-- Textual for the retained shallow TUI
 - pytest, pytest-asyncio, Ruff, Mypy, and Coverage for quality gates
 - Hatchling and `uv build --offline` for packaging
 
 ## Runtime
 
 ```text
-CLI/REPL/TUI
+CLI/REPL
     ↓
 AgentRunner
     ↓
@@ -93,11 +92,11 @@ Session storage is append-only JSONL. `SessionTree` reconstructs active paths an
 
 ## Frontends
 
-The CLI exposes Agent, Session, Plugin, Template, authentication, and model commands. The REPL and TUI select Agents and route prompts through `AgentRunner`. The TUI remains a shallow adapter: it renders Agent events and does not construct providers, Tools, middleware, or `AgentHarness` directly.
+The CLI exposes Agent, Session, Plugin, Template, authentication, and model commands. The inline REPL and print-mode command select Agents and route prompts through `AgentRunner`. Both remain adapters: they render Agent events and do not construct providers, Tools, middleware, or `AgentHarness` directly.
 
 ## Package contract
 
-`pyproject.toml` keeps `mia_ai`, `mia_agent`, `mia_middleware`, `mia_tools`, and `mia_cli` in the wheel. Textual remains declared and `mia_cli/tui/` is explicitly checked during the release gate. The public Plugin API, bundled Notes registration, and allowlisted entry-point discovery are clean-install package contracts. Removed source packages are not included.
+`pyproject.toml` keeps `mia_ai`, `mia_agent`, `mia_middleware`, `mia_tools`, and `mia_cli` in the wheel. The public Plugin API, bundled Notes registration, and allowlisted entry-point discovery are clean-install package contracts. Removed source packages are not included, and the release gate checks the CLI/REPL-only surface.
 
 ## Quality and security
 

@@ -1,5 +1,7 @@
 # Impact — e07 Production Runtime Integrity
 
+> Historical planning artifact. Its frontend paths describe the pre-e12 implementation; the current supported terminal surface is the inline CLI/REPL.
+
 ## Target
 
 Deepen the existing `AgentRunner`, `AgentRuntimeFactory`, runtime event envelopes, Session admission/storage, and `ToolPipeline` boundaries to deliver the canonical closeable Run contract. The purpose of `AgentRunner` is to own one headless Agent prompt execution and terminal truth; its callers are `mia_cli.main`, `mia_cli.repl`, `mia_cli.tui.app`, delegation, package exports, and runtime tests (`src/mia_agent/agent_runner.py:58`, `src/mia_cli/repl.py:141`, `src/mia_cli/tui/app.py:103`). `AgentRuntimeFactory` owns provider/Tool/middleware/Session composition and is called by `AgentRunner`, `DelegationService`, and direct runtime tests (`src/mia_agent/runtime_factory.py:29`, `src/mia_agent/delegation.py:18`). `ToolPipeline` owns onion execution ordering and is used by `AgentHarness`, policy/security/audit tests, and end-to-end scenarios (`src/mia_middleware/pipeline.py:28`, `src/mia_agent/harness.py:31`).

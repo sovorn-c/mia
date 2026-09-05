@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-04 · **Verdict:** READY
 
-This verdict means the selectively replanned production blueprint is ready for `/bp-plan`. It does not mean e07-e11 are implemented or that v0.6.0 is ready to publish.
+This verdict is the historical audit of the selectively replanned production blueprint. Epic e12 later superseded its full-screen Textual frontend assumption; e12 verification records the resulting CLI/REPL-only surface.
 
 ## Principles Alignment
 

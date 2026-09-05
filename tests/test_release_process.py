@@ -27,7 +27,6 @@ def _create_synthetic_dist(dist_dir: Path, version: str = "0.6.0") -> tuple[Path
     sdist_path = dist_dir / f"mia_ai-{version}.tar.gz"
 
     with zipfile.ZipFile(wheel_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("mia_cli/tui/__init__.py", "# tui\n")
         zf.writestr("mia_agent/__init__.py", f"__version__ = '{version}'\n")
         zf.writestr("mia_agent/plugin_models.py", "CORE_PLUGIN_API_VERSION = 1\n")
         zf.writestr(

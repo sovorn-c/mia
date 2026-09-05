@@ -1,0 +1,44 @@
+# e12 CLI-Only Frontend Cleanup verification evidence
+version: "0.6.0"
+epic_id: e12
+status: passed
+verified_at: "2026-09-05T10:09:16Z"
+summary: >-
+  The full-screen Textual frontend and `mia tui` command were removed. The inline CLI/REPL remains the
+  supported interactive terminal surface, and the Agent Core execution path is unchanged.
+stories:
+  e12s01:
+    status: passed
+    checks:
+      - command: uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py
+        result: passed
+      - command: uv run --offline pytest tests/test_release_artifacts.py tests/test_release_process.py tests/test_surface_checks.py
+        result: passed
+      - command: uv run --offline python scripts/check-wheel-surface.py dist/mia_ai-0.6.0-py3-none-any.whl
+        result: passed
+      - command: uv run --offline python scripts/check-artifact-integrity.py check-surface --wheel dist/mia_ai-0.6.0-py3-none-any.whl
+        result: passed
+  e12s02:
+    status: passed
+    checks:
+      - command: uv run --offline pytest tests/test_documentation.py
+        result: passed
+      - command: uv run --offline python scripts/check-spec-consistency.py
+        result: passed
+      - command: bash scripts/lib/plan-consistency-check.sh specs/epics/archive/e12-cli-only-frontend-cleanup
+        result: passed
+      - command: "! grep -R -nE --exclude-dir=__pycache__ 'retained (shallow )?TUI|Textual remains declared|MiaApp|tests/test_tui_app.py|src/mia_cli/tui' specs/tech-architecture README.md docs src tests scripts pyproject.toml uv.lock"
+        result: passed
+quality_gate:
+  command: bash scripts/check-release-gate.sh
+  result: passed
+  details:
+    tests: 358 passed
+    ruff: passed
+    mypy: passed
+    coverage: 88 percent total, 96 percent scoped
+    build: uv build --offline passed
+    public_surface: passed
+historical_evidence:
+  archived_textual_records_preserved: true
+  note: Archived e06/e10 specifications and verification records retain their historical Textual references.

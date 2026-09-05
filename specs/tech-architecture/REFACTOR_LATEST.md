@@ -17,7 +17,7 @@ The production work must strengthen the existing boundary, not flatten controls 
 
 ### 1. AgentRunner Run Interface — selected (Depth 2/5)
 
-- **Files:** `src/mia_agent/agent_runner.py`, `src/mia_agent/runtime_events.py`, CLI/REPL/TUI callers.
+- **Files:** `src/mia_agent/agent_runner.py`, `src/mia_agent/runtime_events.py`, CLI/REPL callers.
 - **Problem:** frontend Adapters classify failure differently; a provider `AgentErrorEvent` can end without the documented terminal Run outcome. The long prompt parameter list and `last_runtime` state also expose runtime construction details.
 - **Deletion test:** removing print mode's separate `AgentErrorEvent` check can turn a failed Run into a successful process exit. The terminal rule therefore does not live at the canonical seam.
 - **Deepening outcome:** the AgentRunner Module accepts one validated Run request, finalizes every Run using the supported consume/cancel/close contract exactly once, emits one matching terminal envelope on normal consumption, and records cancellation before cleanup returns control on external cancellation or awaited stream closure. Every supported caller consumes, cancels, or awaits closure; bare abandonment is excluded.
@@ -49,7 +49,7 @@ The production work must strengthen the existing boundary, not flatten controls 
 
 ### 5. Active Session admission (Depth 2/5)
 
-- **Files:** `src/mia_agent/agent_runner.py`, `src/mia_agent/session/`, TUI worker.
+- **Files:** `src/mia_agent/agent_runner.py`, `src/mia_agent/session/`, CLI/REPL consumers.
 - **Problem:** concurrent Runs can target the same Agent-owned Session and produce timing-dependent lineage.
 - **Deletion test:** removing same-Session admission allows competing restored heads and nondeterministic parentage.
 - **Deepening outcome:** fail busy or serialize one active Run per Agent/Session while allowing distinct Sessions to proceed independently.

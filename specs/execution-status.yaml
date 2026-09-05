@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.6.0
-updated_at: '2026-09-05T04:12:22Z'
+updated_at: '2026-09-05T10:07:19Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-09-03T08:22:40Z'
@@ -267,4 +267,25 @@ epics:
         risk: P1
         tasks_total: 5
         tasks_passing: 5
+        tasks_failing: 0
+  e12:
+    title: CLI-Only Frontend Cleanup
+    status: completed
+    bcps: 5
+    stories:
+      e12s01:
+        title: Remove Full-Screen Textual Frontend
+        status: done
+        bcps: 3
+        risk: P1
+        tasks_total: 3
+        tasks_passing: 3
+        tasks_failing: 0
+      e12s02:
+        title: Reconcile CLI/REPL-Only Product Surface
+        status: done
+        bcps: 2
+        risk: P1
+        tasks_total: 3
+        tasks_passing: 3
         tasks_failing: 0

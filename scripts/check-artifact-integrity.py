@@ -25,7 +25,7 @@ if _surface_spec and _surface_spec.loader:
     FORBIDDEN_WHEEL_PREFIXES = _surface_mod.FORBIDDEN_PREFIXES
     FORBIDDEN_TEXT = _surface_mod.FORBIDDEN_TEXT
 else:
-    REQUIRED_WHEEL_PREFIXES = ("mia_cli/tui/",)
+    REQUIRED_WHEEL_PREFIXES: tuple[str, ...] = ()
     FORBIDDEN_WHEEL_PREFIXES = ()
     FORBIDDEN_TEXT = re.compile(r"^$")
 

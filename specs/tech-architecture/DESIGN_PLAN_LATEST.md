@@ -2,7 +2,7 @@
 
 **Status:** selected for v0.6.0 release planning
 **Module:** `AgentRunner`
-**Callers:** CLI, REPL, TUI, Delegation, and deterministic tests
+**Callers:** CLI, REPL, Delegation, and deterministic tests
 
 ## Requirements
 
@@ -67,11 +67,13 @@ This is the smallest Interface and gives high Leverage across every current Adap
 class AgentRunner:
     def create_run(self, request: RunRequest) -> AgentRun: ...
 
+
 class AgentRun(Protocol):
     identity: RuntimeIdentity
     state: RunState
     outcome: RunOutcome | None
     terminal: AgentEventEnvelope | None
+
     def events(self) -> AsyncIterator[AgentEventEnvelope]: ...
     def cancel(self) -> bool: ...
 ```
