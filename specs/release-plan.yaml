@@ -25,7 +25,7 @@ epics:
     slug: minimal-stream-repl
     title: Minimal Stream REPL and Authentication
     status: completed
-    capsule_dir: specs/epics/e01-minimal-stream-repl
+    capsule_dir: specs/epics/archive/e01-minimal-stream-repl
     outcome: Users can authenticate a supported provider and complete a streamed terminal interaction.
     boundaries:
       includes: Provider setup, connection diagnostics, initial REPL, model controls, and stream rendering.
@@ -43,7 +43,7 @@ epics:
     slug: stream-repl-polish
     title: Stream-First REPL Polish
     status: completed
-    capsule_dir: specs/epics/e02-stream-repl-polish
+    capsule_dir: specs/epics/archive/e02-stream-repl-polish
     outcome: Users can operate, inspect, cancel, resume, and navigate interactive terminal work reliably.
     boundaries:
       includes: Keyboard workflow, prompt controls, inspection, Session navigation, and context discovery.
