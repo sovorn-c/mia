@@ -31,7 +31,7 @@ boundaries:
 stories:
   - id: e10s01
     title: Keyboard-Operable Essential Terminal Workflows
-    status: planned
+    status: passing
     bcps: 5
     risk: P0
     delta: MODIFIED

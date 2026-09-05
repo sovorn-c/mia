@@ -1,7 +1,7 @@
 story_id: e10s01
 title: Keyboard-Operable Essential Terminal Workflows
 spec: e10s01-keyboard-operable-terminal-workflows.md
-status: failing
+status: passing
 bcps: 5
 risk: P0
 delta: MODIFIED
@@ -13,7 +13,7 @@ tasks:
   - id: e10s01t01
     title: Specify and test the essential REPL interaction matrix
     description: Add public tests for prompt submission, clear/cancel, help, Agent/model selection, inspection, quit, focus, and bounded non-TTY behavior.
-    status: failing
+    status: passing
     risk: P0
     security: low
     scenarios: [SC-e10s01-P0-01]
@@ -29,7 +29,7 @@ tasks:
   - id: e10s01t02
     title: Align REPL help and selector discovery
     description: Make essential commands and keyboard/text alternatives visible while preserving aliases and non-TTY selectors.
-    status: failing
+    status: passing
     risk: P0
     security: low
     scenarios: [SC-e10s01-P1-03]
@@ -44,7 +44,7 @@ tasks:
   - id: e10s01t03
     title: Harden TUI focus, bindings, and textual labels
     description: Test and implement Textual prompt focus, Agent switching, new-Agent, approval, help, quit, and visible labels through Pilot.
-    status: failing
+    status: passing
     risk: P0
     security: low
     scenarios: [SC-e10s01-P0-02]
@@ -59,7 +59,7 @@ tasks:
   - id: e10s01t04
     title: Run cross-frontend accessibility regression
     description: Verify the keyboard contract does not change canonical runtime routing or existing CLI/REPL/TUI behavior.
-    status: failing
+    status: passing
     risk: P1
     security: low
     scenarios: [SC-e10s01-P0-01, SC-e10s01-P0-02, SC-e10s01-P1-03]

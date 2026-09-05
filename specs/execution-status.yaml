@@ -217,12 +217,12 @@ epics:
     stories:
       e10s01:
         title: Keyboard-Operable Essential Terminal Workflows
-        status: planned
+        status: passing
         bcps: 5
         risk: P0
         tasks_total: 4
-        tasks_passing: 0
-        tasks_failing: 4
+        tasks_passing: 4
+        tasks_failing: 0
       e10s02:
         title: Plain Output, Semantic Status, and Motion Safety
         status: planned
