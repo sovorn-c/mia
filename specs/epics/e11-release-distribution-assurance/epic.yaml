@@ -49,7 +49,7 @@ requirement_deltas:
 stories:
   - id: e11s01
     title: Reproducible Release Quality and Specification Gate
-    status: planned
+    status: passing
     bcps: 4
     risk: P0
     delta: ADDED

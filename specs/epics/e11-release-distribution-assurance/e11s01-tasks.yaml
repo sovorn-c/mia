@@ -1,7 +1,7 @@
 story_id: e11s01
 title: Reproducible Release Quality and Specification Gate
 spec: e11s01-reproducible-release-quality-and-specification-gate.md
-status: failing
+status: passing
 bcps: 4
 risk: P0
 delta: ADDED
@@ -70,7 +70,7 @@ tasks:
   - id: e11s01t05
     title: Run the complete local release gate
     description: Execute the aggregate gate and confirm all existing repository quality, coverage, public-surface, specification, and security-sensitive checks pass together.
-    status: failing
+    status: passing
     risk: P0
     security: medium
     scenarios: [SC-e11s01-P0-01, SC-e11s01-P0-02, SC-e11s01-P1-03, SC-e11s01-P1-04]

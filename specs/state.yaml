@@ -2,13 +2,11 @@ workflow_mode: solo-git
 session:
   active_flow: build
   active_epic_id: e11
-  active_story_id: e11s01
+  active_story_id: e11s02
   target_version: 0.6.0
 handoff:
   next_skill: develop-tdd
-  summary: 'Epic e11 Release and Distribution Assurance kickoff complete on branch
-    e11-release-distribution-assurance. Active story: e11s01 Reproducible Release Quality
-    and Specification Gate.'
+  summary: 'Story e11s01 Reproducible Release Quality and Specification Gate completed and passing. Advancing to e11s02 Clean Installation and Artifact Integrity.'
   open_decisions: []
 git:
   branch: e11-release-distribution-assurance
