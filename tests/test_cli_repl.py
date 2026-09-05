@@ -942,3 +942,36 @@ def test_essential_repl_commands_and_quit_contract(tmp_path: Path) -> None:
         assert repl.handle_slash_command("/inspect") is True
         mock_render.assert_called_once()
 
+
+def test_help_discovery_exposes_essential_keyboard_and_command_alternatives(
+    tmp_path: Path,
+) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+
+    repl.handle_slash_command("/help")
+    output = repl.console.export_text()
+
+    # Canonical command table is present
+    assert "17 Canonical Slash Commands" in output
+
+    # Essential keyboard actions and command equivalents are visible in text without color/icons
+    assert "Essential Actions & Keyboard Equivalents" in output
+    assert "Submit prompt" in output
+    assert "Enter" in output
+    assert "Clear prompt / Cancel" in output
+    assert "Ctrl+C" in output
+    assert "Switch Agent" in output
+    assert "/agent" in output
+    assert "Switch model" in output
+    assert "Ctrl+L" in output
+    assert "Cycle scoped models" in output
+    assert "Ctrl+P" in output
+    assert "Inspect audit details" in output
+    assert "Ctrl+O" in output
+    assert "Session tree navigator" in output
+    assert "Esc Esc" in output
+    assert "Quit / Exit" in output
+    assert "/quit" in output
+
+
