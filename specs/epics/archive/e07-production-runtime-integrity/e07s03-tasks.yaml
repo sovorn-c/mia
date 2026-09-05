@@ -1,0 +1,117 @@
+story_id: e07s03
+title: Final Core Tool Validation and Plugin Boundary
+spec: e07s03-final-core-tool-validation-plugin-boundary.md
+status: done
+bcps: 6
+risk: P0
+delta: ADDED
+scenarios:
+  - SC-e07s03-P0-01
+  - SC-e07s03-P0-02
+  - SC-e07s03-P0-03
+  - SC-e07s03-P1-04
+tasks:
+  - id: e07s03t01
+    title: Specify complete Plugin Tool boundary tests
+    status: passing
+    risk: P0
+    depends_on: []
+    story_steps: [1]
+    scenarios: [SC-e07s03-P0-01, SC-e07s03-P1-04]
+    work:
+      - Add failing tests for complete Plugin Tool staging, deterministic ordering, duplicate/undeclared rejection, attribution, and Plugin-free compatibility.
+      - Keep the test seam on current bundled Plugin behavior; do not implement e08's arbitrary installed-code host.
+    files:
+      - tests/test_plugins.py
+      - tests/test_agent_runtime.py
+    verify: >-
+      uv run --offline pytest tests/test_plugins.py tests/test_agent_runtime.py -k 'activation or duplicate or undeclared or attribution or plugin_free'
+  - id: e07s03t02
+    title: Stage and validate the complete current Plugin Tool set
+    status: passing
+    risk: P0
+    depends_on: [e07s03t01]
+    story_steps: [2]
+    scenarios: [SC-e07s03-P0-01]
+    work:
+      - Resolve current Plugin Tools and effect declarations as a complete deterministic immutable set before provider/harness execution.
+      - Reject invalid, duplicate, undeclared, or incompatible contributions without partial activation.
+    files:
+      - src/mia_agent/plugins.py
+      - src/mia_agent/plugin_models.py
+      - src/mia_agent/runtime_factory.py
+      - tests/test_plugins.py
+      - tests/test_agent_runtime.py
+    verify: >-
+      uv run --offline pytest tests/test_plugins.py tests/test_agent_runtime.py -k 'plugin or activation or duplicate or effect'
+      && printf 'no new security findings in affected paths\n'
+  - id: e07s03t03
+    title: Add final Core Tool validation after transformation
+    status: passing
+    risk: P0
+    depends_on: [e07s02t04, e07s03t02]
+    story_steps: [3]
+    scenarios: [SC-e07s03-P0-02]
+    work:
+      - Revalidate final Tool identity, arguments, effect, capability, access, approval, security, size, and attribution immediately before executor invocation.
+      - Ensure transformed arguments are the arguments approved and executed; Core rejection cannot be swallowed.
+    files:
+      - src/mia_middleware/pipeline.py
+      - src/mia_middleware/access.py
+      - src/mia_middleware/security.py
+      - src/mia_agent/runtime_factory.py
+      - tests/test_access_policy.py
+      - tests/test_middleware_pipeline.py
+      - tests/test_plugins.py
+    verify: >-
+      uv run --offline pytest tests/test_access_policy.py tests/test_middleware_pipeline.py tests/test_plugins.py -k 'transform or rewrite or final or approval or effect or security'
+      && printf 'no new security findings in affected paths\n'
+  - id: e07s03t04
+    title: Keep attribution and terminal truth outside Plugin behavior
+    status: passing
+    risk: P0
+    depends_on: [e07s01t03, e07s03t03]
+    story_steps: [4]
+    scenarios: [SC-e07s03-P0-03]
+    work:
+      - Preserve Core-owned Tool events, audit, diagnostics, terminal normalization, and finalization against Plugin failure or forged success.
+      - Add cooperative lifecycle cleanup decision evidence while documenting event-loop-blocking trusted-code limits and process-restart recovery.
+    files:
+      - src/mia_agent/agent_runner.py
+      - src/mia_agent/runtime_events.py
+      - src/mia_agent/plugins.py
+      - src/mia_middleware/telemetry.py
+      - tests/test_agent_loop.py
+      - tests/test_plugins.py
+      - tests/test_e2e_scenarios.py
+    verify: >-
+      uv run --offline pytest tests/test_agent_loop.py tests/test_plugins.py tests/test_e2e_scenarios.py -k 'audit or attribution or terminal or failure or cleanup or plugin'
+      && printf 'no new security findings in affected paths\n'
+  - id: e07s03t05
+    title: Verify the final Core boundary and compatibility
+    status: passing
+    risk: P0
+    depends_on: [e07s03t04]
+    story_steps: [5]
+    scenarios: [SC-e07s03-P0-01, SC-e07s03-P0-02, SC-e07s03-P0-03, SC-e07s03-P1-04]
+    work:
+      - Run all runtime, Plugin, policy, middleware, frontend, delegation, and Session regressions.
+      - Run formatting, lint, strict typing, and affected-path security evidence.
+    files:
+      - src/mia_agent/
+      - src/mia_middleware/
+      - tests/test_agent_runtime.py
+      - tests/test_agent_loop.py
+      - tests/test_plugins.py
+      - tests/test_access_policy.py
+      - tests/test_middleware_pipeline.py
+      - tests/test_e2e_scenarios.py
+      - tests/test_cli_print_mode.py
+      - tests/test_cli_repl.py
+      - tests/test_tui_app.py
+    verify: >-
+      uv run --offline pytest tests/test_agent_runtime.py tests/test_agent_loop.py tests/test_plugins.py tests/test_access_policy.py tests/test_middleware_pipeline.py tests/test_e2e_scenarios.py tests/test_delegation.py tests/test_cli_print_mode.py tests/test_cli_repl.py tests/test_tui_app.py
+      && uv run --offline ruff format --check .
+      && uv run --offline ruff check .
+      && uv run --offline mypy src
+      && printf 'no new security findings in affected paths\n'

@@ -1,0 +1,128 @@
+story_id: e08s02
+title: Transactional Run Activation and Owned Plugin Lifecycle
+spec: e08s02-transactional-run-activation-and-owned-lifecycle.md
+status: done
+bcps: 8
+risk: P0
+delta: ADDED
+scenarios:
+  - SC-e08s02-P0-01
+  - SC-e08s02-P0-02
+  - SC-e08s02-P0-03
+  - SC-e08s02-P0-04
+tasks:
+  - id: e08s02t01
+    title: Specify complete-set activation and lifecycle tests
+    status: passing
+    risk: P0
+    depends_on: []
+    story_steps: [1]
+    scenarios: [SC-e08s02-P0-01, SC-e08s02-P0-03]
+    work:
+      - Add tests for no-callback planning, exact dependencies, deterministic activation order, staged publication, immutable snapshots, and Plugin-free compatibility.
+      - Use synthetic trusted Plugins and isolated Agent homes; do not use network or uncontrolled process state.
+    files:
+      - tests/test_plugin_host.py
+      - tests/test_agent_runtime.py
+      - src/mia_agent/plugin_host.py
+    verify: >-
+      uv run --offline pytest tests/test_plugin_host.py tests/test_agent_runtime.py -k 'plan or dependency or order or staged or snapshot'
+    allure:
+      severity: critical
+      categories: ["Plugin Lifecycle", "Security Review", "integration"]
+  - id: e08s02t02
+    title: Implement the narrow PluginContext and owned effects
+    status: passing
+    risk: P0
+    depends_on: [e08s02t01]
+    story_steps: [2]
+    scenarios: [SC-e08s02-P0-01, SC-e08s02-P0-02, SC-e08s02-P0-03]
+    work:
+      - Implement typed `PluginContext` operations for declared registration, approved notification-only observation, and Core-owned reversible effects.
+      - Enforce immutable values, bounded context, attribution, declaration matching, collision rejection, and forbidden mutable Core access.
+    files:
+      - src/mia_agent/plugin_host.py
+      - src/mia_agent/plugin_models.py
+      - tests/test_plugin_host.py
+    verify: >-
+      uv run --offline pytest tests/test_plugin_host.py -k 'context or register or observe or effect or declaration or collision'
+    allure:
+      severity: critical
+      categories: ["Plugin Lifecycle", "Security Review"]
+  - id: e08s02t03
+    title: Add deterministic activation, staging, and rollback
+    status: passing
+    risk: P0
+    depends_on: [e08s01t03, e08s02t02]
+    story_steps: [3]
+    scenarios: [SC-e08s02-P0-01, SC-e08s02-P0-02]
+    work:
+      - Plan the complete enabled Plugin set and activate exact dependencies first with normalized-ID tie-breaking.
+      - Keep registrations hidden until all Plugins succeed; dispose every acquired effect in reverse order on any failure.
+      - Return one immutable Run-scoped activation through `AgentRuntimeFactory` without creating another execution root.
+    files:
+      - src/mia_agent/plugin_host.py
+      - src/mia_agent/plugins.py
+      - src/mia_agent/runtime_factory.py
+      - tests/test_plugin_host.py
+      - tests/test_plugins.py
+      - tests/test_agent_runtime.py
+    verify: >-
+      uv run --offline pytest tests/test_plugin_host.py tests/test_plugins.py tests/test_agent_runtime.py -k 'activation or dependency or deterministic or rollback or staged'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: ["Plugin Lifecycle", "Security Review", "integration"]
+  - id: e08s02t04
+    title: Own disposal decisions and quarantine in AgentRunner
+    status: passing
+    risk: P0
+    depends_on: [e08s02t03]
+    story_steps: [4]
+    scenarios: [SC-e08s02-P0-04]
+    work:
+      - Connect activation-owned disposers and observers to AgentRunner's existing finalization/cleanup linearization.
+      - Make disposal reverse ordered and idempotent; diagnose failures; quarantine timed-out Plugins after Core regains control; preserve domain-work terminal truth.
+      - Document and test the limit that event-loop-blocking trusted Python can delay any same-process cleanup decision.
+    files:
+      - src/mia_agent/plugin_host.py
+      - src/mia_agent/agent_runner.py
+      - src/mia_agent/runtime_events.py
+      - src/mia_agent/runtime_factory.py
+      - tests/test_plugin_host.py
+      - tests/test_agent_runtime.py
+    verify: >-
+      uv run --offline pytest tests/test_plugin_host.py tests/test_agent_runtime.py -k 'dispose or cleanup or timeout or quarantine or diagnostic'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: ["Plugin Lifecycle", "Security Review", "resilience"]
+  - id: e08s02t05
+    title: Verify transactional Run activation and lifecycle
+    status: passing
+    risk: P0
+    depends_on: [e08s02t04]
+    story_steps: [5]
+    scenarios: [SC-e08s02-P0-01, SC-e08s02-P0-02, SC-e08s02-P0-03, SC-e08s02-P0-04]
+    work:
+      - Run host, runtime, Session, cancellation, and Plugin regressions.
+      - Run formatting, lint, strict typing, and affected-path security evidence.
+    files:
+      - src/mia_agent/plugin_host.py
+      - src/mia_agent/plugins.py
+      - src/mia_agent/runtime_factory.py
+      - src/mia_agent/agent_runner.py
+      - tests/test_plugin_host.py
+      - tests/test_plugins.py
+      - tests/test_agent_runtime.py
+      - tests/test_agent_loop.py
+      - tests/test_sessions.py
+      - tests/test_delegation.py
+    verify: >-
+      uv run --offline pytest tests/test_plugin_host.py tests/test_plugins.py tests/test_agent_runtime.py tests/test_agent_loop.py tests/test_sessions.py tests/test_delegation.py
+      && uv run --offline ruff format --check .
+      && uv run --offline ruff check .
+      && uv run --offline mypy src
+    allure:
+      severity: critical
+      categories: ["Plugin Lifecycle", "Security Review", "quality"]

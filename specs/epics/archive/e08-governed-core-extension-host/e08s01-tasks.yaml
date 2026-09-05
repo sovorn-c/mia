@@ -1,0 +1,124 @@
+story_id: e08s01
+title: Typed Plugin Contract, Trust, and Static Catalog
+spec: e08s01-typed-plugin-contract-trust-and-static-catalog.md
+status: done
+bcps: 7
+risk: P0
+delta: MODIFIED
+scenarios:
+  - SC-e08s01-P0-01
+  - SC-e08s01-P0-02
+  - SC-e08s01-P0-03
+  - SC-e08s01-P1-04
+tasks:
+  - id: e08s01t01
+    title: Specify strict trust-aware catalog contracts
+    status: passing
+    risk: P0
+    depends_on: []
+    story_steps: [1]
+    scenarios: [SC-e08s01-P0-01, SC-e08s01-P0-03]
+    work:
+      - Add public-interface tests for declarative and trusted-code manifests, static Skills, provenance, API compatibility, strict IDs, duplicates, and secret-free rejection.
+      - Assert catalog inspection does not invoke executable Plugin callbacks or mutate Agent/Session state.
+    files:
+      - tests/test_plugin_host.py
+      - tests/test_plugins.py
+      - src/mia_agent/plugin_models.py
+    verify: >-
+      uv run --offline pytest tests/test_plugin_host.py tests/test_plugins.py -k 'manifest or static or declarative or trust or provenance or compatibility'
+    allure:
+      severity: critical
+      categories: ["Plugin Contract", "Security Review", "unit"]
+  - id: e08s01t02
+    title: Implement strict Plugin trust and static-resource models
+    status: passing
+    risk: P0
+    depends_on: [e08s01t01]
+    story_steps: [2]
+    scenarios: [SC-e08s01-P0-01, SC-e08s01-P0-02, SC-e08s01-P0-03]
+    work:
+      - Extend Pydantic models with Core-assigned trust/provenance, static Skills, bounded declarations, and exact API compatibility.
+      - Preserve existing Notes Tool, Template, configuration, and normalized-ID contracts.
+    files:
+      - src/mia_agent/plugin_models.py
+      - tests/test_plugins.py
+      - tests/test_agent_templates.py
+    verify: >-
+      uv run --offline pytest tests/test_plugins.py tests/test_agent_templates.py -k 'validation or secret or duplicate or version or template or skill'
+    allure:
+      severity: critical
+      categories: ["Plugin Contract", "Security Review"]
+  - id: e08s01t03
+    title: Add allowlisted discovery and no-execution inspection
+    status: passing
+    risk: P0
+    depends_on: [e08s01t02]
+    story_steps: [3]
+    scenarios: [SC-e08s01-P0-01, SC-e08s01-P0-02]
+    work:
+      - Add Core-owned bundled/installed catalog discovery through the allowlisted entry-point surface.
+      - Return deterministic compatibility, provenance, and trust inspection without importing or activating executable callbacks or installing dependencies.
+    files:
+      - src/mia_agent/plugins.py
+      - src/mia_agent/plugin_catalog.py
+      - src/mia_agent/plugin_models.py
+      - tests/test_plugin_host.py
+    verify: >-
+      uv run --offline pytest tests/test_plugin_host.py -k 'inspect or discover or no_callback or entry_point or install'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: ["Plugin Contract", "Security Review", "integration"]
+  - id: e08s01t04
+    title: Preserve Notes and existing inspection compatibility
+    status: passing
+    risk: P1
+    depends_on: [e08s01t03]
+    story_steps: [4]
+    scenarios: [SC-e08s01-P1-04]
+    work:
+      - Keep Notes Plugin ID, manifest, Tool declarations, notes-agent Template, configuration, and Agent-owned data contract unchanged.
+      - Keep existing Plugin and Template CLI/API listing, inspection, installation, and instantiation behavior compatible.
+    files:
+      - src/mia_agent/plugin_catalog.py
+      - src/mia_agent/plugins.py
+      - src/mia_cli/main.py
+      - tests/test_notes_plugin.py
+      - tests/test_plugins.py
+      - tests/test_agent_templates.py
+      - tests/test_plugin_cli.py
+      - tests/test_agent_template_cli.py
+    verify: >-
+      uv run --offline pytest tests/test_notes_plugin.py tests/test_plugins.py tests/test_agent_templates.py tests/test_plugin_cli.py tests/test_agent_template_cli.py -k 'notes or template or available or manifest or plugin'
+    allure:
+      severity: high
+      categories: ["Plugin Contract", "Compatibility", "integration"]
+  - id: e08s01t05
+    title: Verify the typed contract and static catalog
+    status: passing
+    risk: P0
+    depends_on: [e08s01t04]
+    story_steps: [5]
+    scenarios: [SC-e08s01-P0-01, SC-e08s01-P0-02, SC-e08s01-P0-03, SC-e08s01-P1-04]
+    work:
+      - Run catalog, model, CLI inspection, public-surface, formatting, lint, and strict typing checks.
+      - Confirm no new security findings in affected paths and no executable inspection path exists.
+    files:
+      - src/mia_agent/plugin_models.py
+      - src/mia_agent/plugins.py
+      - src/mia_agent/plugin_catalog.py
+      - src/mia_cli/main.py
+      - tests/test_plugin_host.py
+      - tests/test_plugins.py
+      - tests/test_notes_plugin.py
+      - tests/test_agent_templates.py
+    verify: >-
+      uv run --offline pytest tests/test_plugin_host.py tests/test_plugins.py tests/test_notes_plugin.py tests/test_agent_templates.py tests/test_plugin_cli.py tests/test_agent_template_cli.py
+      && uv run --offline ruff format --check .
+      && uv run --offline ruff check .
+      && uv run --offline mypy src
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: ["Plugin Contract", "Security Review", "quality"]

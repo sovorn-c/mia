@@ -1,0 +1,128 @@
+story_id: e07s02
+title: Safeguarded Runtime Settings and Session Admission
+spec: e07s02-safeguarded-runtime-settings-session-admission.md
+status: done
+bcps: 7
+risk: P0
+delta: MODIFIED
+scenarios:
+  - SC-e07s02-P0-01
+  - SC-e07s02-P0-02
+  - SC-e07s02-P0-03
+  - SC-e07s02-P1-04
+tasks:
+  - id: e07s02t01
+    title: Specify settings and admission failures
+    status: passing
+    risk: P0
+    depends_on: []
+    story_steps: [1]
+    scenarios: [SC-e07s02-P0-01, SC-e07s02-P0-02]
+    work:
+      - Add failing tests for settings precedence, invalid effective values, capability narrowing, same-Session conflicts, and secret-free errors.
+      - Add deterministic asyncio fixtures for held and released Session ownership.
+    files:
+      - tests/test_agent_runtime.py
+      - tests/test_agents.py
+      - tests/test_sessions.py
+      - tests/test_credentials.py
+    verify: >-
+      uv run --offline pytest tests/test_agent_runtime.py tests/test_agents.py tests/test_sessions.py tests/test_credentials.py -k 'settings or override or session_busy or admission or invalid'
+  - id: e07s02t02
+    title: Resolve one effective runtime settings snapshot
+    status: passing
+    risk: P0
+    depends_on: [e07s02t01]
+    story_steps: [2]
+    scenarios: [SC-e07s02-P0-01]
+    work:
+      - Implement documented request, Agent, global, and safe-default precedence for provider/model/context/compaction/execution settings.
+      - Validate values before provider execution and pass one effective snapshot to provider, harness, compactor, and policy construction.
+    files:
+      - src/mia_agent/runtime_factory.py
+      - src/mia_agent/agent_runner.py
+      - src/mia_agent/runtime_models.py
+      - tests/test_agent_runtime.py
+      - tests/test_credentials.py
+    verify: >-
+      uv run --offline pytest tests/test_agent_runtime.py tests/test_credentials.py tests/test_agents.py -k 'settings or precedence or provider or context or compaction or invalid'
+  - id: e07s02t03
+    title: Enforce exclusive Agent-owned Session admission
+    status: passing
+    risk: P0
+    depends_on: [e07s02t02]
+    story_steps: [3]
+    scenarios: [SC-e07s02-P0-02]
+    work:
+      - Add process-local ownership keyed by (agent_id, session_id) to the canonical Run lifecycle.
+      - Normalize conflicts as session_busy without provider/Tool execution and release ownership exactly once on every exit path.
+    files:
+      - src/mia_agent/agent_runner.py
+      - src/mia_agent/session/
+      - tests/test_agent_runtime.py
+      - tests/test_sessions.py
+    verify: >-
+      uv run --offline pytest tests/test_agent_runtime.py tests/test_sessions.py -k 'session_busy or admission or concurrent or release or append'
+  - id: e07s02t04
+    title: Make permanent Core safeguards mandatory
+    status: passing
+    risk: P0
+    depends_on: [e07s02t02]
+    story_steps: [4]
+    scenarios: [SC-e07s02-P0-03]
+    work:
+      - Keep access, security, audit, cost, execution-limit, sanitation, and terminal controls in Core-owned fixed order.
+      - Preserve read-only, approval-required, confirmed full-access, Tool filtering, and fail-closed unknown-effect behavior despite Agent/request configuration.
+    files:
+      - src/mia_agent/runtime_factory.py
+      - src/mia_middleware/access.py
+      - src/mia_middleware/pipeline.py
+      - src/mia_middleware/security.py
+      - src/mia_middleware/telemetry.py
+      - tests/test_access_policy.py
+      - tests/test_middleware_pipeline.py
+      - tests/test_e2e_scenarios.py
+    verify: >-
+      uv run --offline pytest tests/test_access_policy.py tests/test_middleware_pipeline.py tests/test_e2e_scenarios.py -k 'policy or approval or security or audit or budget or limit'
+  - id: e07s02t05
+    title: Preserve bounded Delegation through the boundary
+    status: passing
+    risk: P0
+    depends_on: [e07s02t03, e07s02t04]
+    story_steps: [5]
+    scenarios: [SC-e07s02-P1-04]
+    work:
+      - Route child Runs through effective settings and Session admission with capability intersection and depth bounds.
+      - Prove distinct Sessions remain concurrent and failures remain attributable and secret-free.
+    files:
+      - src/mia_agent/delegation.py
+      - src/mia_agent/runtime_factory.py
+      - tests/test_delegation.py
+      - tests/test_agent_runtime.py
+      - tests/test_sessions.py
+    verify: >-
+      uv run --offline pytest tests/test_delegation.py tests/test_agent_runtime.py tests/test_sessions.py -k 'delegat or depth or access or session or failure'
+  - id: e07s02t06
+    title: Verify settings, admission, and safeguards
+    status: passing
+    risk: P0
+    depends_on: [e07s02t05]
+    story_steps: [6]
+    scenarios: [SC-e07s02-P0-01, SC-e07s02-P0-02, SC-e07s02-P0-03, SC-e07s02-P1-04]
+    work:
+      - Run runtime, policy, middleware, Session, credential, and delegation regressions.
+      - Run formatting, lint, strict typing, and affected-path security evidence.
+    files:
+      - src/mia_agent/
+      - src/mia_middleware/
+      - tests/test_agent_runtime.py
+      - tests/test_sessions.py
+      - tests/test_access_policy.py
+      - tests/test_middleware_pipeline.py
+      - tests/test_delegation.py
+    verify: >-
+      uv run --offline pytest tests/test_agent_runtime.py tests/test_agents.py tests/test_credentials.py tests/test_sessions.py tests/test_access_policy.py tests/test_middleware_pipeline.py tests/test_e2e_scenarios.py tests/test_delegation.py
+      && uv run --offline ruff format --check .
+      && uv run --offline ruff check .
+      && uv run --offline mypy src
+      && printf 'no new security findings in affected paths\n'

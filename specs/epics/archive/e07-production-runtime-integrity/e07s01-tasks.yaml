@@ -1,0 +1,124 @@
+story_id: e07s01
+title: Canonical Closeable Agent Run Stream
+spec: e07s01-canonical-closeable-agent-run-stream.md
+status: done
+bcps: 8
+risk: P0
+delta: MODIFIED
+scenarios:
+  - SC-e07s01-P0-01
+  - SC-e07s01-P0-02
+  - SC-e07s01-P0-03
+  - SC-e07s01-P0-04
+tasks:
+  - id: e07s01t01
+    title: Specify and validate the immutable Run request
+    status: passing
+    risk: P0
+    depends_on: []
+    story_steps: [1]
+    scenarios: [SC-e07s01-P0-01, SC-e07s01-P0-03]
+    work:
+      - Add failing public-interface tests for frozen RunRequest validation, first-iteration acceptance, identity attribution, and sanitized errors.
+      - Reject unknown fields, blank prompts, unsafe IDs, invalid thresholds, and invalid context windows before provider execution.
+    files:
+      - src/mia_agent/agent_runner.py
+      - src/mia_agent/runtime_models.py
+      - tests/test_agent_runtime.py
+    verify: >-
+      uv run --offline pytest tests/test_agent_runtime.py -k 'run_request or validation or attribution'
+  - id: e07s01t02
+    title: Implement the canonical closeable stream
+    status: passing
+    risk: P0
+    depends_on: [e07s01t01]
+    story_steps: [2]
+    scenarios: [SC-e07s01-P0-01, SC-e07s01-P0-02]
+    work:
+      - Implement AgentRunner.run(RunRequest) as the single AsyncGenerator entry while preserving factory injection and private Research sequencing.
+      - Keep runtime construction and credentials private to Core.
+    files:
+      - src/mia_agent/agent_runner.py
+      - src/mia_agent/runtime_models.py
+      - tests/test_agent_runtime.py
+      - tests/test_agent_loop.py
+    verify: >-
+      uv run --offline pytest tests/test_agent_runtime.py tests/test_agent_loop.py -k 'run or request or research'
+  - id: e07s01t03
+    title: Enforce exactly-once terminal truth
+    status: passing
+    risk: P0
+    depends_on: [e07s01t02]
+    story_steps: [3]
+    scenarios: [SC-e07s01-P0-02, SC-e07s01-P0-03]
+    work:
+      - Add the atomic idempotent finalizer and terminal-state guard for success, handled failure, rejection, missing terminal, and duplicate terminal output.
+      - Normalize failures to sanitized Core-owned RunErrorEvent values and prevent post-terminal events.
+    files:
+      - src/mia_agent/agent_runner.py
+      - src/mia_agent/runtime_events.py
+      - tests/test_agent_runtime.py
+      - tests/test_agent_loop.py
+    verify: >-
+      uv run --offline pytest tests/test_agent_runtime.py tests/test_agent_loop.py -k 'terminal or failure or missing or duplicate or contract'
+  - id: e07s01t04
+    title: Define cancellation and awaited-close behavior
+    status: passing
+    risk: P0
+    depends_on: [e07s01t03]
+    story_steps: [4]
+    scenarios: [SC-e07s01-P0-04]
+    work:
+      - Implement pre-finalization cancellation and awaited aclose semantics without promising an envelope.
+      - Defer late cancellation until an existing terminal envelope is returned and make post-delivery closure idempotent.
+      - Document and test that bare abandonment has no lifecycle timing guarantee.
+    files:
+      - src/mia_agent/agent_runner.py
+      - tests/test_agent_runtime.py
+      - tests/test_cli_repl.py
+    verify: >-
+      uv run --offline pytest tests/test_agent_runtime.py tests/test_cli_repl.py -k 'cancel or close or aclose or terminal'
+  - id: e07s01t05
+    title: Migrate all supported frontend callers
+    status: passing
+    risk: P0
+    depends_on: [e07s01t04]
+    story_steps: [5]
+    scenarios: [SC-e07s01-P0-01, SC-e07s01-P0-04]
+    work:
+      - Migrate CLI, REPL, TUI, and Delegation callers to RunRequest and closeable stream consumption.
+      - Use contextlib.aclosing for every supported early-exit path and keep Adapters render-only.
+    files:
+      - src/mia_cli/main.py
+      - src/mia_cli/repl.py
+      - src/mia_cli/tui/app.py
+      - src/mia_agent/delegation.py
+      - tests/test_cli_print_mode.py
+      - tests/test_cli_repl.py
+      - tests/test_tui_app.py
+      - tests/test_delegation.py
+    verify: >-
+      uv run --offline pytest tests/test_cli_print_mode.py tests/test_cli_repl.py tests/test_tui_app.py tests/test_delegation.py
+  - id: e07s01t06
+    title: Verify the complete Run stream contract
+    status: passing
+    risk: P0
+    depends_on: [e07s01t05]
+    story_steps: [6]
+    scenarios: [SC-e07s01-P0-01, SC-e07s01-P0-02, SC-e07s01-P0-03, SC-e07s01-P0-04]
+    work:
+      - Run focused runtime, frontend, Session, and delegation regressions.
+      - Run formatting, lint, strict typing, and affected-path security evidence.
+    files:
+      - tests/test_agent_runtime.py
+      - tests/test_agent_loop.py
+      - tests/test_delegation.py
+      - tests/test_cli_print_mode.py
+      - tests/test_cli_repl.py
+      - tests/test_tui_app.py
+    verify: >-
+      uv run --offline pytest tests/test_agent_runtime.py tests/test_agent_loop.py tests/test_delegation.py tests/test_cli_print_mode.py tests/test_cli_repl.py tests/test_tui_app.py
+      && uv run --offline ruff format --check .
+      && uv run --offline ruff check .
+      && uv run --offline mypy src
+      && printf 'no new security findings in affected paths\n'
