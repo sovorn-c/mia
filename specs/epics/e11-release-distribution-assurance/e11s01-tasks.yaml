@@ -42,7 +42,7 @@ tasks:
   - id: e11s01t03
     title: Compose the local aggregate release gate
     description: Orchestrate specification validation, format, lint, strict mypy, full pytest, scoped coverage, public-surface, and secret-safe security-sensitive checks in a fixed fail-closed order.
-    status: failing
+    status: passing
     risk: P0
     security: medium
     scenarios: [SC-e11s01-P0-01, SC-e11s01-P1-04]
