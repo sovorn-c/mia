@@ -1,0 +1,108 @@
+epic_id: e10
+title: Accessible Product Experience and Documentation
+verified_at: '2026-09-05T02:15:00Z'
+verifier: verify-work
+branch: e10-accessible-product-documentation
+status: passing
+phases:
+  branch:
+    passed: true
+    command: git branch --show-current
+    actual: e10-accessible-product-documentation
+  guidance:
+    passed: true
+    command: cmp -s AGENTS.md CLAUDE.md
+    note: Guidance files are byte-for-byte identical.
+  diff_hygiene:
+    passed: true
+    command: git diff --check main...HEAD
+    note: Git diff check against main passes cleanly with no trailing whitespace or extra EOF blank lines.
+  specs:
+    passed: true
+    command: uv run --offline python -c "import pathlib,yaml; [yaml.safe_load(p.read_text()) for p in pathlib.Path('specs').rglob('*.yaml')]"
+    note: All YAML specifications in specs/ parse cleanly.
+  plan_consistency:
+    passed: true
+    note: Reconciled e10 manifest (status completed, planning_stage delivered, next_skill verify-work), story specs (status done), task ledgers (status done, truthful passing counters), and execution status.
+  mechanical:
+    passed: true
+    commands:
+      - uv run --offline ruff format --check .
+      - uv run --offline ruff check .
+      - uv run --offline mypy src
+      - uv run --offline pytest
+      - uv build --offline
+    tests_passed: 320
+    tests_failed: 0
+    source_files_typechecked: 64
+    artifacts_built:
+      - dist/mia_ai-0.6.0.tar.gz
+      - dist/mia_ai-0.6.0-py3-none-any.whl
+  coverage:
+    passed: true
+    command: uv run --offline coverage run -m pytest && uv run --offline coverage report
+    total_coverage_percent: 90
+    statements_total: 11835
+    statements_missed: 1239
+  public_surface:
+    passed: true
+    commands:
+      - uv run --offline pytest tests/test_surface_checks.py
+      - uv run --offline python -m zipfile -l dist/mia_ai-0.6.0-py3-none-any.whl
+      - uv run --offline mia --help
+      - uv run --offline mia run --help
+    note: Wheel package contains only authorized packages under src/ with py.typed markers and valid entrypoints; CLI exposes --plain and accessible commands.
+  story_verifications:
+    e10s01:
+      title: Keyboard-Operable Essential Terminal Workflows
+      status: passing
+      commands:
+        - uv run --offline pytest tests/test_cli_repl.py tests/test_tui_app.py tests/test_pty_prompt_layout.py
+      tests_passed: 50
+      tests_failed: 0
+      outcomes:
+        - Non-TTY bounded input with EOFError and KeyboardInterrupt cancellation verified.
+        - Essential keyboard actions and slash command alternatives discovered via REPL /help menu.
+        - Textual ApprovalModal keyboard navigation (y/n/Escape) and autofocus verified.
+        - Textual MiaApp keyboard bindings (Escape prompt focus, F1 help, Alt+1..9 fast agent switch, Ctrl+N new session, Ctrl+Q quit) and accessible footer verified.
+    e10s02:
+      title: Plain Output, Semantic Status, and Motion Safety
+      status: passing
+      commands:
+        - uv run --offline pytest tests/test_cli_print_mode.py tests/test_cli_repl.py
+      tests_passed: 54
+      tests_failed: 0
+      outcomes:
+        - Presentation mode resolution for explicit --plain flag, NO_COLOR environment variable, and non-TTY stdout detection verified.
+        - RichStreamRenderer suppresses live animations and braille spinners in plain mode.
+        - Static semantic status labels ([running], [ok], [error], [cancelled], [attention]) emitted without ANSI control sequences.
+        - Truthful CLI exit codes and runtime outcome preservation verified.
+    e10s03:
+      title: Complete User, Operator, and Plugin Documentation
+      status: passing
+      commands:
+        - uv run --offline pytest tests/test_documentation.py
+      tests_passed: 8
+      tests_failed: 0
+      outcomes:
+        - README navigation and docs directory created (docs/README.md, docs/user-guide.md, docs/operator-guide.md, docs/plugin-author-guide.md).
+        - Markdown internal links resolve to valid files.
+        - User guide covers installation, credentials, first run, agents, sessions, models, access policies, keyboard shortcuts, and plain output.
+        - Operator guide covers diagnostics, data locations/sensitivity, backup/restore, and non-destructive recovery verification.
+        - Plugin author guide covers Governed Core Extension Host, trust/provenance, static resources, typed contributions, lifecycle, and unsandboxed execution boundaries.
+        - Documentation secret safety verified with 0 API keys or credentials.
+        - Documented CLI commands verified against registered Typer commands.
+  security:
+    passed: true
+    checks:
+      - credential_isolation: Machine-global credentials store strictly separated from Agent definitions, Sessions, backups, and docs.
+      - secret_redaction: Diagnostic and telemetry records recursively scrub sensitive keys.
+      - plain_output_safety: Plain mode emits clean text without terminal control injection vulnerabilities.
+      - non_destructive: Recovery and verification tools remain read-only without speculative auto-repair.
+      - no_sandbox_honesty: Documentation clearly states trusted Python plugins are unsandboxed and run in-process.
+  terminal_verdict:
+    passed: true
+    exit_code: 0
+    captured_at: '2026-09-05T02:15:00Z'
+    command: uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest && uv build --offline
+    note: Full epic e10 verification passed cleanly with 320 tests passing and clean diff hygiene.
