@@ -209,8 +209,8 @@ epics:
   - id: e10
     slug: accessible-product-documentation
     title: Accessible Product Experience and Documentation
-    status: planned
-    capsule_dir: specs/epics/e10-accessible-product-documentation
+    status: completed
+    capsule_dir: specs/epics/archive/e10-accessible-product-documentation
     outcome: >-
       Users can operate essential workflows and make informed Plugin trust decisions without color,
       animation, or undocumented product knowledge.

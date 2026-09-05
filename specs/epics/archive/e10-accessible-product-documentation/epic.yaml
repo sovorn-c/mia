@@ -56,4 +56,4 @@ stories:
     depends_on: [e10s01, e10s02]
     spec_file: e10s03-complete-user-operator-plugin-documentation.md
     tasks_file: e10s03-tasks.yaml
-next_skill: verify-work
+next_skill: survey-context
