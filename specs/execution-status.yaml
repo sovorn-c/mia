@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.6.0
-updated_at: '2026-09-05T03:03:57Z'
+updated_at: '2026-09-05T03:09:44Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-09-03T08:22:40Z'
@@ -250,8 +250,8 @@ epics:
         bcps: 4
         risk: P0
         tasks_total: 5
-        tasks_passing: 0
-        tasks_failing: 5
+        tasks_passing: 2
+        tasks_failing: 3
       e11s02:
         title: Clean Installation and Artifact Integrity
         status: planned
