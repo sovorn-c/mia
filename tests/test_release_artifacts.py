@@ -323,3 +323,85 @@ def test_artifact_clean_install_and_smoke() -> None:
     res = _run_integrity(["smoke", "--wheel", str(dist_wheels[0])])
     assert res.returncode == 0, f"Smoke test failed: {res.stderr}\n{res.stdout}"
     assert "clean install smoke: clean" in res.stdout.lower()
+
+
+def test_manifest_verification_rejects_unconfined_artifact_names(tmp_path: Path) -> None:
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+    manifest_path = dist_dir / "artifacts-manifest.json"
+
+    manifest_data = {
+        "version": "0.6.0",
+        "artifacts": [
+            {
+                "name": "../outside/mia_ai-0.6.0-escaped.whl",
+                "type": "wheel",
+                "version": "0.6.0",
+                "size": 100,
+                "sha256": "deadbeef",
+            }
+        ],
+    }
+    manifest_path.write_text(json.dumps(manifest_data, indent=2), encoding="utf-8")
+
+    res = _run_integrity(
+        ["verify", "--dist", str(dist_dir), "--manifest", str(manifest_path), "--version", "0.6.0"]
+    )
+    assert res.returncode != 0
+    assert (
+        "traversal" in res.stderr.lower()
+        or "escape" in res.stderr.lower()
+        or "confined" in res.stderr.lower()
+    )
+
+
+def test_manifest_verification_rejects_untracked_artifacts_in_dist(tmp_path: Path) -> None:
+    dist_dir = tmp_path / "dist"
+    sdist_path, wheel_path = _create_synthetic_dist(dist_dir)
+    manifest_path = dist_dir / "artifacts-manifest.json"
+
+    # Generate legitimate manifest
+    _run_integrity(
+        [
+            "generate",
+            "--dist",
+            str(dist_dir),
+            "--manifest",
+            str(manifest_path),
+            "--version",
+            "0.6.0",
+        ]
+    )
+
+    # Inject an untracked wheel into dist
+    untracked_whl = dist_dir / "untracked_pkg-0.6.0-py3-none-any.whl"
+    untracked_whl.write_bytes(b"corrupt-or-untracked-wheel")
+
+    res = _run_integrity(
+        ["verify", "--dist", str(dist_dir), "--manifest", str(manifest_path), "--version", "0.6.0"]
+    )
+    assert res.returncode != 0
+    assert "untracked" in res.stderr.lower()
+
+
+def test_wheel_surface_rejects_duplicate_archive_members(tmp_path: Path) -> None:
+    wheel_dup = tmp_path / "dup-0.6.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel_dup, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("mia_cli/tui/__init__.py", "# 1\n")
+        zf.writestr("mia_cli/tui/__init__.py", "# 2 duplicate\n")
+        zf.writestr("mia_agent/__init__.py", "")
+
+    res = _run_integrity(["check-surface", "--wheel", str(wheel_dup)])
+    assert res.returncode != 0
+    assert "duplicate" in res.stderr.lower()
+
+
+def test_wheel_surface_rejects_directory_traversing_archive_entries(tmp_path: Path) -> None:
+    wheel_trav = tmp_path / "trav-0.6.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel_trav, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("mia_cli/tui/__init__.py", "# 1\n")
+        zf.writestr("../evil.py", "# traversal payload\n")
+
+    res = _run_integrity(["check-surface", "--wheel", str(wheel_trav)])
+    assert res.returncode != 0
+    assert "traversing" in res.stderr.lower() or "traversal" in res.stderr.lower()

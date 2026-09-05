@@ -143,6 +143,22 @@ def generate_manifest(
     return 0
 
 
+def _is_confined_artifact_name(name: str, base_dir: Path) -> bool:
+    if not name or not isinstance(name, str):
+        return False
+    # Artifact name must be a single filename, not a path
+    if "/" in name or "\\" in name or ".." in name:
+        return False
+    p = Path(name)
+    if p.is_absolute() or p.name != name:
+        return False
+    try:
+        resolved = (base_dir / name).resolve()
+        return resolved.is_relative_to(base_dir.resolve()) and resolved.parent == base_dir.resolve()
+    except Exception:
+        return False
+
+
 def verify_manifest(dist_dir: Path, manifest_path: Path, expected_version: str) -> int:
     if not manifest_path.is_file():
         print(f"Manifest file not found: {manifest_path}", file=sys.stderr)
@@ -167,16 +183,26 @@ def verify_manifest(dist_dir: Path, manifest_path: Path, expected_version: str) 
         print(f"Manifest contains no artifacts list: {manifest}", file=sys.stderr)
         return 1
 
+    seen_files: set[str] = set()
     for art in artifacts:
         name = art.get("name")
         if not name:
             print(f"Manifest artifact entry missing 'name': {art}", file=sys.stderr)
             return 1
 
+        if not _is_confined_artifact_name(name, dist_dir):
+            print(
+                f"Artifact path traversal or escape detected: {name!r} is not confined to {dist_dir}",
+                file=sys.stderr,
+            )
+            return 1
+
         file_path = dist_dir / name
         if not file_path.is_file():
             print(f"Artifact file missing on disk: {file_path}", file=sys.stderr)
             return 1
+
+        seen_files.add(name)
 
         expected_size = art.get("size")
         actual_size = file_path.stat().st_size
@@ -196,6 +222,16 @@ def verify_manifest(dist_dir: Path, manifest_path: Path, expected_version: str) 
             )
             return 1
 
+    # Check for untracked wheels or sdists
+    if dist_dir.is_dir():
+        for f in dist_dir.iterdir():
+            if (f.name.endswith(".whl") or f.name.endswith(".tar.gz")) and f.name not in seen_files:
+                print(
+                    f"Dist directory contains untracked artifact not in manifest: {f.name}",
+                    file=sys.stderr,
+                )
+                return 1
+
     print("artifact integrity: clean")
     return 0
 
@@ -207,6 +243,29 @@ def check_wheel_surface(wheel_path: Path) -> int:
 
     with zipfile.ZipFile(wheel_path) as zf:
         names = zf.namelist()
+
+        # Check duplicate archive members
+        if len(names) != len(set(names)):
+            seen: set[str] = set()
+            duplicates: list[str] = []
+            for n in names:
+                if n in seen and n not in duplicates:
+                    duplicates.append(n)
+                seen.add(n)
+            print(
+                f"Wheel contains duplicate archive members: {', '.join(duplicates)}",
+                file=sys.stderr,
+            )
+            return 1
+
+        # Check directory-traversing archive entries
+        for name in names:
+            if name.startswith("/") or name.startswith("\\") or ".." in Path(name).parts:
+                print(
+                    f"Wheel contains directory-traversing archive entry: {name!r}",
+                    file=sys.stderr,
+                )
+                return 1
 
         # Check required prefixes
         missing = [
@@ -251,6 +310,8 @@ def check_wheel_surface(wheel_path: Path) -> int:
 
 
 def smoke_clean_install(wheel_path: Path, repo_root: Path) -> int:
+    wheel_path = wheel_path.resolve()
+    repo_root = repo_root.resolve()
     if not wheel_path.is_file():
         print(f"Wheel file not found: {wheel_path}", file=sys.stderr)
         return 2
@@ -266,53 +327,115 @@ def smoke_clean_install(wheel_path: Path, repo_root: Path) -> int:
     )
 
     with tempfile.TemporaryDirectory() as td:
-        clean_site = Path(td) / "installed-site"
-        clean_site.mkdir()
-        with zipfile.ZipFile(wheel_path) as zf:
-            zf.extractall(clean_site)
-
-        smoke_script = """
-import sys
-from pathlib import Path
-import mia_agent
-import mia_cli.main
-
-clean_dir = Path(sys.argv[1]).resolve()
-agent_file = Path(mia_agent.__file__).resolve()
-assert agent_file.is_relative_to(clean_dir), f"Imported from {agent_file}, not clean install {clean_dir}"
-assert "/src/" not in str(agent_file), f"Source checkout was not excluded: {agent_file}"
-
-from typer.testing import CliRunner
-runner = CliRunner()
-
-for subcmd in [["--help"], ["agent", "list"], ["template", "list"], ["plugin", "list"], ["sessions", "list"]]:
-    res = runner.invoke(mia_cli.main.app, subcmd)
-    if res.exit_code != 0:
-        print(f"Command 'mia {' '.join(subcmd)}' failed with exit code {res.exit_code}:\\n{res.output}", file=sys.stderr)
-        sys.exit(1)
-
-print("clean install smoke: clean")
-"""
-        python_path = f"{clean_site}:{site_packages}" if site_packages else str(clean_site)
-        res = subprocess.run(
-            [sys.executable, "-c", smoke_script, str(clean_site)],
+        venv_dir = Path(td) / "venv"
+        # 1. Create isolated virtual environment using uv venv
+        venv_res = subprocess.run(
+            ["uv", "venv", "--python", sys.executable, str(venv_dir)],
             cwd=td,
-            env={
-                "PATH": os.environ.get("PATH", ""),
-                "PYTHONPATH": python_path,
-                "HOME": td,
-            },
             capture_output=True,
             text=True,
+            check=False,
+            env={"PATH": os.environ.get("PATH", "")},
         )
-        if res.returncode != 0:
+        if venv_res.returncode != 0:
             print(
-                f"Clean install smoke failed:\n{res.stderr}\n{res.stdout}",
+                f"Failed to create virtual environment via uv:\n{venv_res.stderr}",
                 file=sys.stderr,
             )
             return 1
 
-        print(res.stdout.strip())
+        # Determine venv layout
+        venv_bin = venv_dir / ("Scripts" if sys.platform == "win32" else "bin")
+        python_bin = venv_bin / ("python.exe" if sys.platform == "win32" else "python")
+        mia_bin = venv_bin / ("mia.exe" if sys.platform == "win32" else "mia")
+
+        # Provide installed runtime dependencies to isolated venv via .pth without contaminating wheel under test
+        venv_site_pkgs = list(venv_dir.glob("lib/python*/site-packages"))
+        if not venv_site_pkgs:
+            venv_site_pkgs = list(venv_dir.glob("Lib/site-packages"))
+        if venv_site_pkgs and site_packages:
+            (venv_site_pkgs[0] / "_repo_deps.pth").write_text(
+                site_packages + "\n", encoding="utf-8"
+            )
+
+        # 2. Install the wheel using uv pip install --offline --no-deps into the isolated venv
+        install_res = subprocess.run(
+            [
+                "uv",
+                "pip",
+                "install",
+                "--offline",
+                "--no-deps",
+                str(wheel_path),
+                "--python",
+                str(python_bin),
+            ],
+            cwd=td,
+            capture_output=True,
+            text=True,
+            check=False,
+            env={"PATH": os.environ.get("PATH", "")},
+        )
+        if install_res.returncode != 0:
+            print(
+                f"Failed to install wheel into isolated venv:\n{install_res.stderr}",
+                file=sys.stderr,
+            )
+            return 1
+
+        # 3. Verify entry point binary was generated
+        if not mia_bin.is_file():
+            print(
+                f"Installed CLI entry point not found at {mia_bin}",
+                file=sys.stderr,
+            )
+            return 1
+
+        # 4. Invoke the installed CLI entry point for non-mutating surface commands
+        test_env = {
+            "PATH": f"{venv_bin}:{os.environ.get('PATH', '')}",
+            "HOME": td,
+        }
+        for subcmd in [
+            ["--help"],
+            ["agent", "list"],
+            ["template", "list"],
+            ["plugin", "list"],
+            ["sessions", "list"],
+        ]:
+            cmd = [str(mia_bin), *subcmd]
+            res = subprocess.run(cmd, cwd=td, env=test_env, capture_output=True, text=True)
+            if res.returncode != 0:
+                print(
+                    f"CLI invocation '{' '.join(cmd)}' failed with exit code {res.returncode}:\n{res.stderr}\n{res.stdout}",
+                    file=sys.stderr,
+                )
+                return 1
+
+        # 5. Verify package provenance: mia_agent must import from the isolated venv, not repo src/
+        provenance_script = (
+            "import sys, pathlib, mia_agent; "
+            "agent_path = pathlib.Path(mia_agent.__file__).resolve(); "
+            f"venv_path = pathlib.Path({repr(str(venv_dir))}).resolve(); "
+            "assert agent_path.is_relative_to(venv_path), f'Imported from {agent_path}, not venv {venv_path}'; "
+            f"repo_src = pathlib.Path({repr(str(repo_root))}).resolve() / 'src'; "
+            "assert not agent_path.is_relative_to(repo_src), f'Source checkout not excluded: {agent_path}'"
+        )
+        prov_res = subprocess.run(
+            [str(python_bin), "-c", provenance_script],
+            cwd=td,
+            env=test_env,
+            capture_output=True,
+            text=True,
+        )
+        if prov_res.returncode != 0:
+            print(
+                f"Clean install provenance check failed:\n{prov_res.stderr}",
+                file=sys.stderr,
+            )
+            return 1
+
+        print("clean install smoke: clean")
         return 0
 
 

@@ -51,5 +51,32 @@ current_step="check-public-surface.sh"
 echo "=== [7/7] Public Package Surface Gate ==="
 bash scripts/check-public-surface.sh
 
+# Record verified gate evidence artifact
+current_step="record-gate-evidence"
+mkdir -p dist
+uv run --offline python3 -c '
+import json, re, subprocess
+from datetime import datetime, timezone
+from pathlib import Path
+
+pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
+version = re.search(r"version\s*=\s*\"([^\"]+)\"", pyproject).group(1)
+try:
+    ref = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+except Exception:
+    ref = "HEAD"
+
+evidence = {
+    "status": "passed",
+    "version": version,
+    "source_ref": ref,
+    "timestamp": datetime.now(timezone.utc).isoformat(),
+}
+dist_dir = Path("dist")
+dist_dir.mkdir(parents=True, exist_ok=True)
+(dist_dir / "release-gate-evidence.json").write_text(json.dumps(evidence, indent=2), encoding="utf-8")
+'
+echo "Wrote release gate evidence to dist/release-gate-evidence.json"
+
 current_step="done"
 echo "=== All Release Quality Gates Passed Cleanly ==="

@@ -411,3 +411,149 @@ def test_release_documentation_operator_guide_and_links() -> None:
     assert "scripts/release.py" in guide
     assert "scripts/check-release-gate.sh" in guide
     assert "scripts/check-artifact-integrity.py" in guide
+
+
+def test_verify_candidate_rejects_unconfined_artifact_names(tmp_path: Path) -> None:
+    dist = tmp_path / "dist"
+    _create_synthetic_dist(dist, "0.6.0")
+    manifest_path = dist / "release-manifest.json"
+
+    # Create manifest with path traversal artifact name
+    manifest_data = {
+        "version": "0.6.0",
+        "source_ref": "mockref123",
+        "artifacts": [
+            {
+                "name": "../outside/mia_ai-0.6.0-escaped.whl",
+                "type": "wheel",
+                "version": "0.6.0",
+                "size": 100,
+                "sha256": "abcdef",
+            }
+        ],
+    }
+    manifest_path.write_text(json.dumps(manifest_data, indent=2), encoding="utf-8")
+
+    res = _run_release(
+        [
+            "verify",
+            "--dist-dir",
+            str(dist),
+            "--version",
+            "0.6.0",
+            "--skip-gate-check",
+        ]
+    )
+    assert res.returncode != 0
+    assert (
+        "traversal" in res.stderr.lower()
+        or "escape" in res.stderr.lower()
+        or "confined" in res.stderr.lower()
+    )
+
+
+def test_verify_candidate_requires_gate_evidence_when_not_skipped(tmp_path: Path) -> None:
+    dist = tmp_path / "dist"
+    _create_synthetic_dist(dist, "0.6.0")
+    _generate_manifest_for(dist, "0.6.0", ref="mockref123")
+
+    # Without --skip-gate-check and without gate-evidence, verify must fail closed
+    res = _run_release(
+        [
+            "verify",
+            "--dist-dir",
+            str(dist),
+            "--version",
+            "0.6.0",
+            "--ref",
+            "mockref123",
+        ]
+    )
+    assert res.returncode != 0
+    assert (
+        "gate evidence missing" in res.stderr.lower()
+        or "release gate evidence" in res.stderr.lower()
+    )
+
+
+def test_verify_candidate_rejects_failing_or_mismatched_gate_evidence(tmp_path: Path) -> None:
+    dist = tmp_path / "dist"
+    _create_synthetic_dist(dist, "0.6.0")
+    _generate_manifest_for(dist, "0.6.0", ref="mockref123")
+    evidence_file = dist / "release-gate-evidence.json"
+
+    # 1. Failing status in gate evidence
+    evidence_file.write_text(
+        json.dumps({"status": "failed", "version": "0.6.0", "source_ref": "mockref123"}),
+        encoding="utf-8",
+    )
+    res = _run_release(
+        [
+            "verify",
+            "--dist-dir",
+            str(dist),
+            "--version",
+            "0.6.0",
+            "--ref",
+            "mockref123",
+        ]
+    )
+    assert res.returncode != 0
+    assert "failing gate" in res.stderr.lower()
+
+    # 2. Mismatched version in gate evidence
+    evidence_file.write_text(
+        json.dumps({"status": "passed", "version": "0.5.0", "source_ref": "mockref123"}),
+        encoding="utf-8",
+    )
+    res = _run_release(
+        [
+            "verify",
+            "--dist-dir",
+            str(dist),
+            "--version",
+            "0.6.0",
+            "--ref",
+            "mockref123",
+        ]
+    )
+    assert res.returncode != 0
+    assert "version mismatch" in res.stderr.lower()
+
+    # 3. Mismatched source_ref in gate evidence
+    evidence_file.write_text(
+        json.dumps({"status": "passed", "version": "0.6.0", "source_ref": "unmatched_ref"}),
+        encoding="utf-8",
+    )
+    res = _run_release(
+        [
+            "verify",
+            "--dist-dir",
+            str(dist),
+            "--version",
+            "0.6.0",
+            "--ref",
+            "mockref123",
+        ]
+    )
+    assert res.returncode != 0
+    assert "source_ref mismatch" in res.stderr.lower()
+
+    # 4. Valid gate evidence matching version and ref succeeds
+    evidence_file.write_text(
+        json.dumps({"status": "passed", "version": "0.6.0", "source_ref": "mockref123"}),
+        encoding="utf-8",
+    )
+    res_ok = _run_release(
+        [
+            "verify",
+            "--dist-dir",
+            str(dist),
+            "--version",
+            "0.6.0",
+            "--ref",
+            "mockref123",
+        ]
+    )
+    assert res_ok.returncode == 0
+    assert "candidate verified" in res_ok.stdout.lower()

@@ -74,6 +74,22 @@ def _sanitize_secrets(text: str, extra_secrets: list[str] | None = None) -> str:
     return sanitized
 
 
+def _is_confined_artifact_name(name: str, base_dir: Path) -> bool:
+    if not name or not isinstance(name, str):
+        return False
+    # Artifact name must be a single filename, not a path
+    if "/" in name or "\\" in name or ".." in name:
+        return False
+    p = Path(name)
+    if p.is_absolute() or p.name != name:
+        return False
+    try:
+        resolved = (base_dir / name).resolve()
+        return resolved.is_relative_to(base_dir.resolve()) and resolved.parent == base_dir.resolve()
+    except Exception:
+        return False
+
+
 def verify_candidate(
     dist_dir: Path,
     expected_version: str,
@@ -129,6 +145,12 @@ def verify_candidate(
         name = art.get("name")
         if not name:
             return False, "Manifest artifact entry missing 'name'", manifest_data
+        if not _is_confined_artifact_name(name, dist_dir):
+            return (
+                False,
+                f"Artifact path traversal or escape detected: {name!r} is not confined to {dist_dir}",
+                manifest_data,
+            )
         art_path = dist_dir / name
         if not art_path.is_file():
             return False, f"Artifact file missing from dist: {name}", manifest_data
@@ -168,34 +190,47 @@ def verify_candidate(
 
     # Gate evidence check
     if not skip_gate_check:
-        if gate_evidence:
-            if not gate_evidence.is_file():
-                return False, f"Gate evidence file not found: {gate_evidence}", manifest_data
-            try:
-                g_data = json.loads(gate_evidence.read_text(encoding="utf-8"))
-                if g_data.get("status") not in ("passed", "success", "OK") and not g_data.get(
-                    "success", False
-                ):
-                    return (
-                        False,
-                        f"Gate evidence at {gate_evidence} indicates failing gate: {g_data}",
-                        manifest_data,
-                    )
-            except Exception as e:
-                return (
-                    False,
-                    f"Failed to read gate evidence JSON at {gate_evidence}: {e}",
-                    manifest_data,
-                )
-        else:
-            # Default gate check script check
-            gate_script = REPO_ROOT / "scripts" / "check-release-gate.sh"
-            if not gate_script.is_file():
-                return (
-                    False,
-                    "Gate check script scripts/check-release-gate.sh not found",
-                    manifest_data,
-                )
+        evidence_file = gate_evidence or (dist_dir / "release-gate-evidence.json")
+        if not evidence_file.is_file():
+            return (
+                False,
+                f"Release gate evidence missing at {evidence_file}. Run scripts/check-release-gate.sh or pass --skip-gate-check for testing.",
+                manifest_data,
+            )
+        try:
+            g_data = json.loads(evidence_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            return (
+                False,
+                f"Failed to read gate evidence JSON at {evidence_file}: {e}",
+                manifest_data,
+            )
+
+        if g_data.get("status") not in ("passed", "success", "OK") and not g_data.get(
+            "success", False
+        ):
+            return (
+                False,
+                f"Gate evidence at {evidence_file} indicates failing gate: {g_data}",
+                manifest_data,
+            )
+
+        ev_version = g_data.get("version")
+        if not ev_version or ev_version != expected_version:
+            return (
+                False,
+                f"Gate evidence version mismatch: expected '{expected_version}' but gate evidence recorded '{ev_version}'",
+                manifest_data,
+            )
+
+        ev_ref = g_data.get("source_ref")
+        target_ref = expected_ref or manifest_data.get("source_ref")
+        if target_ref and target_ref != "HEAD" and (not ev_ref or ev_ref != target_ref):
+            return (
+                False,
+                f"Gate evidence source_ref mismatch: expected '{target_ref}' but gate evidence recorded '{ev_ref}'",
+                manifest_data,
+            )
 
     return True, "Candidate verified successfully", manifest_data
 
