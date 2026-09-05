@@ -70,6 +70,10 @@ class MiaFooter(Static):
             ("Switch Agent  ", "#9CA3AF"),
             (" [Ctrl+N] ", "bold #FF7A00"),
             ("New Agent  ", "#9CA3AF"),
+            (" [Esc] ", "bold #FF7A00"),
+            ("Focus Prompt  ", "#9CA3AF"),
+            (" [F1] ", "bold #FF7A00"),
+            ("Help  ", "#9CA3AF"),
             (" [Ctrl+Q] ", "bold #FF7A00"),
             ("Quit", "#9CA3AF"),
         )
@@ -83,11 +87,18 @@ class MiaApp(App[None]):
 
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit", show=False),
+        Binding("escape", "focus_prompt", "Focus Prompt", show=False),
+        Binding("f1", "show_help", "Help", show=False),
+        Binding("ctrl+n", "spawn_new_agent", "New Agent", show=False),
         Binding("alt+1", "switch_agent(1)", "Agent 1", show=False),
         Binding("alt+2", "switch_agent(2)", "Agent 2", show=False),
         Binding("alt+3", "switch_agent(3)", "Agent 3", show=False),
         Binding("alt+4", "switch_agent(4)", "Agent 4", show=False),
-        Binding("ctrl+n", "spawn_new_agent", "New Agent", show=False),
+        Binding("alt+5", "switch_agent(5)", "Agent 5", show=False),
+        Binding("alt+6", "switch_agent(6)", "Agent 6", show=False),
+        Binding("alt+7", "switch_agent(7)", "Agent 7", show=False),
+        Binding("alt+8", "switch_agent(8)", "Agent 8", show=False),
+        Binding("alt+9", "switch_agent(9)", "Agent 9", show=False),
     ]
 
     def __init__(
@@ -282,3 +293,13 @@ class MiaApp(App[None]):
         self.sidebar_widget.update_agent_list(agents, active_id=new_id)
         self.pane_container.switch_to_agent(new_id)
         self.prompt_editor.set_target(new_id)
+
+    def action_focus_prompt(self) -> None:
+        """Move keyboard focus to the prompt input editor."""
+        self.prompt_editor.textarea.focus()
+
+    def action_show_help(self) -> None:
+        """Trigger help action via keyboard shortcut."""
+        self.on_mia_prompt_editor_slash_command_triggered(
+            MiaPromptEditor.SlashCommandTriggered(command="help", args="")
+        )

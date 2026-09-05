@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from rich.text import Text
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Center, Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Static
@@ -11,6 +12,12 @@ from textual.widgets import Button, Static
 
 class ApprovalModal(ModalScreen[bool]):
     """Modal dialog asking user to approve or reject a sensitive command/tool call."""
+
+    BINDINGS = [
+        Binding("y", "approve", "Approve (Y)", priority=True),
+        Binding("n", "reject", "Reject (N)", priority=True),
+        Binding("escape", "reject", "Reject (N)", priority=True),
+    ]
 
     DEFAULT_CSS = """
     ApprovalModal {
@@ -41,6 +48,15 @@ class ApprovalModal(ModalScreen[bool]):
         self.action_name = action_name
         self.details = details
         self.agent_id = agent_id
+
+    def on_mount(self) -> None:
+        self.query_one("#btn-approve", Button).focus()
+
+    def action_approve(self) -> None:
+        self.dismiss(True)
+
+    def action_reject(self) -> None:
+        self.dismiss(False)
 
     def compose(self) -> ComposeResult:
         with Center():

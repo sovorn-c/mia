@@ -170,7 +170,7 @@ async def test_tui_uses_run_request_and_closeable_stream(tmp_path: Path) -> None
         worker = app.run_agent_turn_worker("mia", "Test TUI prompt")
         await worker.wait()
     assert len(received_requests) == 1
-    assert received_requests[0].prompt_text == "Test prompt"
+    assert received_requests[0].prompt_text == "Test TUI prompt"
     assert received_requests[0].agent_id == "mia"
     assert closed is True
 
@@ -232,9 +232,9 @@ async def test_tui_keyboard_focus_agent_switch_help_and_quit(tmp_path: Path) -> 
         textarea = app.query_one("#prompt-textarea")
         assert textarea.has_focus
 
-        # Shift focus away to sidebar, then press escape to return focus to prompt
-        sidebar = app.query_one("AgentSidebar")
-        sidebar.focus()
+        # Shift focus away to an item in sidebar, then press escape to return focus to prompt
+        app.query(AgentListItem).first().focus()
+        await pilot.pause()
         assert not textarea.has_focus
         await pilot.press("escape")
         await pilot.pause()
@@ -246,10 +246,12 @@ async def test_tui_keyboard_focus_agent_switch_help_and_quit(tmp_path: Path) -> 
         cards = list(app.query(AssistantMessageCard))
         assert len(cards) >= 1
 
-        # Press Alt+2 to switch to helper
+        # Press Alt+2 to switch to second agent
+        agents = manager.list_agents()
+        assert len(agents) >= 2
         await pilot.press("alt+2")
         await pilot.pause()
-        assert app.active_agent_id == "helper"
+        assert app.active_agent_id == agents[1].agent_id
 
         # Press Ctrl+N to create worker
         await pilot.press("ctrl+n")
