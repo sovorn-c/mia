@@ -181,7 +181,10 @@ def test_presentation_mode_selection_contract() -> None:
     assert resolve_plain_mode(plain_option=False, environ={"NO_COLOR": "true"}) is True
     # Empty NO_COLOR string does not activate plain mode
     term_console = Console(force_terminal=True, color_system="truecolor")
-    assert resolve_plain_mode(plain_option=False, console=term_console, environ={"NO_COLOR": ""}) is False
+    assert (
+        resolve_plain_mode(plain_option=False, console=term_console, environ={"NO_COLOR": ""})
+        is False
+    )
 
     # Non-terminal console activates plain mode
     non_term_console = Console(force_terminal=False)
@@ -287,6 +290,3 @@ def test_run_command_plain_mode_preserves_exit_codes_on_failure_and_success() ->
         mock_loop.return_value = True
         res_ok = runner.invoke(app, ["run", "-p", "Ok test", "--plain"])
         assert res_ok.exit_code == 0
-
-
-

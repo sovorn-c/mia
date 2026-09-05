@@ -973,5 +973,3 @@ def test_help_discovery_exposes_essential_keyboard_and_command_alternatives(
     assert "Esc Esc" in output
     assert "Quit / Exit" in output
     assert "/quit" in output
-
-

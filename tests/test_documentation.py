@@ -79,7 +79,9 @@ def test_operator_guide_covers_required_topics() -> None:
         "non-destructive",
         "credential",
     ]:
-        assert keyword.lower() in content.lower(), f"Missing required keyword '{keyword}' in {guide.name}"
+        assert keyword.lower() in content.lower(), (
+            f"Missing required keyword '{keyword}' in {guide.name}"
+        )
 
 
 def test_plugin_author_guide_covers_required_topics() -> None:
@@ -95,7 +97,9 @@ def test_plugin_author_guide_covers_required_topics() -> None:
         "sandbox",
         "Core",
     ]:
-        assert keyword.lower() in content.lower(), f"Missing required keyword '{keyword}' in {guide.name}"
+        assert keyword.lower() in content.lower(), (
+            f"Missing required keyword '{keyword}' in {guide.name}"
+        )
 
 
 def test_documentation_contains_no_real_secret_values() -> None:
@@ -134,4 +138,6 @@ def test_documented_cli_commands_are_valid() -> None:
             subcmd = match.group(1)
             if subcmd.startswith("-"):
                 continue
-            assert subcmd in valid_subcmds, f"Unknown CLI command 'mia {subcmd}' found in {doc.name}"
+            assert subcmd in valid_subcmds, (
+                f"Unknown CLI command 'mia {subcmd}' found in {doc.name}"
+            )

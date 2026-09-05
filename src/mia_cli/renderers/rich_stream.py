@@ -52,6 +52,7 @@ def resolve_plain_mode(
         return True
     return False
 
+
 spinners_dict = getattr(rich.spinner, "SPINNERS", {})
 if "dot_cycle" not in spinners_dict:
     spinners_dict["dot_cycle"] = {
@@ -122,9 +123,7 @@ class RichStreamRenderer:
     ) -> None:
         self.console = console or Console()
         self.plain_mode = (
-            plain_mode
-            if plain_mode is not None
-            else resolve_plain_mode(console=self.console)
+            plain_mode if plain_mode is not None else resolve_plain_mode(console=self.console)
         )
         self.show_thinking_trace = show_thinking_trace
         self._in_thought = False
@@ -290,7 +289,9 @@ class RichStreamRenderer:
                     )
             else:
                 if event.is_error:
-                    self.console.print(f"[bold red]✗ {event.tool_name}[/bold red] [dim]{dur_str}[/dim]")
+                    self.console.print(
+                        f"[bold red]✗ {event.tool_name}[/bold red] [dim]{dur_str}[/dim]"
+                    )
                     self.console.print(f"  [dim red]↳ {output_str[:250]}[/dim red]")
                 else:
                     self.console.print(
