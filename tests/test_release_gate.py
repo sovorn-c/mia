@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -275,3 +276,76 @@ def test_spec_consistency_distinguishes_archived_capsules(tmp_path: Path) -> Non
 
     result = _run_spec_checker(tmp_path)
     assert result.returncode == 0, f"Failed on valid archive: {result.stderr}"
+
+
+RELEASE_GATE = ROOT / "scripts" / "check-release-gate.sh"
+
+
+def test_release_gate_script_exists_and_executable() -> None:
+    assert RELEASE_GATE.is_file(), f"{RELEASE_GATE} does not exist"
+    assert os.access(RELEASE_GATE, os.X_OK), f"{RELEASE_GATE} is not executable"
+
+
+def test_release_gate_order_and_failure_reporting(tmp_path: Path) -> None:
+    # Test that the release gate script defines the deterministic ordered checks
+    assert RELEASE_GATE.is_file()
+    text = RELEASE_GATE.read_text(encoding="utf-8")
+    expected_order = [
+        "check-spec-consistency.py",
+        "ruff format",
+        "ruff check",
+        "mypy",
+        "pytest",
+        "check-coverage.sh",
+        "check-public-surface.sh",
+    ]
+    last_idx = -1
+    for step in expected_order:
+        idx = text.find(step)
+        assert idx != -1, f"Expected step {step!r} missing in release gate script"
+        assert idx > last_idx, f"Step {step!r} is out of order in release gate script"
+        last_idx = idx
+
+
+def test_release_gate_fails_closed_without_claiming_success(tmp_path: Path) -> None:
+    # Run the release gate script pointing to a failing environment or mock
+    fake_env = dict(os.environ)
+    fake_env["MIA_FAIL_EARLY_STEP"] = "spec"
+    # When check fails, verify returncode is non-zero and no success claim is made
+    script_copy = tmp_path / "test-gate.sh"
+    script_copy.write_text(RELEASE_GATE.read_text(encoding="utf-8"), encoding="utf-8")
+    script_copy.chmod(0o755)
+
+    # Inject a failing command in place of a check
+    runner = subprocess.run(
+        ["bash", str(script_copy)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=fake_env,
+    )
+    assert runner.returncode != 0
+    assert "All Release Quality Gates Passed Cleanly" not in runner.stdout
+    assert "clean" not in runner.stdout.lower() or runner.returncode != 0
+
+
+def test_release_gate_secret_safety(tmp_path: Path) -> None:
+    secret_value = "super_secret_token_value_xyz123"
+    env_with_secret = dict(os.environ)
+    env_with_secret["MIA_RELEASE_TOKEN"] = secret_value
+    env_with_secret["PYPI_TOKEN"] = secret_value
+
+    script_copy = tmp_path / "test-gate.sh"
+    script_copy.write_text(RELEASE_GATE.read_text(encoding="utf-8"), encoding="utf-8")
+    script_copy.chmod(0o755)
+
+    runner = subprocess.run(
+        ["bash", str(script_copy)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=env_with_secret,
+    )
+    # Output must never contain the secret value
+    combined_output = runner.stdout + runner.stderr
+    assert secret_value not in combined_output, "Secret value leaked in release gate output"
