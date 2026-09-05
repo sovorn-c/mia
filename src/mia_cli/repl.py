@@ -786,6 +786,29 @@ class MiaREPL:
 
     def print_command_menu(self, filter_prefix: str | None = None) -> None:
         """Render canonical commands with descriptions and aliases."""
+        if not filter_prefix:
+            actions_table = Table(
+                title="Essential Actions & Keyboard Equivalents",
+                border_style="#2D3342",
+                show_header=True,
+                header_style="bold #FF7A00",
+            )
+            actions_table.add_column("Action", style="white", width=26)
+            actions_table.add_column("Key / Command Equivalent", style="bold #FF7A00")
+            actions_table.add_row("Submit prompt", "Enter")
+            actions_table.add_row("Insert newline", "Ctrl+J / Alt+Enter")
+            actions_table.add_row("Clear prompt / Cancel", "Ctrl+C / Esc")
+            actions_table.add_row("Help & Discovery", "/help or /?")
+            actions_table.add_row("Switch Agent", "/agent <id>")
+            actions_table.add_row("Switch model", "Ctrl+L or /model")
+            actions_table.add_row("Cycle scoped models", "Ctrl+P or /model next")
+            actions_table.add_row("Inspect audit details", "Ctrl+O or /inspect")
+            actions_table.add_row("Session tree navigator", "Esc Esc or /tree")
+            actions_table.add_row("Toggle thinking trace", "Ctrl+T / Shift+Tab or /thinking")
+            actions_table.add_row("Quit / Exit", "/quit, /exit, or Ctrl+D")
+            self.console.print(actions_table)
+            self.console.print()
+
         table = Table(
             title=f"🥕 Mia {len(SLASH_COMMANDS)} Canonical Slash Commands",
             border_style="#2D3342",
