@@ -62,4 +62,3 @@ uv run --offline mypy src
 uv run --offline pytest
 uv build --offline
 ```
-
