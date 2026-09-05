@@ -2,11 +2,11 @@ workflow_mode: solo-git
 session:
   active_flow: build
   active_epic_id: e11
-  active_story_id: e11s02
+  active_story_id: e11s03
   target_version: 0.6.0
 handoff:
   next_skill: develop-tdd
-  summary: 'Story e11s01 Reproducible Release Quality and Specification Gate completed and passing. Advancing to e11s02 Clean Installation and Artifact Integrity.'
+  summary: 'Story e11s02 Clean Installation and Artifact Integrity completed and passing. Advancing to e11s03 Authorized Publication and Supersession Procedure.'
   open_decisions: []
 git:
   branch: e11-release-distribution-assurance

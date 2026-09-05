@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -258,6 +259,72 @@ def check_wheel_surface(wheel_path: Path) -> int:
     return 0
 
 
+def smoke_clean_install(wheel_path: Path, repo_root: Path) -> int:
+    if not wheel_path.is_file():
+        print(f"Wheel file not found: {wheel_path}", file=sys.stderr)
+        return 2
+
+    import tempfile
+
+    repo_site_packages = [p for p in sys.path if "site-packages" in p and str(repo_root) in p]
+    fallback_site_packages = [p for p in sys.path if "site-packages" in p]
+    site_packages = (
+        repo_site_packages[0]
+        if repo_site_packages
+        else (fallback_site_packages[0] if fallback_site_packages else "")
+    )
+
+    with tempfile.TemporaryDirectory() as td:
+        clean_site = Path(td) / "installed-site"
+        clean_site.mkdir()
+        with zipfile.ZipFile(wheel_path) as zf:
+            zf.extractall(clean_site)
+
+        smoke_script = """
+import sys
+from pathlib import Path
+import mia_agent
+import mia_cli.main
+
+clean_dir = Path(sys.argv[1]).resolve()
+agent_file = Path(mia_agent.__file__).resolve()
+assert agent_file.is_relative_to(clean_dir), f"Imported from {agent_file}, not clean install {clean_dir}"
+assert "/src/" not in str(agent_file), f"Source checkout was not excluded: {agent_file}"
+
+from typer.testing import CliRunner
+runner = CliRunner()
+
+for subcmd in [["--help"], ["agent", "list"], ["template", "list"], ["plugin", "list"], ["sessions", "list"]]:
+    res = runner.invoke(mia_cli.main.app, subcmd)
+    if res.exit_code != 0:
+        print(f"Command 'mia {' '.join(subcmd)}' failed with exit code {res.exit_code}:\\n{res.output}", file=sys.stderr)
+        sys.exit(1)
+
+print("clean install smoke: clean")
+"""
+        python_path = f"{clean_site}:{site_packages}" if site_packages else str(clean_site)
+        res = subprocess.run(
+            [sys.executable, "-c", smoke_script, str(clean_site)],
+            cwd=td,
+            env={
+                "PATH": os.environ.get("PATH", ""),
+                "PYTHONPATH": python_path,
+                "HOME": td,
+            },
+            capture_output=True,
+            text=True,
+        )
+        if res.returncode != 0:
+            print(
+                f"Clean install smoke failed:\n{res.stderr}\n{res.stdout}",
+                file=sys.stderr,
+            )
+            return 1
+
+        print(res.stdout.strip())
+        return 0
+
+
 def main() -> int:
     repo_root = Path(__file__).resolve().parent.parent
     default_version = _get_project_version(repo_root)
@@ -283,6 +350,10 @@ def main() -> int:
     surf_parser = subparsers.add_parser("check-surface", help="Check wheel package surface")
     surf_parser.add_argument("--wheel", type=Path, required=True)
 
+    # smoke
+    smoke_parser = subparsers.add_parser("smoke", help="Clean install and non-mutating smoke test")
+    smoke_parser.add_argument("--wheel", type=Path, required=True)
+
     args = parser.parse_args()
 
     if args.command == "generate":
@@ -293,6 +364,8 @@ def main() -> int:
         return verify_manifest(args.dist, manifest_path, args.version)
     elif args.command == "check-surface":
         return check_wheel_surface(args.wheel)
+    elif args.command == "smoke":
+        return smoke_clean_install(args.wheel, repo_root)
     else:
         # Default: verify dist/
         dist_dir = repo_root / "dist"

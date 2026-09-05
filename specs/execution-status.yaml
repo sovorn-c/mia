@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.6.0
-updated_at: '2026-09-05T03:15:23Z'
+updated_at: '2026-09-05T03:18:14Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-09-03T08:22:40Z'
@@ -258,8 +258,8 @@ epics:
         bcps: 5
         risk: P0
         tasks_total: 5
-        tasks_passing: 2
-        tasks_failing: 3
+        tasks_passing: 5
+        tasks_failing: 0
       e11s03:
         title: Authorized Publication and Supersession Procedure
         status: planned

@@ -58,7 +58,7 @@ stories:
     tasks_file: e11s01-tasks.yaml
   - id: e11s02
     title: Clean Installation and Artifact Integrity
-    status: planned
+    status: passing
     bcps: 5
     risk: P0
     delta: ADDED

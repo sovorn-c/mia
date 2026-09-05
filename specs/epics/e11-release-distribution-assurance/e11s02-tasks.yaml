@@ -1,7 +1,7 @@
 story_id: e11s02
 title: Clean Installation and Artifact Integrity
 spec: e11s02-clean-installation-and-artifact-integrity.md
-status: failing
+status: passing
 bcps: 5
 risk: P0
 delta: ADDED
@@ -43,7 +43,7 @@ tasks:
   - id: e11s02t03
     title: Verify package and Plugin API surfaces
     description: Reuse the wheel surface checker and public Plugin API version/entry-point contract to reject missing packages, retired paths, API drift, unsupported contributions, and untrusted metadata.
-    status: failing
+    status: passing
     risk: P0
     security: medium
     scenarios: [SC-e11s02-P0-02, SC-e11s02-P1-04]
@@ -58,7 +58,7 @@ tasks:
   - id: e11s02t04
     title: Add isolated clean-install smoke
     description: Install the local wheel into a temporary supported environment with source paths excluded, run the mia CLI and non-mutating inspection commands, and verify a synthetic installed Plugin through the allowlisted entry point.
-    status: failing
+    status: passing
     risk: P0
     security: medium
     scenarios: [SC-e11s02-P0-03, SC-e11s02-P1-04]
@@ -72,7 +72,7 @@ tasks:
   - id: e11s02t05
     title: Run the full artifact and package gate
     description: Build and inspect both distributable formats, run package-surface and clean-install smoke checks, and execute the repository quality checks without contacting a registry.
-    status: failing
+    status: passing
     risk: P0
     security: medium
     scenarios: [SC-e11s02-P0-01, SC-e11s02-P0-02, SC-e11s02-P0-03, SC-e11s02-P1-04, SC-e11s02-P1-05]
