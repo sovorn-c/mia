@@ -15,7 +15,7 @@ tasks:
   - id: e11s02t01
     title: Add artifact integrity contract tests
     description: Cover manifest fields, artifact version/source/lock identity, SHA-256 and size mismatches, tampering, duplicate members, and forbidden package paths using temporary artifacts.
-    status: failing
+    status: passing
     risk: P0
     security: medium
     scenarios: [SC-e11s02-P0-01, SC-e11s02-P1-05]
@@ -29,7 +29,7 @@ tasks:
   - id: e11s02t02
     title: Implement versioned artifact manifest and inspection
     description: Build sdist/wheel inspection with standard-library hashing and archive readers, compare project metadata and lock/source context, and fail closed before install acceptance.
-    status: failing
+    status: passing
     risk: P0
     security: medium
     scenarios: [SC-e11s02-P0-01, SC-e11s02-P0-02, SC-e11s02-P1-05]
