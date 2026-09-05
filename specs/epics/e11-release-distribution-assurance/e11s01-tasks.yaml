@@ -56,7 +56,7 @@ tasks:
   - id: e11s01t04
     title: Add CI parity workflow
     description: Add pull-request and protected-branch workflow triggers with the supported Python matrix and the exact local gate command, without publication permissions or release credentials.
-    status: failing
+    status: passing
     risk: P1
     security: medium
     scenarios: [SC-e11s01-P1-03]
