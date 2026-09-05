@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 import time
 from typing import Any
 
@@ -24,6 +26,31 @@ from mia_agent.events import (
     TurnCompleteEvent,
     TurnStartEvent,
 )
+
+
+def resolve_plain_mode(
+    plain_option: bool = False,
+    console: Console | None = None,
+    environ: dict[str, str] | None = None,
+) -> bool:
+    """Determine whether plain, non-animated, accessible output should be used.
+
+    Returns True if:
+    1. plain_option is True (explicit --plain flag)
+    2. NO_COLOR environment variable is set and non-empty
+    3. The target console/stream is not an interactive terminal
+    """
+    if plain_option:
+        return True
+    env = os.environ if environ is None else environ
+    if env.get("NO_COLOR"):
+        return True
+    if console is not None:
+        if not console.is_terminal or console.no_color:
+            return True
+    elif not sys.stdout.isatty():
+        return True
+    return False
 
 spinners_dict = getattr(rich.spinner, "SPINNERS", {})
 if "dot_cycle" not in spinners_dict:

@@ -168,6 +168,7 @@ def test_cli_run_agent_loop_uses_run_request_and_closeable_stream() -> None:
 
 def test_presentation_mode_selection_contract() -> None:
     from rich.console import Console
+
     from mia_cli.renderers.rich_stream import resolve_plain_mode
 
     # Explicit --plain flag overrides everything

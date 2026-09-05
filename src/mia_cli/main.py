@@ -127,6 +127,13 @@ def run_command(
         int | None,
         typer.Option("--context-window", "-w", help="Context window token limit (e.g. 128000)"),
     ] = None,
+    plain: Annotated[
+        bool,
+        typer.Option(
+            "--plain",
+            help="Emit static plain text output without ANSI color or live animations",
+        ),
+    ] = False,
 ) -> None:
     """Execute one prompt through a named Agent in headless streaming mode."""
     if not prompt:
