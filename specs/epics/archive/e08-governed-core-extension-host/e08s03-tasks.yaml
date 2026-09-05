@@ -1,0 +1,138 @@
+story_id: e08s03
+title: Core Boundary, Notes Migration, and Compatibility
+spec: e08s03-core-boundary-notes-migration-and-compatibility.md
+status: done
+bcps: 6
+risk: P0
+delta: MODIFIED
+scenarios:
+  - SC-e08s03-P0-01
+  - SC-e08s03-P0-02
+  - SC-e08s03-P0-03
+  - SC-e08s03-P1-04
+tasks:
+  - id: e08s03t01
+    title: Specify final Core boundary and compatibility tests
+    status: passing
+    risk: P0
+    depends_on: []
+    story_steps: [1]
+    scenarios: [SC-e08s03-P0-01, SC-e08s03-P0-02]
+    work:
+      - Add tests for transformed-argument final validation, approval/executor agreement, rejected-call non-execution, observer non-forgery, identity/Session protection, and Plugin-free behavior.
+      - Keep tests on public host, runtime, middleware, and AgentRunner boundaries.
+    files:
+      - tests/test_plugin_host.py
+      - tests/test_access_policy.py
+      - tests/test_middleware_pipeline.py
+      - tests/test_agent_runtime.py
+    verify: >-
+      uv run --offline pytest tests/test_plugin_host.py tests/test_access_policy.py tests/test_middleware_pipeline.py tests/test_agent_runtime.py -k 'final or transform or approval or reject or attribution or terminal'
+    allure:
+      severity: critical
+      categories: ["Core Boundary", "Security Review", "integration"]
+  - id: e08s03t02
+    title: Integrate activated contributions through the Core pipeline
+    status: passing
+    risk: P0
+    depends_on: [e08s02t03, e08s03t01]
+    story_steps: [2]
+    scenarios: [SC-e08s03-P0-01, SC-e08s03-P0-02]
+    work:
+      - Wire host-backed Tools, bounded context, notification-only observers, and optional middleware through AgentRuntimeFactory and ToolPipeline.
+      - Retain mandatory access, security, audit, cost, execution-limit, sanitation, and final Core validation controls with one executor path.
+    files:
+      - src/mia_agent/runtime_factory.py
+      - src/mia_agent/agent_runner.py
+      - src/mia_middleware/pipeline.py
+      - src/mia_middleware/access.py
+      - tests/test_plugin_host.py
+      - tests/test_plugins.py
+      - tests/test_agent_runtime.py
+    verify: >-
+      uv run --offline pytest tests/test_plugin_host.py tests/test_plugins.py tests/test_agent_runtime.py -k 'runtime or pipeline or middleware or context or observer or tool'
+    allure:
+      severity: critical
+      categories: ["Core Boundary", "Security Review"]
+  - id: e08s03t03
+    title: Preserve attribution, terminal truth, and Session ownership
+    status: passing
+    risk: P0
+    depends_on: [e08s03t02]
+    story_steps: [3]
+    scenarios: [SC-e08s03-P0-02]
+    work:
+      - Keep Tool events, audits, diagnostics, cancellation, admission, finalization, terminal normalization, and Session writes Core-owned when Plugin callbacks fail or attempt forgery.
+      - Ensure observer failures are sanitized diagnostics and never rewrite completed domain-work truth.
+    files:
+      - src/mia_agent/agent_runner.py
+      - src/mia_agent/runtime_events.py
+      - src/mia_agent/session/
+      - src/mia_middleware/telemetry.py
+      - tests/test_plugin_host.py
+      - tests/test_agent_runtime.py
+      - tests/test_agent_loop.py
+      - tests/test_e2e_scenarios.py
+    verify: >-
+      uv run --offline pytest tests/test_plugin_host.py tests/test_agent_runtime.py tests/test_agent_loop.py tests/test_e2e_scenarios.py -k 'audit or diagnostic or cancellation or terminal or session or forged or duplicate'
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: ["Core Boundary", "Security Review", "resilience"]
+  - id: e08s03t04
+    title: Migrate Notes and preserve Plugin-free behavior
+    status: passing
+    risk: P0
+    depends_on: [e08s03t03]
+    story_steps: [4]
+    scenarios: [SC-e08s03-P0-03]
+    work:
+      - Route bundled Notes through the host-backed contract without changing Plugin ID, Tool names/effects, Template, configuration, Agent-owned data path, or stored format.
+      - Verify disablement data retention, existing CLI/API behavior, Plugin-free Agents, and frontend adapters.
+    files:
+      - src/mia_agent/plugin_catalog.py
+      - src/mia_agent/plugins.py
+      - src/mia_agent/runtime_factory.py
+      - src/mia_cli/main.py
+      - tests/test_notes_plugin.py
+      - tests/test_plugins.py
+      - tests/test_agent_templates.py
+      - tests/test_agent_runtime.py
+      - tests/test_cli_print_mode.py
+      - tests/test_cli_repl.py
+      - tests/test_tui_app.py
+    verify: >-
+      uv run --offline pytest tests/test_notes_plugin.py tests/test_plugins.py tests/test_agent_templates.py tests/test_agent_runtime.py tests/test_cli_print_mode.py tests/test_cli_repl.py tests/test_tui_app.py -k 'notes or plugin_free or compatibility or template'
+    allure:
+      severity: critical
+      categories: ["Core Boundary", "Compatibility", "integration"]
+  - id: e08s03t05
+    title: Verify public API and clean package compatibility
+    status: passing
+    risk: P1
+    depends_on: [e08s03t04]
+    story_steps: [5]
+    scenarios: [SC-e08s03-P0-03, SC-e08s03-P1-04]
+    work:
+      - Expose only the bounded typed Plugin API/version and inspection surfaces.
+      - Build and inspect the wheel, then run all e08 runtime, middleware, Notes, frontend, and quality checks with no new security findings.
+    files:
+      - src/mia_agent/__init__.py
+      - src/mia_agent/plugin_models.py
+      - src/mia_agent/plugin_host.py
+      - pyproject.toml
+      - tests/test_surface_checks.py
+      - tests/test_plugin_host.py
+      - tests/test_plugins.py
+      - tests/test_notes_plugin.py
+      - tests/test_agent_runtime.py
+    verify: >-
+      uv run --offline pytest tests/test_plugin_host.py tests/test_plugins.py tests/test_notes_plugin.py tests/test_agent_templates.py tests/test_agent_runtime.py tests/test_agent_loop.py tests/test_access_policy.py tests/test_middleware_pipeline.py tests/test_e2e_scenarios.py tests/test_cli_print_mode.py tests/test_cli_repl.py tests/test_tui_app.py
+      && uv run --offline ruff format --check .
+      && uv run --offline ruff check .
+      && uv run --offline mypy src
+      && uv build --offline
+      && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: high
+      categories: ["Core Boundary", "Security Review", "Compatibility", "quality"]

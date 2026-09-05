@@ -1,0 +1,88 @@
+story_id: e11s03
+title: Authorized Publication and Supersession Procedure
+spec: e11s03-authorized-publication-and-supersession-procedure.md
+status: passing
+bcps: 4
+risk: P1
+delta: ADDED
+scenarios:
+  - SC-e11s03-P0-01
+  - SC-e11s03-P1-02
+  - SC-e11s03-P1-03
+  - SC-e11s03-P2-04
+tasks:
+  - id: e11s03t01
+    title: Add publication authorization and refusal tests
+    description: Exercise dry-run, missing approval, version/ref mismatch, stale artifact, missing gate evidence, and secret-safe refusal paths without contacting a registry.
+    status: passing
+    risk: P0
+    security: high
+    scenarios: [SC-e11s03-P0-01]
+    files:
+      - tests/test_release_process.py
+      - scripts/release.py
+    verify: uv run --offline pytest tests/test_release_process.py -k 'authorization or mismatch or dry or refusal or secret' && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: [Publication, Authorization, Security Review]
+  - id: e11s03t02
+    title: Implement exact-candidate publication checks
+    description: Verify e11s01/e11s02 evidence, project version, Git ref, artifact hashes, and explicit approval before allowing the existing uv publish command to run.
+    status: passing
+    risk: P0
+    security: high
+    scenarios: [SC-e11s03-P0-01]
+    files:
+      - scripts/release.py
+      - tests/test_release_process.py
+    verify: uv run --offline pytest tests/test_release_process.py -k 'authorization or mismatch or dry or refusal or secret' && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: [Publication, Authorization, Security Review]
+  - id: e11s03t03
+    title: Preserve failure evidence and define recovery states
+    description: Record sanitized publication outcomes and implement explicit retry, withdrawal, and supersession guidance without deleting artifacts, tags, or valid evidence automatically.
+    status: passing
+    risk: P1
+    security: high
+    scenarios: [SC-e11s03-P1-03]
+    files:
+      - scripts/release.py
+      - tests/test_release_process.py
+      - docs/release-guide.md
+    verify: uv run --offline pytest tests/test_release_process.py -k 'failure or withdraw or supersede or evidence' && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: high
+      categories: [Publication, Recovery, Security Review]
+  - id: e11s03t04
+    title: Add protected release workflow and release documentation
+    description: Add manual/protected release automation plus v0.6.0 release notes and an operator runbook covering provenance, compatibility, trust limits, authorization, failure, withdrawal, and supersession.
+    status: passing
+    risk: P1
+    security: medium
+    scenarios: [SC-e11s03-P1-02, SC-e11s03-P2-04]
+    files:
+      - .github/workflows/release.yml
+      - docs/release-guide.md
+      - RELEASE_NOTES.md
+      - tests/test_release_process.py
+    verify: uv run --offline pytest tests/test_release_process.py -k 'workflow or notes or documentation or links' && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: high
+      categories: [Release, Documentation, Security Review]
+  - id: e11s03t05
+    title: Run the offline release procedure
+    description: Validate the complete dry-run and refusal procedure, including evidence retention and documentation/workflow consistency, without registry contact or credential access.
+    status: passing
+    risk: P1
+    security: high
+    scenarios: [SC-e11s03-P0-01, SC-e11s03-P1-02, SC-e11s03-P1-03, SC-e11s03-P2-04]
+    files:
+      - scripts/release.py
+      - docs/release-guide.md
+      - RELEASE_NOTES.md
+      - .github/workflows/release.yml
+    verify: uv run --offline pytest tests/test_release_process.py && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: high
+      categories: [Release, Recovery, Security Review, Full Suite]

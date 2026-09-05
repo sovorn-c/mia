@@ -1,0 +1,84 @@
+story_id: e11s01
+title: Reproducible Release Quality and Specification Gate
+spec: e11s01-reproducible-release-quality-and-specification-gate.md
+status: passing
+bcps: 4
+risk: P0
+delta: ADDED
+scenarios:
+  - SC-e11s01-P0-01
+  - SC-e11s01-P0-02
+  - SC-e11s01-P1-03
+  - SC-e11s01-P1-04
+tasks:
+  - id: e11s01t01
+    title: Add specification-consistency contract tests
+    description: Build temporary valid and invalid release-plan, execution-status, epic, and task-ledger fixtures that assert parser, identity, dependency, BCP, status, and path failures through the public validator boundary.
+    status: passing
+    risk: P0
+    security: low
+    scenarios: [SC-e11s01-P0-02]
+    files:
+      - tests/test_release_gate.py
+      - scripts/check-spec-consistency.py
+    verify: uv run --offline pytest tests/test_release_gate.py -k 'spec or yaml or status or dependency or bcp'
+    allure:
+      severity: critical
+      categories: [Release Gate, Specification, unit]
+  - id: e11s01t02
+    title: Implement fail-closed specification validation
+    description: Parse all release YAML and validate epic/story/capsule relationships with actionable non-zero failures while distinguishing archived historical capsules from active planning capsules.
+    status: passing
+    risk: P0
+    security: low
+    scenarios: [SC-e11s01-P0-02]
+    files:
+      - scripts/check-spec-consistency.py
+      - tests/test_release_gate.py
+    verify: uv run --offline pytest tests/test_release_gate.py -k 'spec or yaml or status or dependency or bcp'
+    allure:
+      severity: critical
+      categories: [Release Gate, Specification, Security Review]
+  - id: e11s01t03
+    title: Compose the local aggregate release gate
+    description: Orchestrate specification validation, format, lint, strict mypy, full pytest, scoped coverage, public-surface, and secret-safe security-sensitive checks in a fixed fail-closed order.
+    status: passing
+    risk: P0
+    security: medium
+    scenarios: [SC-e11s01-P0-01, SC-e11s01-P1-04]
+    files:
+      - scripts/check-release-gate.sh
+      - tests/test_release_gate.py
+    verify: uv run --offline pytest tests/test_release_gate.py -k 'gate or order or failure or secret' && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: [Release Gate, Security Review, Integration]
+  - id: e11s01t04
+    title: Add CI parity workflow
+    description: Add pull-request and protected-branch workflow triggers with the supported Python matrix and the exact local gate command, without publication permissions or release credentials.
+    status: passing
+    risk: P1
+    security: medium
+    scenarios: [SC-e11s01-P1-03]
+    files:
+      - .github/workflows/ci.yml
+      - tests/test_release_gate.py
+    verify: uv run --offline pytest tests/test_release_gate.py -k workflow && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: high
+      categories: [CI, Security Review, Integration]
+  - id: e11s01t05
+    title: Run the complete local release gate
+    description: Execute the aggregate gate and confirm all existing repository quality, coverage, public-surface, specification, and security-sensitive checks pass together.
+    status: passing
+    risk: P0
+    security: medium
+    scenarios: [SC-e11s01-P0-01, SC-e11s01-P0-02, SC-e11s01-P1-03, SC-e11s01-P1-04]
+    files:
+      - scripts/check-release-gate.sh
+      - scripts/check-spec-consistency.py
+      - .github/workflows/ci.yml
+    verify: bash scripts/check-release-gate.sh && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: [Release Gate, Security Review, Full Suite]

@@ -1,0 +1,77 @@
+id: e11
+slug: release-distribution-assurance
+title: Release and Distribution Assurance
+type: release
+status: passing
+planning_stage: planned
+target_version: "0.6.0"
+risk: P0
+wsjf:
+  business_value: 10
+  time_criticality: 10
+  risk_reduction: 9
+  job_size: 3
+  score: 9.67
+total_bcps: 13
+depends_on: [e07, e08, e09, e10]
+outcome: >-
+  Maintainers can reproducibly verify, package, publish, install-smoke, and supersede v0.6.0 artifacts.
+boundaries:
+  includes:
+    - Automated formatting, lint, strict type, test, coverage, and security-sensitive checks
+    - Specification consistency, public-surface, Plugin API compatibility, package-surface, and artifact-integrity gates
+    - Clean supported-environment build, installation, bundled Notes, installed Plugin discovery, CLI, REPL, and Textual smoke verification
+    - Artifact provenance, authorized publication, release notes, and secret-safe logs
+    - Failed-publication handling and withdrawal or supersession runbook
+  excludes:
+    - Container or server deployment
+    - Additional package registries
+    - Hosted runtime operations
+    - Publication without explicit authorization
+architecture:
+  - specs/tech-architecture/tech-stack.md
+  - specs/security/REVIEW.md
+  - specs/security/EXCEPTIONS.md
+  - specs/tech-architecture/e11-TEST_PLAN_LATEST.md
+requirement_deltas:
+  - story_id: e11s01
+    type: ADDED
+    requirement: Reproducible release quality and specification gate
+    after: Every supported change can run one fail-closed local gate that validates specifications, code quality, coverage, public surface, and security-sensitive regression checks, and CI invokes the same gate.
+  - story_id: e11s02
+    type: ADDED
+    requirement: Clean installation and artifact integrity
+    after: Maintainers can build version-matched sdist and wheel artifacts, verify their package and Plugin API surfaces and provenance, detect tampering, and install-smoke them in an isolated supported environment.
+  - story_id: e11s03
+    type: ADDED
+    requirement: Authorized publication and supersession procedure
+    after: Maintainers can publish only through explicit authorization and can document and execute secret-safe failure, withdrawal, and supersession handling without implicit publication.
+stories:
+  - id: e11s01
+    title: Reproducible Release Quality and Specification Gate
+    status: passing
+    bcps: 4
+    risk: P0
+    delta: ADDED
+    depends_on: []
+    spec_file: e11s01-reproducible-release-quality-and-specification-gate.md
+    tasks_file: e11s01-tasks.yaml
+  - id: e11s02
+    title: Clean Installation and Artifact Integrity
+    status: passing
+    bcps: 5
+    risk: P0
+    delta: ADDED
+    depends_on: [e11s01]
+    spec_file: e11s02-clean-installation-and-artifact-integrity.md
+    tasks_file: e11s02-tasks.yaml
+  - id: e11s03
+    title: Authorized Publication and Supersession Procedure
+    status: passing
+    bcps: 4
+    risk: P1
+    delta: ADDED
+    depends_on: [e11s01, e11s02]
+    spec_file: e11s03-authorized-publication-and-supersession-procedure.md
+    tasks_file: e11s03-tasks.yaml
+next_skill: bp-review

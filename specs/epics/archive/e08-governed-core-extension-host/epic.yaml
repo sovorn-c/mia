@@ -1,0 +1,85 @@
+id: e08
+slug: governed-core-extension-host
+title: Governed Core Extension Host
+type: platform
+status: completed
+planning_stage: delivered
+target_version: "0.6.0"
+wsjf:
+  business_value: 9
+  time_criticality: 8
+  risk_reduction: 10
+  job_size: 5
+  score: 5.4
+total_bcps: 21
+depends_on: [e07]
+outcome: >-
+  Developers can extend durable Agents through a small typed Plugin contract that cannot replace
+  Core identity, trust, access, Session, attribution, cleanup, or outcome ownership through its
+  supported API; trusted Python process authority remains explicit.
+boundaries:
+  includes:
+    - Declarative and explicitly trusted installed-code Plugin forms with Core-derived provenance
+    - Inspectable strict manifest contributions for Agent Templates and static Skills without Run activation
+    - One narrow Run registration context for declared Tools, bounded additive context contributors, notification-only Run observers, and optional Tool middleware
+    - Complete-set planning, exact dependency validation, deterministic activation, staged publication, immutable Run snapshots, rollback, and an idempotent cleanup completion-or-timeout decision before terminal-envelope emission
+    - Final Core validation after Plugin Tool transformations and permanent audit, security, access, execution-limit, sanitation, and terminal-truth ownership
+    - Migration of bundled Notes without changing its Plugin ID, Tool names/effects, Template, configuration, Agent-owned data, or stored format
+    - Public Plugin API/version inspection, explicit trust presentation, cooperative async callback contract, conditional timeout/quarantine behavior, event-loop-blocking restart guidance, honest same-process authority, attribution, diagnostics, and Plugin-free compatibility
+  excludes:
+    - Generic service or dependency-injection container and Core service replacement
+    - Provider, model adapter, credential, Session, Delegation, terminal outcome, or execution-root Plugins
+    - Plugin commands, frontend components, renderers, keybindings, or arbitrary event names
+    - Hot reload, live mutation of active Runs, child Plugin mounting, background work, or scheduler behavior
+    - Remote catalogs, automatic package or dependency installation, semantic-version solving, and unrestricted project-local code loading
+    - Tool overrides, mutable history interception, and operating-system or process sandbox guarantees
+architecture:
+  - specs/IMPACT_LATEST.md
+  - specs/tech-architecture/REFACTOR_LATEST.md
+  - specs/tech-architecture/DESIGN_PLAN_LATEST.md
+  - specs/adr/0003-governed-core-extension-host.md
+  - specs/tech-architecture/e08-TEST_PLAN_LATEST.md
+requirement_deltas:
+  - story_id: e08s01
+    type: MODIFIED
+    requirement: Typed Plugin catalog and trust contract
+    before: Plugin manifests describe the bundled Notes Tools and Templates, while discovery has no static Skill, provenance, or explicit trust model.
+    after: Strict manifests describe declarative or trusted-code forms, static Skills/Templates, API compatibility, Core-derived provenance, and effective trust; inspection executes no Plugin callback.
+  - story_id: e08s02
+    type: ADDED
+    requirement: Transactional Run activation and owned lifecycle
+    after: Core plans the complete enabled Plugin set, activates exact dependencies deterministically through a narrow context, publishes staged contributions atomically, rolls back failures, and owns immutable Run-scoped disposal and quarantine decisions.
+  - story_id: e08s03
+    type: MODIFIED
+    requirement: Core boundary and compatibility
+    before: Bundled Plugin Tools are composed through existing middleware, but the final post-transformation host validation and broader lifecycle attribution are not a complete installed-code contract.
+    after: All host-backed contributions remain inside permanent Core policy, final validation, attribution, terminal truth, Notes compatibility, Plugin-free behavior, and bounded public/package surfaces.
+stories:
+  - id: e08s01
+    title: Typed Plugin Contract, Trust, and Static Catalog
+    status: done
+    bcps: 7
+    risk: P0
+    delta: MODIFIED
+    depends_on: []
+    spec_file: e08s01-typed-plugin-contract-trust-and-static-catalog.md
+    tasks_file: e08s01-tasks.yaml
+  - id: e08s02
+    title: Transactional Run Activation and Owned Plugin Lifecycle
+    status: done
+    bcps: 8
+    risk: P0
+    delta: ADDED
+    depends_on: [e08s01]
+    spec_file: e08s02-transactional-run-activation-and-owned-lifecycle.md
+    tasks_file: e08s02-tasks.yaml
+  - id: e08s03
+    title: Core Boundary, Notes Migration, and Compatibility
+    status: done
+    bcps: 6
+    risk: P0
+    delta: MODIFIED
+    depends_on: [e08s01, e08s02]
+    spec_file: e08s03-core-boundary-notes-migration-and-compatibility.md
+    tasks_file: e08s03-tasks.yaml
+next_skill: survey-context

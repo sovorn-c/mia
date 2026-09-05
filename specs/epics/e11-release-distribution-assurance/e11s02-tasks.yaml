@@ -1,0 +1,86 @@
+story_id: e11s02
+title: Clean Installation and Artifact Integrity
+spec: e11s02-clean-installation-and-artifact-integrity.md
+status: passing
+bcps: 5
+risk: P0
+delta: ADDED
+scenarios:
+  - SC-e11s02-P0-01
+  - SC-e11s02-P0-02
+  - SC-e11s02-P0-03
+  - SC-e11s02-P1-04
+  - SC-e11s02-P1-05
+tasks:
+  - id: e11s02t01
+    title: Add artifact integrity contract tests
+    description: Cover manifest fields, artifact version/source/lock identity, SHA-256 and size mismatches, tampering, duplicate members, and forbidden package paths using temporary artifacts.
+    status: passing
+    risk: P0
+    security: medium
+    scenarios: [SC-e11s02-P0-01, SC-e11s02-P1-05]
+    files:
+      - tests/test_release_artifacts.py
+      - scripts/check-artifact-integrity.py
+    verify: uv run --offline pytest tests/test_release_artifacts.py -k 'manifest or hash or tamper or version or member' && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: [Artifacts, Integrity, Security Review]
+  - id: e11s02t02
+    title: Implement versioned artifact manifest and inspection
+    description: Build sdist/wheel inspection with standard-library hashing and archive readers, compare project metadata and lock/source context, and fail closed before install acceptance.
+    status: passing
+    risk: P0
+    security: medium
+    scenarios: [SC-e11s02-P0-01, SC-e11s02-P0-02, SC-e11s02-P1-05]
+    files:
+      - scripts/check-artifact-integrity.py
+      - tests/test_release_artifacts.py
+    verify: uv run --offline pytest tests/test_release_artifacts.py -k 'manifest or hash or tamper or version or member' && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: [Artifacts, Integrity, Security Review]
+  - id: e11s02t03
+    title: Verify package and Plugin API surfaces
+    description: Reuse the wheel surface checker and public Plugin API version/entry-point contract to reject missing packages, retired paths, API drift, unsupported contributions, and untrusted metadata.
+    status: passing
+    risk: P0
+    security: medium
+    scenarios: [SC-e11s02-P0-02, SC-e11s02-P1-04]
+    files:
+      - scripts/check-artifact-integrity.py
+      - scripts/check-wheel-surface.py
+      - tests/test_release_artifacts.py
+    verify: uv run --offline pytest tests/test_release_artifacts.py -k 'surface or plugin or api or entry_point' && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: [Artifacts, Plugins, Security Review]
+  - id: e11s02t04
+    title: Add isolated clean-install smoke
+    description: Install the local wheel into a temporary supported environment with source paths excluded, run the mia CLI and non-mutating inspection commands, and verify a synthetic installed Plugin through the allowlisted entry point.
+    status: passing
+    risk: P0
+    security: medium
+    scenarios: [SC-e11s02-P0-03, SC-e11s02-P1-04]
+    files:
+      - tests/test_release_artifacts.py
+      - scripts/check-artifact-integrity.py
+    verify: uv run --offline pytest tests/test_release_artifacts.py -k 'install or smoke or entry_point' && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: [Clean Install, Plugins, Security Review, E2E]
+  - id: e11s02t05
+    title: Run the full artifact and package gate
+    description: Build and inspect both distributable formats, run package-surface and clean-install smoke checks, and execute the repository quality checks without contacting a registry.
+    status: passing
+    risk: P0
+    security: medium
+    scenarios: [SC-e11s02-P0-01, SC-e11s02-P0-02, SC-e11s02-P0-03, SC-e11s02-P1-04, SC-e11s02-P1-05]
+    files:
+      - scripts/check-artifact-integrity.py
+      - tests/test_release_artifacts.py
+      - scripts/check-wheel-surface.py
+    verify: uv run --offline pytest tests/test_release_artifacts.py tests/test_surface_checks.py && uv build --offline && printf 'no new security findings in affected paths\n'
+    allure:
+      severity: critical
+      categories: [Artifacts, Clean Install, Full Suite, Security Review]

@@ -1,0 +1,83 @@
+id: e07
+slug: production-runtime-integrity
+title: Production Runtime Integrity
+type: hardening
+context: runtime, provider configuration, session admission, middleware, events, Plugin safety, tests, CLI, and TUI adapters
+status: completed
+planning_stage: delivered
+target_version: "0.6.0"
+wsjf:
+  business_value: 10
+  time_criticality: 10
+  risk_reduction: 10
+  job_size: 5
+  score: 6.0
+total_bcps: 21
+depends_on: [e06]
+outcome: >-
+  All callers receive one validated, deterministic, safeguarded, and truthful Agent Run contract.
+boundaries:
+  includes:
+    - Selected immutable Run request and closeable ordered event-stream Interface
+    - Exactly one Core-finalized terminal outcome through the supported consume/cancel/awaited-close contract
+    - Permanent access, security, audit, and supported execution-limit safeguards
+    - Final Core Tool validation after optional Plugin transformations and terminal truth outside Plugin hooks
+    - Effective Agent provider and invocation settings with secret-free errors
+    - One active Run per Agent-owned Session and bounded cooperative cancellation cleanup
+    - Regression evidence at public and trust-boundary Interfaces
+  excludes:
+    - Public lifecycle handle or callback event bus
+    - Scheduler, queue, background Run manager, or remote execution
+    - New providers or provider registry
+    - Compatibility framework or second runtime root
+    - Governed third-party Plugin host implementation beyond the existing extension boundary
+architecture:
+  - specs/tech-architecture/REFACTOR_LATEST.md
+  - specs/tech-architecture/DESIGN_PLAN_LATEST.md
+  - specs/tech-architecture/e07-TEST_PLAN_LATEST.md
+  - specs/adr/0002-canonical-run-request-stream.md
+  - specs/adr/0003-governed-core-extension-host.md
+requirement_deltas:
+  - story_id: e07s01
+    type: MODIFIED
+    requirement: Canonical Agent Run entry
+    before: Frontends may consume AgentRunner.prompt() directly and infer terminal behavior from streamed Agent events.
+    after: AgentRunner.run(RunRequest) is the one immutable, validated, closeable AsyncGenerator contract; Core owns identity, terminal normalization, and exactly-once finalization.
+  - story_id: e07s02
+    type: MODIFIED
+    requirement: Runtime policy and admission
+    before: Runtime construction resolves policy and Session access in separate paths without one explicit production admission contract.
+    after: AgentRuntimeFactory applies effective settings, permanent safeguards, and fail-fast one-Run-per-Agent-owned-Session admission before provider execution.
+  - story_id: e07s03
+    type: ADDED
+    requirement: Final Core Tool and Plugin boundary
+    after: Core validates the final Tool identity, arguments, effects, access, security, attribution, and terminal truth after optional existing Plugin transformations and owns cooperative cleanup decisions.
+stories:
+  - id: e07s01
+    title: Canonical Closeable Agent Run Stream
+    status: done
+    bcps: 8
+    risk: P0
+    delta: MODIFIED
+    depends_on: []
+    spec_file: e07s01-canonical-closeable-agent-run-stream.md
+    tasks_file: e07s01-tasks.yaml
+  - id: e07s02
+    title: Safeguarded Runtime Settings and Session Admission
+    status: done
+    bcps: 7
+    risk: P0
+    delta: MODIFIED
+    depends_on: [e07s01]
+    spec_file: e07s02-safeguarded-runtime-settings-session-admission.md
+    tasks_file: e07s02-tasks.yaml
+  - id: e07s03
+    title: Final Core Tool Validation and Plugin Boundary
+    status: done
+    bcps: 6
+    risk: P0
+    delta: ADDED
+    depends_on: [e07s01, e07s02]
+    spec_file: e07s03-final-core-tool-validation-plugin-boundary.md
+    tasks_file: e07s03-tasks.yaml
+next_skill: survey-context
