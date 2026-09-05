@@ -373,7 +373,9 @@ def test_ci_workflow_parity_and_safety() -> None:
     # 3. No publication or release secrets in CI workflow
     assert "publish" not in content.lower(), "CI workflow must not contain publication steps"
     assert "secrets.pypi" not in content.lower(), "CI workflow must not reference pypi credentials"
-    assert "secrets.release" not in content.lower(), "CI workflow must not reference release credentials"
+    assert "secrets.release" not in content.lower(), (
+        "CI workflow must not reference release credentials"
+    )
 
     # 4. Permissions must be read-only or minimal
     permissions = data.get("permissions", {})
