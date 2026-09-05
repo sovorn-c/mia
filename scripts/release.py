@@ -85,7 +85,14 @@ def verify_candidate(
     if not dist_dir.is_dir():
         return False, f"Dist directory not found: {dist_dir}", {}
 
-    m_path = manifest_path or (dist_dir / "release-manifest.json")
+    if manifest_path:
+        m_path = manifest_path
+    elif (dist_dir / "release-manifest.json").is_file():
+        m_path = dist_dir / "release-manifest.json"
+    elif (dist_dir / "artifacts-manifest.json").is_file():
+        m_path = dist_dir / "artifacts-manifest.json"
+    else:
+        m_path = dist_dir / "release-manifest.json"
     if not m_path.is_file():
         return False, f"Release manifest not found at {m_path}", {}
 
@@ -175,12 +182,20 @@ def verify_candidate(
                         manifest_data,
                     )
             except Exception as e:
-                return False, f"Failed to read gate evidence JSON at {gate_evidence}: {e}", manifest_data
+                return (
+                    False,
+                    f"Failed to read gate evidence JSON at {gate_evidence}: {e}",
+                    manifest_data,
+                )
         else:
             # Default gate check script check
             gate_script = REPO_ROOT / "scripts" / "check-release-gate.sh"
             if not gate_script.is_file():
-                return False, "Gate check script scripts/check-release-gate.sh not found", manifest_data
+                return (
+                    False,
+                    "Gate check script scripts/check-release-gate.sh not found",
+                    manifest_data,
+                )
 
     return True, "Candidate verified successfully", manifest_data
 
@@ -219,7 +234,13 @@ def record_attempt_evidence(
 
 def classify_failure(failure_type: str, details: str) -> tuple[str, str]:
     lower = (failure_type + " " + details).lower()
-    if "network" in lower or "timeout" in lower or "econnreset" in lower or "502" in lower or "503" in lower:
+    if (
+        "network" in lower
+        or "timeout" in lower
+        or "econnreset" in lower
+        or "502" in lower
+        or "503" in lower
+    ):
         return (
             "RETRY",
             "Transient network or gateway failure before publication completed. "
@@ -344,7 +365,9 @@ def main(argv: list[str] | None = None) -> int:
     artifact_names = [a.get("name", "") for a in manifest.get("artifacts", [])]
 
     if args.action == "verify":
-        print(f"Candidate verified: version={expected_version}, ref={source_ref}, artifacts={len(artifact_names)}")
+        print(
+            f"Candidate verified: version={expected_version}, ref={source_ref}, artifacts={len(artifact_names)}"
+        )
         print("Dry run complete: release candidate is ready for authorized publication.")
         return 0
 
@@ -362,12 +385,16 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
         if args.dry_run:
-            print(f"DRY RUN (authorized): candidate version={expected_version} verified. No network calls made.")
+            print(
+                f"DRY RUN (authorized): candidate version={expected_version} verified. No network calls made."
+            )
             return 0
 
         # Failure simulation (for offline tests)
         if args.simulate_failure:
-            action, rec = classify_failure(args.simulate_failure, f"Simulated {args.simulate_failure} error")
+            action, rec = classify_failure(
+                args.simulate_failure, f"Simulated {args.simulate_failure} error"
+            )
             ev_path = record_attempt_evidence(
                 evidence_dir=evidence_dir,
                 status="failed",
@@ -432,7 +459,9 @@ def main(argv: list[str] | None = None) -> int:
                 source_ref=source_ref,
                 artifacts=artifact_names,
             )
-            print(f"Successfully published {len(artifacts_to_publish)} artifacts for version {expected_version}.")
+            print(
+                f"Successfully published {len(artifacts_to_publish)} artifacts for version {expected_version}."
+            )
             return 0
         except Exception as e:
             sanitized_err = _sanitize_secrets(str(e))

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -14,29 +15,19 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-REQUIRED_WHEEL_PREFIXES = ("mia_cli/tui/",)
-FORBIDDEN_WHEEL_PREFIXES = (
-    "mia_agent/profiles/",
-    "mia_agent/profiles.py",
-    "mia_agent/herd/",
-    "mia_agent/herd.py",
-    "mia_agent/mode_runtime.py",
-    "mia_agent/orchestration.py",
-    "mia_agent/orchestration/",
-    "mia_agent/orchestration_events.py",
-    "mia_agent/orchestration_models.py",
-    "mia_agent/agents/legacy.py",
-    "mia_agent/agents/legacy/",
-    "mia_agent/legacy.py",
+_surface_spec = importlib.util.spec_from_file_location(
+    "check_wheel_surface", Path(__file__).parent / "check-wheel-surface.py"
 )
-FORBIDDEN_TEXT = re.compile(
-    r"\b(AgentProfile|ProfileManager|ModeRuntime|ModeCatalog|WorkflowStage|"
-    r"HerdManager|ManagedAgent|AgentState|MiaHerdApp|HerdEvent|"
-    r"InvokeSubagentTool|OrchestrationEventEnvelope|OrchestrationErrorEvent)\b|"
-    r"mia_agent\.(profiles|herd|orchestration(_events|_models)?)|"
-    r"--profile\b|/profile([^A-Za-z0-9_-]|$)|--mode\b|"
-    r"/mode([^A-Za-z0-9_-]|$)|code_mode\b"
-)
+if _surface_spec and _surface_spec.loader:
+    _surface_mod = importlib.util.module_from_spec(_surface_spec)
+    _surface_spec.loader.exec_module(_surface_mod)
+    REQUIRED_WHEEL_PREFIXES = _surface_mod.REQUIRED_PREFIXES
+    FORBIDDEN_WHEEL_PREFIXES = _surface_mod.FORBIDDEN_PREFIXES
+    FORBIDDEN_TEXT = _surface_mod.FORBIDDEN_TEXT
+else:
+    REQUIRED_WHEEL_PREFIXES = ("mia_cli/tui/",)
+    FORBIDDEN_WHEEL_PREFIXES = ()
+    FORBIDDEN_TEXT = re.compile(r"^$")
 
 
 def _compute_sha256(path: Path) -> str:
@@ -336,36 +327,59 @@ def main() -> int:
 
     # generate
     gen_parser = subparsers.add_parser("generate", help="Generate artifact manifest")
-    gen_parser.add_argument("--dist", type=Path, default=repo_root / "dist")
+    gen_parser.add_argument("--dist", "--dist-dir", dest="dist", type=Path, default=repo_root / "dist")
     gen_parser.add_argument("--manifest", type=Path, default=None)
     gen_parser.add_argument("--version", type=str, default=default_version)
 
     # verify
     ver_parser = subparsers.add_parser("verify", help="Verify artifact manifest and integrity")
-    ver_parser.add_argument("--dist", type=Path, default=repo_root / "dist")
+    ver_parser.add_argument("--dist", "--dist-dir", dest="dist", type=Path, default=repo_root / "dist")
     ver_parser.add_argument("--manifest", type=Path, default=None)
     ver_parser.add_argument("--version", type=str, default=default_version)
 
     # check-surface
     surf_parser = subparsers.add_parser("check-surface", help="Check wheel package surface")
-    surf_parser.add_argument("--wheel", type=Path, required=True)
+    surf_parser.add_argument("--wheel", type=Path, default=None)
+    surf_parser.add_argument("--dist", "--dist-dir", dest="dist", type=Path, default=None)
 
     # smoke
     smoke_parser = subparsers.add_parser("smoke", help="Clean install and non-mutating smoke test")
-    smoke_parser.add_argument("--wheel", type=Path, required=True)
+    smoke_parser.add_argument("--wheel", type=Path, default=None)
+    smoke_parser.add_argument("--dist", "--dist-dir", dest="dist", type=Path, default=None)
 
     args = parser.parse_args()
 
     if args.command == "generate":
-        manifest_path = args.manifest or (args.dist / "artifacts-manifest.json")
+        manifest_path = args.manifest or (args.dist / "release-manifest.json")
         return generate_manifest(args.dist, manifest_path, args.version, repo_root)
     elif args.command == "verify":
-        manifest_path = args.manifest or (args.dist / "artifacts-manifest.json")
+        manifest_path = args.manifest
+        if not manifest_path:
+            if (args.dist / "release-manifest.json").is_file():
+                manifest_path = args.dist / "release-manifest.json"
+            else:
+                manifest_path = args.dist / "artifacts-manifest.json"
         return verify_manifest(args.dist, manifest_path, args.version)
     elif args.command == "check-surface":
-        return check_wheel_surface(args.wheel)
+        wheel = args.wheel
+        if not wheel and args.dist:
+            wheels = sorted(args.dist.glob("*.whl"))
+            if wheels:
+                wheel = wheels[0]
+        if not wheel:
+            print("check-surface requires --wheel or --dist", file=sys.stderr)
+            return 2
+        return check_wheel_surface(wheel)
     elif args.command == "smoke":
-        return smoke_clean_install(args.wheel, repo_root)
+        wheel = args.wheel
+        if not wheel and args.dist:
+            wheels = sorted(args.dist.glob("*.whl"))
+            if wheels:
+                wheel = wheels[0]
+        if not wheel:
+            print("smoke requires --wheel or --dist", file=sys.stderr)
+            return 2
+        return smoke_clean_install(wheel, repo_root)
     else:
         # Default: verify dist/
         dist_dir = repo_root / "dist"

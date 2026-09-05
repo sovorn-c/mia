@@ -12,7 +12,6 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-import pytest
 import yaml
 
 ROOT = Path(__file__).parents[1]
@@ -42,7 +41,7 @@ def _create_synthetic_dist(dist_dir: Path, version: str = "0.6.0") -> tuple[Path
 
     with tarfile.open(sdist_path, "w:gz") as tf:
         info = tarfile.TarInfo(f"mia_ai-{version}/pyproject.toml")
-        data = f'[project]\nname = "mia-ai"\nversion = "{version}"\n'.encode("utf-8")
+        data = f'[project]\nname = "mia-ai"\nversion = "{version}"\n'.encode()
         info.size = len(data)
         tf.addfile(info, io.BytesIO(data))
 
@@ -137,11 +136,7 @@ def test_refusal_when_unauthorized(tmp_path: Path) -> None:
     _create_synthetic_dist(dist, "0.6.0")
     _generate_manifest_for(dist, "0.6.0", ref="mockref123")
 
-    clean_env = {
-        k: v
-        for k, v in os.environ.items()
-        if not k.startswith("MIA_RELEASE_")
-    }
+    clean_env = {k: v for k, v in os.environ.items() if not k.startswith("MIA_RELEASE_")}
     clean_env["MIA_RELEASE_AUTHORIZED"] = ""
     res = _run_release(
         [
@@ -158,11 +153,7 @@ def test_refusal_when_unauthorized(tmp_path: Path) -> None:
     )
     assert res.returncode != 0
     combined = (res.stdout + res.stderr).lower()
-    assert (
-        "authorization" in combined
-        or "unauthorized" in combined
-        or "refused" in combined
-    )
+    assert "authorization" in combined or "unauthorized" in combined or "refused" in combined
 
 
 def test_refusal_on_version_mismatch(tmp_path: Path) -> None:
@@ -389,12 +380,8 @@ def test_workflow_release_yml_protected_and_manual() -> None:
     content = WORKFLOW_PATH.read_text(encoding="utf-8")
     data = yaml.safe_load(content)
 
-    triggers = data.get("on", {})
-    if isinstance(triggers, list):
-        assert "workflow_dispatch" in triggers
-        assert "push" not in triggers
-        assert "pull_request" not in triggers
-    elif isinstance(triggers, dict):
+    triggers = data.get("on") or data.get(True) or {}
+    if isinstance(triggers, (list, dict)):
         assert "workflow_dispatch" in triggers
         assert "push" not in triggers
         assert "pull_request" not in triggers

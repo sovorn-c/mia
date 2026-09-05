@@ -1,0 +1,80 @@
+name: Release
+
+"on":
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version to publish (e.g. 0.6.0)"
+        required: true
+        default: "0.6.0"
+        type: string
+      authorized:
+        description: "Explicit authorization to publish to registry"
+        required: true
+        default: false
+        type: boolean
+      dry_run:
+        description: "Run candidate verification only without uploading"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Authorized Release
+    runs-on: ubuntu-latest
+    environment: release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Run complete release gate
+        run: bash scripts/check-release-gate.sh
+
+      - name: Build distribution artifacts
+        run: uv build
+
+      - name: Generate and verify artifact manifest
+        run: |
+          python scripts/check-artifact-integrity.py generate --dist-dir dist --version "${{ inputs.version }}"
+          python scripts/check-artifact-integrity.py verify --dist-dir dist --version "${{ inputs.version }}"
+          python scripts/check-artifact-integrity.py check-surface --dist-dir dist
+          python scripts/check-artifact-integrity.py smoke --dist-dir dist
+
+      - name: Verify release candidate (dry-run)
+        if: ${{ inputs.dry_run || !inputs.authorized }}
+        run: |
+          python scripts/release.py verify \
+            --dist-dir dist \
+            --version "${{ inputs.version }}" \
+            --ref "${{ github.sha }}"
+
+      - name: Publish release (authorized)
+        if: ${{ inputs.authorized && !inputs.dry_run }}
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+          MIA_RELEASE_AUTHORIZED: "1"
+        run: |
+          python scripts/release.py publish \
+            --dist-dir dist \
+            --version "${{ inputs.version }}" \
+            --ref "${{ github.sha }}" \
+            --authorized
