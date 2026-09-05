@@ -118,8 +118,14 @@ class RichStreamRenderer:
         self,
         console: Console | None = None,
         show_thinking_trace: bool = False,
+        plain_mode: bool | None = None,
     ) -> None:
         self.console = console or Console()
+        self.plain_mode = (
+            plain_mode
+            if plain_mode is not None
+            else resolve_plain_mode(console=self.console)
+        )
         self.show_thinking_trace = show_thinking_trace
         self._in_thought = False
         self._in_text = False
@@ -142,7 +148,7 @@ class RichStreamRenderer:
 
     def _start_status(self, action: str, style: str = "bold #FF7A00") -> None:
         """Start or update live animated working status with dynamic cycling dots and live timer."""
-        if not self.console.is_terminal:
+        if self.plain_mode or not self.console.is_terminal:
             return
         if self._active_status is None:
             self._status_widget = AnimatedWorkingStatus(
