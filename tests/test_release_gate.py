@@ -349,3 +349,35 @@ def test_release_gate_secret_safety(tmp_path: Path) -> None:
     # Output must never contain the secret value
     combined_output = runner.stdout + runner.stderr
     assert secret_value not in combined_output, "Secret value leaked in release gate output"
+
+
+CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+
+
+def test_ci_workflow_parity_and_safety() -> None:
+    assert CI_WORKFLOW.is_file(), f"{CI_WORKFLOW} does not exist"
+    content = CI_WORKFLOW.read_text(encoding="utf-8")
+    data = yaml.safe_load(content)
+    assert isinstance(data, dict)
+
+    # 1. Triggers include pull_request and push to main
+    triggers = data.get("on") or data.get(True) or {}
+    assert "pull_request" in triggers, "CI workflow missing pull_request trigger"
+    assert "push" in triggers, "CI workflow missing push trigger"
+
+    # 2. Gate command invoked
+    assert "scripts/check-release-gate.sh" in content or "check-release-gate.sh" in content, (
+        "CI workflow does not invoke check-release-gate.sh"
+    )
+
+    # 3. No publication or release secrets in CI workflow
+    assert "publish" not in content.lower(), "CI workflow must not contain publication steps"
+    assert "secrets.pypi" not in content.lower(), "CI workflow must not reference pypi credentials"
+    assert "secrets.release" not in content.lower(), "CI workflow must not reference release credentials"
+
+    # 4. Permissions must be read-only or minimal
+    permissions = data.get("permissions", {})
+    if isinstance(permissions, dict):
+        assert permissions.get("contents") in {"read", None}
+        assert permissions.get("packages") in {"read", None}
+        assert "write" not in permissions.values()
