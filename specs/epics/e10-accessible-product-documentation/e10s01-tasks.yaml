@@ -1,7 +1,7 @@
 story_id: e10s01
 title: Keyboard-Operable Essential Terminal Workflows
 spec: e10s01-keyboard-operable-terminal-workflows.md
-status: passing
+status: done
 bcps: 5
 risk: P0
 delta: MODIFIED

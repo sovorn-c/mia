@@ -8,7 +8,7 @@
 - **Risk:** P0
 - **Context:** Rich renderer, headless CLI output, non-color status semantics, and live animation
 - **BCPs:** 4
-- **Status:** planned
+- **Status:** done
 - **Requirement delta:** MODIFIED
 
 ## 2. User Story

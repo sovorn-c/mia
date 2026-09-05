@@ -8,7 +8,7 @@
 - **Risk:** P0
 - **Context:** CLI, prompt-toolkit REPL, Textual TUI, keyboard interaction, and help discovery
 - **BCPs:** 5
-- **Status:** planned
+- **Status:** done
 - **Requirement delta:** MODIFIED
 
 ## 2. User Story

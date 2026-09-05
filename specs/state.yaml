@@ -1,12 +1,12 @@
 workflow_mode: solo-git
 session:
-  active_flow: build
+  active_flow: verify-work
   active_epic_id: e10
   active_story_id: e10s03
   target_version: 0.6.0
 handoff:
   next_skill: verify-work
-  summary: 'e10 Accessible Product Experience and Documentation is completely built and passing across all three stories (e10s01 keyboard terminal workflows, e10s02 plain semantic status and motion safety, e10s03 comprehensive documentation).'
+  summary: 'e10 Accessible Product Experience and Documentation is completely built and internally complete across all three stories (e10s01 keyboard terminal workflows, e10s02 plain semantic status and motion safety, e10s03 comprehensive documentation) with verification evidence persisted in specs/verifications/e10-verify.yaml.'
   open_decisions: []
 git:
   branch: e10-accessible-product-documentation

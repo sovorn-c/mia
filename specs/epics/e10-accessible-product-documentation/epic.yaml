@@ -3,7 +3,7 @@ slug: accessible-product-documentation
 title: Accessible Product Experience and Documentation
 type: production-readiness
 status: completed
-planning_stage: planned
+planning_stage: delivered
 target_version: "0.6.0"
 wsjf:
   business_value: 8
@@ -31,7 +31,7 @@ boundaries:
 stories:
   - id: e10s01
     title: Keyboard-Operable Essential Terminal Workflows
-    status: passing
+    status: done
     bcps: 5
     risk: P0
     delta: MODIFIED
@@ -40,7 +40,7 @@ stories:
     tasks_file: e10s01-tasks.yaml
   - id: e10s02
     title: Plain Output, Semantic Status, and Motion Safety
-    status: passing
+    status: done
     bcps: 4
     risk: P0
     delta: MODIFIED
@@ -49,11 +49,11 @@ stories:
     tasks_file: e10s02-tasks.yaml
   - id: e10s03
     title: Complete User, Operator, and Plugin Documentation
-    status: passing
+    status: done
     bcps: 4
     risk: P1
     delta: ADDED
     depends_on: [e10s01, e10s02]
     spec_file: e10s03-complete-user-operator-plugin-documentation.md
     tasks_file: e10s03-tasks.yaml
-next_skill: bp-build
+next_skill: verify-work

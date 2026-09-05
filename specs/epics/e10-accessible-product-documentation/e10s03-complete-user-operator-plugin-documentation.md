@@ -8,7 +8,7 @@
 - **Risk:** P1
 - **Context:** README, local guides, CLI contract, Plugin trust, operations, recovery, and supported limits
 - **BCPs:** 4
-- **Status:** planned
+- **Status:** done
 - **Requirement delta:** ADDED
 
 ## 2. User Story

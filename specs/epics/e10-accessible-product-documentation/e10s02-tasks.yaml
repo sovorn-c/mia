@@ -1,7 +1,7 @@
 story_id: e10s02
 title: Plain Output, Semantic Status, and Motion Safety
 spec: e10s02-plain-output-semantic-status-and-motion-safety.md
-status: passing
+status: done
 bcps: 4
 risk: P0
 delta: MODIFIED

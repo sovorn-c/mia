@@ -1,7 +1,7 @@
 story_id: e10s03
 title: Complete User, Operator, and Plugin Documentation
 spec: e10s03-complete-user-operator-plugin-documentation.md
-status: passing
+status: done
 bcps: 4
 risk: P1
 delta: ADDED
