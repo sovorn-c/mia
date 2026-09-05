@@ -1,12 +1,16 @@
 workflow_mode: solo-git
 session:
   active_flow: plan
-  active_epic_id: null
-  active_story_id: null
+  active_epic_id: e11
+  active_story_id: e11s01
   target_version: 0.6.0
 handoff:
-  next_skill: survey-context
-  summary: 'Epic e10 Accessible Product Experience and Documentation was merged into local main and its reviewed capsule was archived. Release gates passed: 320 tests, Ruff, mypy, offline build, coverage, public-surface, wheel-surface, CLI, and diff checks. The next epic (e11 Release and Distribution Assurance) can now be planned.'
+  next_skill: bp-build
+  summary: 'Epic e11 Release and Distribution Assurance is fully planned with three
+    implementation-ready stories: e11s01 quality/specification gate, e11s02 clean
+    installation and artifact integrity, and e11s03 authorized publication and supersession.
+    Plan consistency passed; all task ledgers start failing for TDD execution. The
+    next step is whole-epic bp-build on the e11 branch.'
   open_decisions: []
 git:
   branch: main
@@ -23,9 +27,9 @@ metrics:
   story_start: '2026-09-01T08:57:36Z'
   skill_timings:
     plan-work:
-      calls: 7
-      total_seconds: 13584.0
-      avg_seconds: 1940.5714285714287
+      calls: 8
+      total_seconds: 13905.0
+      avg_seconds: 1738.125
     develop-tdd:
       calls: 5
       total_seconds: 10063.0

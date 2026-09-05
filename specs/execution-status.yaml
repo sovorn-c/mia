@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.6.0
-updated_at: '2026-09-05T02:22:32Z'
+updated_at: '2026-09-05T03:03:57Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-09-03T08:22:40Z'
@@ -243,4 +243,28 @@ epics:
     title: Release and Distribution Assurance
     status: planned
     bcps: 13
-    stories: {}
+    stories:
+      e11s01:
+        title: Reproducible Release Quality and Specification Gate
+        status: planned
+        bcps: 4
+        risk: P0
+        tasks_total: 5
+        tasks_passing: 0
+        tasks_failing: 5
+      e11s02:
+        title: Clean Installation and Artifact Integrity
+        status: planned
+        bcps: 5
+        risk: P0
+        tasks_total: 5
+        tasks_passing: 0
+        tasks_failing: 5
+      e11s03:
+        title: Authorized Publication and Supersession Procedure
+        status: planned
+        bcps: 4
+        risk: P1
+        tasks_total: 5
+        tasks_passing: 0
+        tasks_failing: 5
