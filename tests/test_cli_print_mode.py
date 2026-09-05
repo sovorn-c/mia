@@ -164,3 +164,30 @@ def test_cli_run_agent_loop_uses_run_request_and_closeable_stream() -> None:
     assert received_requests[0].prompt_text == "Hello CLI"
     assert received_requests[0].agent_id == "mia"
     assert closed is True
+
+
+def test_presentation_mode_selection_contract() -> None:
+    from rich.console import Console
+    from mia_cli.renderers.rich_stream import resolve_plain_mode
+
+    # Explicit --plain flag overrides everything
+    assert resolve_plain_mode(plain_option=True, environ={}) is True
+    assert resolve_plain_mode(plain_option=True, console=Console(force_terminal=True)) is True
+
+    # NO_COLOR environment variable activates plain mode
+    assert resolve_plain_mode(plain_option=False, environ={"NO_COLOR": "1"}) is True
+    assert resolve_plain_mode(plain_option=False, environ={"NO_COLOR": "true"}) is True
+    # Empty NO_COLOR string does not activate plain mode
+    term_console = Console(force_terminal=True, color_system="truecolor")
+    assert resolve_plain_mode(plain_option=False, console=term_console, environ={"NO_COLOR": ""}) is False
+
+    # Non-terminal console activates plain mode
+    non_term_console = Console(force_terminal=False)
+    assert resolve_plain_mode(plain_option=False, console=non_term_console, environ={}) is True
+
+
+def test_cli_run_help_exposes_plain_option() -> None:
+    result = runner.invoke(app, ["run", "--help"])
+    assert result.exit_code == 0
+    assert "--plain" in result.stdout
+
