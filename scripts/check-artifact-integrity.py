@@ -327,13 +327,17 @@ def main() -> int:
 
     # generate
     gen_parser = subparsers.add_parser("generate", help="Generate artifact manifest")
-    gen_parser.add_argument("--dist", "--dist-dir", dest="dist", type=Path, default=repo_root / "dist")
+    gen_parser.add_argument(
+        "--dist", "--dist-dir", dest="dist", type=Path, default=repo_root / "dist"
+    )
     gen_parser.add_argument("--manifest", type=Path, default=None)
     gen_parser.add_argument("--version", type=str, default=default_version)
 
     # verify
     ver_parser = subparsers.add_parser("verify", help="Verify artifact manifest and integrity")
-    ver_parser.add_argument("--dist", "--dist-dir", dest="dist", type=Path, default=repo_root / "dist")
+    ver_parser.add_argument(
+        "--dist", "--dist-dir", dest="dist", type=Path, default=repo_root / "dist"
+    )
     ver_parser.add_argument("--manifest", type=Path, default=None)
     ver_parser.add_argument("--version", type=str, default=default_version)
 

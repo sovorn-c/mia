@@ -2,7 +2,7 @@ id: e11
 slug: release-distribution-assurance
 title: Release and Distribution Assurance
 type: release
-status: planned
+status: passing
 planning_stage: planned
 target_version: "0.6.0"
 risk: P0
@@ -67,11 +67,11 @@ stories:
     tasks_file: e11s02-tasks.yaml
   - id: e11s03
     title: Authorized Publication and Supersession Procedure
-    status: planned
+    status: passing
     bcps: 4
     risk: P1
     delta: ADDED
     depends_on: [e11s01, e11s02]
     spec_file: e11s03-authorized-publication-and-supersession-procedure.md
     tasks_file: e11s03-tasks.yaml
-next_skill: bp-build
+next_skill: bp-review

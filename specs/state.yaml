@@ -5,8 +5,8 @@ session:
   active_story_id: e11s03
   target_version: 0.6.0
 handoff:
-  next_skill: develop-tdd
-  summary: 'Story e11s02 Clean Installation and Artifact Integrity completed and passing. Advancing to e11s03 Authorized Publication and Supersession Procedure.'
+  next_skill: bp-review
+  summary: 'Epic e11 Release and Distribution Assurance completed cleanly. All stories (e11s01, e11s02, e11s03) and 15 tasks are passing. Verified with offline release gate, manifest checks, clean-install smoke, and release orchestrator dry run. Ready for review.'
   open_decisions: []
 git:
   branch: e11-release-distribution-assurance
