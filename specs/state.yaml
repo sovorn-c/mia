@@ -1,15 +1,15 @@
 workflow_mode: solo-git
 session:
-  active_flow: build
-  active_epic_id: e11
-  active_story_id: e11s03
+  active_flow: plan
+  active_epic_id: null
+  active_story_id: null
   target_version: 0.6.0
 handoff:
-  next_skill: bp-review
-  summary: 'Epic e11 Release and Distribution Assurance completed cleanly. All stories (e11s01, e11s02, e11s03) and 15 tasks are passing. Verified with offline release gate, manifest checks, clean-install smoke, and release orchestrator dry run. Ready for review.'
+  next_skill: survey-context
+  summary: 'Epic e11 Release and Distribution Assurance was merged into local main and its reviewed capsule was archived. Release gates passed: 366 tests, Ruff, mypy, offline build, coverage, public-surface, artifact-integrity, clean-install, and publication checks. All 3 stories (e11s01, e11s02, e11s03) and 15 tasks are marked done and epic e11 is complete.'
   open_decisions: []
 git:
-  branch: e11-release-distribution-assurance
+  branch: main
 environment:
   package_manager: uv 0.10.11
   python: 3.14.6
@@ -39,9 +39,9 @@ metrics:
       total_seconds: 342.0
       avg_seconds: 342.0
     release-branch:
-      calls: 4
-      total_seconds: 399.0
-      avg_seconds: 99.75
+      calls: 5
+      total_seconds: 461.0
+      avg_seconds: 92.2
     survey-context:
       calls: 2
       total_seconds: 187.0

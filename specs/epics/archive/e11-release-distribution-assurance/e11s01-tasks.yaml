@@ -1,7 +1,7 @@
 story_id: e11s01
 title: Reproducible Release Quality and Specification Gate
 spec: e11s01-reproducible-release-quality-and-specification-gate.md
-status: passing
+status: done
 bcps: 4
 risk: P0
 delta: ADDED

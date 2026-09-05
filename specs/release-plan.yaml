@@ -232,8 +232,8 @@ epics:
   - id: e11
     slug: release-distribution-assurance
     title: Release and Distribution Assurance
-    status: passing
-    capsule_dir: specs/epics/e11-release-distribution-assurance
+    status: completed
+    capsule_dir: specs/epics/archive/e11-release-distribution-assurance
     outcome: Maintainers can reproducibly verify, package, publish, install-smoke, and supersede v0.6.0 artifacts.
     boundaries:
       includes: >-

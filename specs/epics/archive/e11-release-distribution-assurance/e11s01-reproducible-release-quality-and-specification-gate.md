@@ -8,7 +8,7 @@
 - **Risk:** P0
 - **Context:** local release gate, specification integrity, CI parity, public surface, and security-sensitive regression checks
 - **BCPs:** 4
-- **Status:** planned
+- **Status:** done
 - **Requirement delta:** ADDED
 
 ## 2. User Story

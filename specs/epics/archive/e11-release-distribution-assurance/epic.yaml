@@ -2,8 +2,8 @@ id: e11
 slug: release-distribution-assurance
 title: Release and Distribution Assurance
 type: release
-status: passing
-planning_stage: planned
+status: completed
+planning_stage: delivered
 target_version: "0.6.0"
 risk: P0
 wsjf:
@@ -49,7 +49,7 @@ requirement_deltas:
 stories:
   - id: e11s01
     title: Reproducible Release Quality and Specification Gate
-    status: passing
+    status: done
     bcps: 4
     risk: P0
     delta: ADDED
@@ -58,7 +58,7 @@ stories:
     tasks_file: e11s01-tasks.yaml
   - id: e11s02
     title: Clean Installation and Artifact Integrity
-    status: passing
+    status: done
     bcps: 5
     risk: P0
     delta: ADDED
@@ -67,11 +67,11 @@ stories:
     tasks_file: e11s02-tasks.yaml
   - id: e11s03
     title: Authorized Publication and Supersession Procedure
-    status: passing
+    status: done
     bcps: 4
     risk: P1
     delta: ADDED
     depends_on: [e11s01, e11s02]
     spec_file: e11s03-authorized-publication-and-supersession-procedure.md
     tasks_file: e11s03-tasks.yaml
-next_skill: bp-review
+next_skill: survey-context

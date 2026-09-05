@@ -8,7 +8,7 @@
 - **Risk:** P1
 - **Context:** publication authorization, release notes, failure handling, withdrawal, supersession, and secret-safe operator procedure
 - **BCPs:** 4
-- **Status:** planned
+- **Status:** done
 - **Requirement delta:** ADDED
 
 ## 2. User Story

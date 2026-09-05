@@ -8,7 +8,7 @@
 - **Risk:** P0
 - **Context:** sdist/wheel construction, package surface, Plugin API compatibility, provenance, hashes, and isolated installation
 - **BCPs:** 5
-- **Status:** planned
+- **Status:** done
 - **Requirement delta:** ADDED
 
 ## 2. User Story

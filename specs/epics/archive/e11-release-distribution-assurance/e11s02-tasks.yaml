@@ -1,7 +1,7 @@
 story_id: e11s02
 title: Clean Installation and Artifact Integrity
 spec: e11s02-clean-installation-and-artifact-integrity.md
-status: passing
+status: done
 bcps: 5
 risk: P0
 delta: ADDED
