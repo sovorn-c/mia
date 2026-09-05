@@ -192,3 +192,35 @@ def test_cli_run_help_exposes_plain_option() -> None:
     assert result.exit_code == 0
     assert "--plain" in result.stdout
 
+
+def test_renderer_threads_plain_mode_and_suppresses_live_status() -> None:
+    from rich.console import Console
+
+    from mia_cli.renderers.rich_stream import RichStreamRenderer
+
+    # Interactive renderer creates live status when terminal
+    term_console = Console(force_terminal=True)
+    interactive_renderer = RichStreamRenderer(console=term_console, plain_mode=False)
+    assert interactive_renderer.plain_mode is False
+    interactive_renderer.start_turn()
+    assert interactive_renderer._active_status is not None
+    interactive_renderer._stop_status()
+
+    # Plain renderer suppresses live status completely
+    plain_renderer = RichStreamRenderer(console=term_console, plain_mode=True)
+    assert plain_renderer.plain_mode is True
+    plain_renderer.start_turn()
+    assert plain_renderer._active_status is None
+
+
+def test_run_command_threads_plain_mode_flag(tmp_path: Path) -> None:
+    from unittest.mock import AsyncMock
+
+    with patch("mia_cli.main._run_agent_loop", new_callable=AsyncMock) as mock_loop:
+        mock_loop.return_value = True
+        res = runner.invoke(app, ["run", "-p", "Check plain", "--plain"])
+        assert res.exit_code == 0
+        assert mock_loop.call_args is not None
+        assert mock_loop.call_args.kwargs.get("plain") is True
+
+
