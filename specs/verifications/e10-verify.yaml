@@ -23,7 +23,9 @@ phases:
     note: All YAML specifications in specs/ parse cleanly.
   plan_consistency:
     passed: true
-    note: Reconciled e10 manifest (status completed, planning_stage delivered, next_skill verify-work), story specs (status done), task ledgers (status done, truthful passing counters), and execution status.
+    command: bash scripts/lib/plan-consistency-check.sh specs/epics/e10-accessible-product-documentation
+    result: CRITICAL=0 HIGH=0 MED=0
+    note: Capsule artifacts consistent across e10 manifest (status completed, planning_stage delivered, next_skill verify-work), story specifications (status done), task ledgers (status passing, truthful passing task counters), and execution status (stories done).
   mechanical:
     passed: true
     commands:
