@@ -10,7 +10,10 @@ release:
   scope: specs/product/SCOPE_LATEST.yaml
   ordering: dependency-ready WSJF; completed historical sequence is preserved
   dependency_satisfied_statuses: [completed, passing]
-  status_note: passing means implemented and verified but not yet released; completed means the historical release item is closed
+  status_note: >-
+    Implementation and candidate verification are complete, but formal v0.6.0 publication and release closure remain
+    pending. Passing means implemented and verified but not yet released; completed means the historical release item is
+    closed.
 
 wsjf_scale:
   business_value: 1-10

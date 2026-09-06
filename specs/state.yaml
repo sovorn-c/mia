@@ -6,8 +6,9 @@ session:
   target_version: 0.6.0
 handoff:
   next_skill: survey-context
-  summary: 'Epic e12 CLI-Only Frontend Cleanup was completed and archived. The full-screen Textual frontend, `mia tui` command, dependency, tests, package checks, and current documentation promises were removed. The inline CLI/REPL remains supported; the full offline release gate passed with 358 tests.'
-  open_decisions: []
+  summary: 'Epic e12 CLI-Only Frontend Cleanup was completed and archived. The full-screen Textual frontend, `mia tui` command, dependency, tests, package checks, and current documentation promises were removed. The inline CLI/REPL remains supported; the v0.6.0 release candidate passes the offline quality and artifact checks, but the project is not formally finished or published.'
+  open_decisions:
+    - 'Decide when to authorize v0.6.0 publication and formal release closure; do not publish automatically.'
 git:
   branch: main
 environment:
