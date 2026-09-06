@@ -10,7 +10,7 @@ handoff:
   open_decisions:
     - 'Decide when to authorize v0.6.0 publication and formal release closure; do not publish automatically.'
 git:
-  branch: main
+  branch: chore/reconcile-release-candidate-state
 environment:
   package_manager: uv 0.10.11
   python: 3.14.6
