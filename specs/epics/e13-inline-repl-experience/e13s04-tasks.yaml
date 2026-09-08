@@ -1,0 +1,30 @@
+story_id: e13s04
+title: Accessible and Resilient Inline Terminal Experience
+status: passing
+bcps: 2
+spec: e13s04-accessible-and-resilient-inline-terminal-experience.md
+tasks:
+  - id: 1
+    description: Add coverage for narrow terminals, multiline paste, plain output, reduced motion, and documentation/help consistency
+    verify: uv run --offline pytest tests/test_pty_prompt_layout.py tests/test_cli_print_mode.py -q
+    risk: P1
+    status: passing
+    allure:
+      severity: high
+      categories: [e13, cli-repl, unit]
+  - id: 2
+    description: Harden layout fallbacks, non-color status cues, motion preferences, and current documentation without reintroducing a full-screen frontend
+    verify: uv run --offline pytest tests/test_pty_prompt_layout.py tests/test_cli_print_mode.py -q
+    risk: P1
+    status: passing
+    allure:
+      severity: high
+      categories: [e13, cli-repl, integration]
+  - id: 3
+    description: Run the complete offline quality and package gates required for the renewed v0.6 candidate
+    verify: uv run --offline ruff format --check . && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest && uv build --offline
+    risk: P1
+    status: passing
+    allure:
+      severity: high
+      categories: [e13, cli-repl, release-gate]

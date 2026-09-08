@@ -1,0 +1,30 @@
+story_id: e13s02
+title: Draft Composition and Safe Run Focus
+status: passing
+bcps: 4
+spec: e13s02-draft-composition-and-safe-run-focus.md
+tasks:
+  - id: 1
+    description: Add deterministic input tests for editing a next draft while a Run streams, blocked busy submission, and draft retention after cancellation
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_pty_prompt_layout.py -q
+    risk: P0
+    status: passing
+    allure:
+      severity: critical
+      categories: [e13, cli-repl, unit]
+  - id: 2
+    description: Implement explicit draft, busy, approval, and cancellation focus coordination in LivePromptSession and MiaREPL; never enqueue or concurrently submit a draft
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_pty_prompt_layout.py -q
+    risk: P0
+    status: passing
+    allure:
+      severity: critical
+      categories: [e13, cli-repl, integration]
+  - id: 3
+    description: Verify exactly-once terminal handling and no approval or draft loss across supported consume/cancel/close paths
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py -q
+    risk: P0
+    status: passing
+    allure:
+      severity: critical
+      categories: [e13, cli-repl, integration]

@@ -1,8 +1,8 @@
-# Mia v0.6.0 Release Notes
+# Mia v0.6.0 Release Candidate Notes
 
 ## Overview
 
-Mia v0.6.0 establishes the verified production release baseline for Mia, a lightweight, modular local Agent core. This release consolidates core Agent runtime capabilities, deterministic testing harness, onion-style middleware pipeline, session history trees, and complete distribution assurance.
+Mia v0.6.0 establishes the verified production release-candidate baseline for Mia, a lightweight, modular local Agent core. Implementation and candidate verification are complete; formal publication and release closure remain pending. This release consolidates core Agent runtime capabilities, deterministic testing harness, onion-style middleware pipeline, session history trees, and complete distribution assurance.
 
 ## Key Highlights
 

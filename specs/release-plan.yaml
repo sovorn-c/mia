@@ -1,4 +1,4 @@
-# specs/release-plan.yaml — v0.6.0 production release index with e12 CLI-only cleanup
+# specs/release-plan.yaml — v0.6.0 production release index with e13 inline REPL experience
 version: "0.6.0"
 target_release: v0.6.0-agent-core
 release:
@@ -10,7 +10,10 @@ release:
   scope: specs/product/SCOPE_LATEST.yaml
   ordering: dependency-ready WSJF; completed historical sequence is preserved
   dependency_satisfied_statuses: [completed, passing]
-  status_note: passing means implemented and verified but not yet released; completed means the historical release item is closed
+  status_note: >-
+    e01-e12 implementation and prior candidate verification are preserved. Approved e13 extends the unpublished
+    v0.6.0 scope; implementation and fresh candidate verification are now required before authorized publication.
+    Passing means implemented and verified but not yet released; completed means the historical release item is closed.
 
 wsjf_scale:
   business_value: 1-10
@@ -270,6 +273,24 @@ epics:
       job_size: 2
       score: 10.5
     bcps: 5
+
+  - id: e13
+    slug: inline-repl-experience
+    title: Inline REPL Visual and Interaction Experience
+    status: passing
+    capsule_dir: specs/epics/e13-inline-repl-experience
+    outcome: Users can read, navigate, control, and compose work in a coherent inline REPL without compromising Run truth or drafts.
+    boundaries:
+      includes: Visual hierarchy, status, streaming and Tool output, keyboard discovery, selectors, Session inspection, draft composition, accessibility, and renewed candidate verification.
+      excludes: Full-screen frontends, automatic queues, concurrent Runs, new Core APIs, and story/task planning at blueprint time.
+    depends_on: [e07, e10, e12]
+    wsjf:
+      business_value: 8
+      time_criticality: 5
+      risk_reduction: 5
+      job_size: 5
+      score: 3.6
+    bcps: 13
 
 bugs:
   total: 1

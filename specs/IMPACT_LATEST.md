@@ -1,3 +1,28 @@
+# Impact Analysis — e13 Inline REPL Experience
+
+## Target and dependents
+
+MiaREPL (`src/mia_cli/repl.py`), LivePromptSession (`src/mia_cli/interactive_input.py`), and RichStreamRenderer (`src/mia_cli/renderers/rich_stream.py`). Cymbal depth-2 impact reported 40 callers across 20 groups (including tests). Production consumers include CLI startup and print-mode rendering in `src/mia_cli/main.py`, MiaREPL prompt/rendering composition, and LiveInteractivePrompt compatibility input.
+
+## Affected historical capabilities
+
+Preserve e01/e02 prompt, keyboard, selection, streaming, and inspection behavior; e07 Run terminal truth; e10 accessible essential workflows and plain output; e12 CLI-only packaging. Their archived artifacts remain unchanged. e13 owns the new requirements, documentation delta, and renewed candidate verification.
+
+## Existing test coverage and gaps
+
+- `tests/test_cli_repl.py`: REPL commands, shortcuts, Agent and Session operations, cancellation, rendering.
+- `tests/test_pty_prompt_layout.py`: prompt layout and input behavior.
+- `tests/test_cli_print_mode.py`: shared renderer and print-mode fallback.
+- New coverage needed during delivery: compose-during-Run, disabled busy submission, draft preservation through approval/cancellation/focus, streaming plus editing, resize/paste, and state-specific help.
+
+## Risk: High
+
+Shared interactive and print surfaces plus approval/focus coordination create regression risk despite no new public Core API. Existing input bindings reset or replace drafts. Add focused regressions through public interfaces during bp-plan/build, and preserve ADR 0002 finalization and permanent Tool safeguards. No implementation or tests were run for the feature during this analysis.
+
+---
+
+## Preserved previous impact report
+
 # Impact Analysis: e12 CLI-Only Frontend Cleanup
 
 ## Target

@@ -1,0 +1,121 @@
+id: e13
+slug: inline-repl-experience
+title: Inline REPL Visual and Interaction Experience
+type: feature
+status: passing
+planning_stage: planned
+target_version: 0.6.0
+risk: P1
+wsjf:
+  business_value: 8
+  time_criticality: 5
+  risk_reduction: 5
+  job_size: 5
+  score: 3.6
+  rationale: High everyday usability value, moderate unpublished-release urgency and interaction risk reduction; one medium-sized
+    cross-cutting frontend increment.
+total_bcps: 13
+estimate_note: Provisional epic estimate, not a story allocation; refine during bp-plan.
+depends_on:
+- e07
+- e10
+- e12
+outcome: Users can read, navigate, control, and compose work in a coherent inline REPL without compromising Run truth, access
+  controls, terminal scrollback, or their current draft.
+boundaries:
+  includes:
+  - Compact prompt and readable Agent, model, Session, and Run status
+  - Consistent hierarchy for streamed responses, Tool activity, results, and inspectable details
+  - Discoverable commands, consistent keyboard controls and selectors, Session navigation and inspection
+  - Explicit approval, cancellation, success, and error states
+  - Draft composition during a Run with submission disabled until completion and no automatic submission
+  - Draft preservation on Run cancellation and non-destructive focus transitions
+  - Plain-output accessibility, non-color status cues, reduced motion, and narrow-terminal behavior
+  - Updated interaction documentation and fresh v0.6 quality, package, and candidate verification
+  excludes:
+  - Full-screen Textual, web, desktop, or alternate-screen application
+  - Automatic prompt queue, background Run manager, concurrent submission, or new collaboration semantics
+  - Replacement of AgentRunner, AgentRuntimeFactory, AgentHarness, or permanent Tool safeguards
+  - New providers, Plugin UI contributions, runtime dependencies without separate approval, or public frontend framework
+  - Detailed story specifications, task plans, and implementation during blueprinting
+success_criteria:
+- Agent, model, Session, and Run state are identifiable without relying on color or animation; unavailable metrics are not
+  presented as measured values.
+- Streaming output remains readable and in terminal scrollback while editing a draft, with no duplicated final result or draft
+  corruption.
+- A draft can be composed during a Run; Enter cannot submit it while busy, completion never auto-submits it, and cancellation
+  preserves it.
+- Approval input is distinct from draft input, cannot accidentally authorize a Tool, and returns focus without losing the
+  draft.
+- Help accurately documents available commands and keyboard behavior across idle, running, approval, selector, and cancellation
+  states.
+- Session navigation and inspection remain discoverable; switching Agent, model, or Session cannot silently retarget an active
+  Run or discard a draft.
+- Narrow terminals, resizing, multiline paste, plain output, and reduced motion preserve essential operation without a full-screen
+  UI.
+- Failed and cancelled Runs are not shown as successful; supported stream consumption, cancellation, and awaited closure retain
+  exactly-once Core finalization.
+- Print mode and existing access policies remain compatible; full offline quality and clean-install artifact checks are rerun
+  after delivery.
+requirement_deltas:
+- type: ADDED
+  requirement: Inline visual and interaction redesign with concurrent draft editing, not concurrent execution
+- type: MODIFIED
+  requirement: v0.6 scope exclusion oos-07
+  before: Full REPL visual redesign is excluded.
+  after: Inline REPL redesign is included in e13; full-screen and alternative frontends remain excluded.
+references:
+  design: specs/tech-architecture/e13-REPL-DESIGN.md
+  impact: specs/IMPACT_LATEST.md
+  audit: specs/PLAN-AUDIT_LATEST.md
+stories:
+- id: e13s01
+  title: Truthful Inline Run and Stream Presentation
+  status: passing
+  bcps: 4
+  risk: P1
+  delta: ADDED
+  depends_on: []
+  spec: e13s01-truthful-inline-run-and-stream-presentation.md
+  spec_file: e13s01-truthful-inline-run-and-stream-presentation.md
+  tasks: e13s01-tasks.yaml
+  tasks_file: e13s01-tasks.yaml
+- id: e13s02
+  title: Draft Composition and Safe Run Focus
+  status: passing
+  bcps: 4
+  risk: P0
+  delta: ADDED
+  depends_on:
+  - e13s01
+  spec: e13s02-draft-composition-and-safe-run-focus.md
+  spec_file: e13s02-draft-composition-and-safe-run-focus.md
+  tasks: e13s02-tasks.yaml
+  tasks_file: e13s02-tasks.yaml
+- id: e13s03
+  title: Discoverable Commands, Selectors, and Session Inspection
+  status: passing
+  bcps: 3
+  risk: P1
+  delta: ADDED
+  depends_on:
+  - e13s02
+  spec: e13s03-discoverable-commands-selectors-and-session-inspection.md
+  spec_file: e13s03-discoverable-commands-selectors-and-session-inspection.md
+  tasks: e13s03-tasks.yaml
+  tasks_file: e13s03-tasks.yaml
+- id: e13s04
+  title: Accessible and Resilient Inline Terminal Experience
+  status: passing
+  bcps: 2
+  risk: P1
+  delta: ADDED
+  depends_on:
+  - e13s01
+  - e13s02
+  - e13s03
+  spec: e13s04-accessible-and-resilient-inline-terminal-experience.md
+  spec_file: e13s04-accessible-and-resilient-inline-terminal-experience.md
+  tasks: e13s04-tasks.yaml
+  tasks_file: e13s04-tasks.yaml
+next_skill: verify-work

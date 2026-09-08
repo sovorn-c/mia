@@ -14,6 +14,9 @@ summary: >-
   governed-extensibility, operational-visibility,
   accessibility, documentation, and distribution gaps required for a production release.
 
+  The approved e13 increment adds a coherent inline REPL visual and interaction redesign, including
+  draft composition during a Run without concurrent submission or automatic queuing.
+
   Production-ready means the supported local package has one truthful execution contract, permanent
   safeguards, deterministic Agent-owned history, useful secret-free diagnostics, accessible terminal
   fallbacks, reproducible release gates, install and recovery guidance, and verifiable distributable
@@ -102,6 +105,14 @@ in_scope:
       Mia has one supported interactive terminal entry point through the inline CLI/REPL; the full-screen
       Textual frontend, command, dependency, and stale current documentation are removed.
 
+  - id: inline-repl-experience
+    maps_to: e13
+    name: Coherent inline REPL visual and interaction experience
+    outcome: >-
+      Users can read responses and Tool activity, discover commands, navigate Sessions, understand
+      approval and Run states, and compose a draft during a Run without submitting or losing it.
+      The interface remains inline, scrollback-friendly, keyboard-operable, and usable in plain output.
+
 out_of_scope:
   - id: oos-01
     name: Hosted service, web application, or remote control plane
@@ -124,8 +135,10 @@ out_of_scope:
     name: Automatic migration, deletion, or rewriting of unsupported user files
     rationale: Release work must not risk data loss; supported recovery remains explicit and non-destructive.
   - id: oos-07
-    name: Full visual redesign of the REPL
-    rationale: Accessibility and correctness are required, but a new visual language is not needed for this cleanup.
+    name: Full-screen or alternative frontend redesign
+    rationale: >-
+      The approved e13 addition brings inline REPL visual and interaction redesign into v0.6 scope;
+      full-screen Textual, web, and desktop interfaces remain excluded.
   - id: oos-08
     name: Unbounded extension distribution or Core replacement framework
     rationale: >-
@@ -155,6 +168,7 @@ constraints:
   - Do not modify user data outside isolated test homes during planning, build, or release verification.
 
 success_criteria:
+  - The e13 inline REPL outcome and its observable criteria are satisfied before renewed v0.6 candidate verification.
   - All in-scope outcomes map to exactly one primary epic in the release roadmap.
   - A fresh supported Python environment can build, install, launch, and complete deterministic smoke workflows.
   - CLI and REPL consume one validated closeable Run stream; every supported Run finalizes exactly once through an atomic idempotent finalizer, normal consumption emits one matching terminal envelope, pre-finalization cancellation/closure records cancellation, late cancellation after finalization returns the existing terminal envelope, and awaited closure after delivery preserves the outcome.

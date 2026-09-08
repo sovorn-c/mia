@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import sys
 import time
@@ -122,14 +123,29 @@ def format_status_toolbar(
     workspace_name: str = "mia",
     model_name: str = "mimo-v2.5",
     tokens: int = 0,
-    window_tokens: int = 128000,
+    window_tokens: int | None = None,
     thinking_enabled: bool = False,
+    *,
+    agent_id: str | None = None,
+    session_id: str | None = None,
+    run_state: str = "idle",
+    width: int | None = None,
 ) -> HTML:
     """Render clean status info line below the prompt, adjusted with zero background."""
-    pct = (tokens / max(1, window_tokens)) * 100
-    pct_str = f"{pct:.1f}%" if tokens > 0 else "0%"
     tokens_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(tokens)
-    window_str = f"{window_tokens // 1000}k" if window_tokens >= 1000 else str(window_tokens)
+    if window_tokens is not None and window_tokens > 0:
+        pct = (tokens / max(1, window_tokens)) * 100
+        pct_str = f"{pct:.1f}%" if tokens > 0 else "0%"
+        window_str = f"{window_tokens // 1000}k" if window_tokens >= 1000 else str(window_tokens)
+        token_display = f"⚡ {tokens_str}/{window_str} ({pct_str})"
+    else:
+        token_display = f"⚡ {tokens_str}"
+
+    if width is not None and width < 60:
+        return HTML(
+            f"<style fg='#9CA3AF'>📁 <b>{workspace_name}</b> │ 🧠 <b>{model_name}</b> │ "
+            f"{token_display} │ <style fg='#FF7A00'>[{run_state}]</style></style>"
+        )
 
     thinking_badge = (
         " <style fg='#FF7A00'>[💭 on]</style>"
@@ -137,10 +153,17 @@ def format_status_toolbar(
         else " <style fg='#6B7280'>[💭 off]</style>"
     )
 
+    agent_part = f"🤖 <b>{agent_id}</b> │ " if agent_id else ""
+    session_part = f"🆔 <b>{session_id}</b> │ " if session_id else ""
+    state_badge = f" <style fg='#FF7A00'>[{run_state}]</style> │" if run_state else ""
+
     return HTML(
         f"<style fg='#9CA3AF'>  📁 <b>{workspace_name}</b> │ "
+        f"{agent_part}"
         f"🧠 <b>{model_name}</b> │ "
-        f"⚡ {tokens_str}/{window_str} ({pct_str}){thinking_badge} │ "
+        f"{session_part}"
+        f"{token_display}{thinking_badge} │"
+        f"{state_badge} "
         f"<b>/help</b></style>"
     )
 
@@ -159,9 +182,13 @@ class LivePromptSession:
         output: Any = None,
     ) -> None:
         self.history_file = history_file or (Path.home() / ".mia" / "history")
+        self.toolbar_callback = toolbar_callback
         self.history = SafeFileHistory(str(self.history_file))
         self.completer = SlashCompleter()
         self._last_escape_time = 0.0
+        self.is_busy: bool = False
+        self.draft_text: str = ""
+        self.on_cancel_callback: Callable[[], None] | None = None
         self.bindings = self._create_keybindings()
         self.session: PromptSession[str] = PromptSession(
             history=self.history,
@@ -174,9 +201,42 @@ class LivePromptSession:
             reserve_space_for_menu=8,
         )
 
+    def get_draft(self) -> str:
+        """Return the current draft text from the active buffer or stored draft."""
+        with contextlib.suppress(Exception):
+            if (
+                hasattr(self.session, "app")
+                and self.session.app
+                and self.session.app.current_buffer
+            ):
+                text = self.session.app.current_buffer.text
+                if text:
+                    self.draft_text = text
+        return self.draft_text
+
+    def set_draft(self, text: str) -> None:
+        """Set the draft text in storage and the active buffer if available."""
+        self.draft_text = text
+        with contextlib.suppress(Exception):
+            if (
+                hasattr(self.session, "app")
+                and self.session.app
+                and self.session.app.current_buffer
+            ):
+                self.session.app.current_buffer.text = text
+
+    def restore_draft(self, text: str | None = None) -> None:
+        """Restore draft text to active buffer or storage."""
+        target = text if text is not None else self.draft_text
+        self.set_draft(target)
+
     def _handle_escape(self, event: KeyPressEvent) -> None:
         """Apply Pi-style escape behavior to the current prompt buffer."""
         buffer = event.current_buffer
+        if self.is_busy:
+            if buffer.complete_state:
+                buffer.cancel_completion()
+            return
         if buffer.complete_state:
             buffer.cancel_completion()
             self._last_escape_time = 0.0
@@ -195,10 +255,26 @@ class LivePromptSession:
     def _create_keybindings(self) -> KeyBindings:
         kb = KeyBindings()
 
-        # Ctrl+C: Clear active input buffer without killing session
+        # Enter: Submit prompt when idle, block submission during an active Run without queueing
+        @kb.add("enter")
+        def _handle_enter(event: KeyPressEvent) -> None:
+            if self.is_busy:
+                if event.current_buffer.text:
+                    self.draft_text = event.current_buffer.text
+                return
+            event.current_buffer.validate_and_handle()
+
+        # Ctrl+C: Clear active input buffer when idle; signal cancel while busy without dropping draft
         @kb.add("c-c")
         def _clear_buffer(event: KeyPressEvent) -> None:
+            if self.is_busy:
+                if event.current_buffer.text:
+                    self.draft_text = event.current_buffer.text
+                if self.on_cancel_callback:
+                    self.on_cancel_callback()
+                return
             event.current_buffer.reset()
+            self.draft_text = ""
 
         # Ctrl+J / Alt+Enter: Insert newline for multi-line prompts
         @kb.add("c-j")
@@ -218,17 +294,29 @@ class LivePromptSession:
         # Pi-style model selection and scoped-model cycling.
         @kb.add("c-l")
         def _model_picker_shortcut(event: KeyPressEvent) -> None:
+            if self.is_busy:
+                return
+            if event.current_buffer.text and not event.current_buffer.text.startswith("/"):
+                self.draft_text = event.current_buffer.text
             event.current_buffer.text = "/model"
             event.current_buffer.validate_and_handle()
 
         @kb.add("c-p")
         def _model_cycle_shortcut(event: KeyPressEvent) -> None:
+            if self.is_busy:
+                return
+            if event.current_buffer.text and not event.current_buffer.text.startswith("/"):
+                self.draft_text = event.current_buffer.text
             event.current_buffer.text = "/model next"
             event.current_buffer.validate_and_handle()
 
         # Ctrl+O: Post-turn detail audit inspector shortcut
         @kb.add("c-o")
         def _inspect_shortcut(event: KeyPressEvent) -> None:
+            if self.is_busy:
+                return
+            if event.current_buffer.text and not event.current_buffer.text.startswith("/"):
+                self.draft_text = event.current_buffer.text
             event.current_buffer.text = "/inspect"
             event.current_buffer.validate_and_handle()
 
@@ -236,12 +324,20 @@ class LivePromptSession:
         # in standard terminal input, so binding it would break completion.
         @kb.add("s-tab")
         def _thinking_cycle_shortcut(event: KeyPressEvent) -> None:
+            if self.is_busy:
+                return
+            if event.current_buffer.text and not event.current_buffer.text.startswith("/"):
+                self.draft_text = event.current_buffer.text
             event.current_buffer.text = "/thinking"
             event.current_buffer.validate_and_handle()
 
         # Ctrl+T: Toggle thinking trace shortcut
         @kb.add("c-t")
         def _thinking_shortcut(event: KeyPressEvent) -> None:
+            if self.is_busy:
+                return
+            if event.current_buffer.text and not event.current_buffer.text.startswith("/"):
+                self.draft_text = event.current_buffer.text
             event.current_buffer.text = "/thinking"
             event.current_buffer.validate_and_handle()
 
@@ -262,13 +358,26 @@ class LivePromptSession:
                 raise
 
         formatted_prompt: AnyFormattedText = [("class:prompt", prompt_prefix)]
+        active_toolbar = (
+            bottom_toolbar
+            if bottom_toolbar is not None
+            else (self.toolbar_callback() if self.toolbar_callback else None)
+        )
 
         try:
+            default_text = self.draft_text or ""
             result = await self.session.prompt_async(
                 formatted_prompt,
+                bottom_toolbar=active_toolbar,
+                default=default_text,
                 reserve_space_for_menu=8,
             )
+            if not self.is_busy:
+                self.draft_text = ""
             return result.strip()
+        except asyncio.CancelledError:
+            self.get_draft()
+            raise
         except KeyboardInterrupt:
             # Handle empty Ctrl+C
             return ""
@@ -290,12 +399,21 @@ class LivePromptSession:
                 raise
 
         formatted_prompt: AnyFormattedText = [("class:prompt", prompt_prefix)]
+        active_toolbar = (
+            bottom_toolbar
+            if bottom_toolbar is not None
+            else (self.toolbar_callback() if self.toolbar_callback else None)
+        )
 
         try:
+            default_text = self.draft_text or ""
             result = self.session.prompt(
                 formatted_prompt,
+                bottom_toolbar=active_toolbar,
+                default=default_text,
                 reserve_space_for_menu=8,
             )
+            self.draft_text = ""
             return result.strip()
         except KeyboardInterrupt:
             # Handle empty Ctrl+C

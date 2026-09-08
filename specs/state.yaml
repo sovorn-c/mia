@@ -1,15 +1,17 @@
 workflow_mode: solo-git
 session:
-  active_flow: plan
-  active_epic_id: null
-  active_story_id: null
+  active_flow: build
+  active_epic_id: e13
+  active_story_id: e13s04
   target_version: 0.6.0
 handoff:
-  next_skill: survey-context
-  summary: 'Epic e12 CLI-Only Frontend Cleanup was completed and archived. The full-screen Textual frontend, `mia tui` command, dependency, tests, package checks, and current documentation promises were removed. The inline CLI/REPL remains supported; the full offline release gate passed with 358 tests.'
-  open_decisions: []
+  next_skill: release-branch
+  summary: Epic e13 independent review and verification passed cleanly. All 4 stories,
+    offline quality gates, and candidate verification passed. Ready for solo-local release.
+  open_decisions:
+  - Run fresh v0.6 candidate verification after e13; do not publish automatically.
 git:
-  branch: main
+  branch: e13-inline-repl-experience
 environment:
   package_manager: uv 0.10.11
   python: 3.14.6
@@ -23,13 +25,14 @@ metrics:
   story_start: '2026-09-01T08:57:36Z'
   skill_timings:
     plan-work:
-      calls: 8
-      total_seconds: 13905.0
-      avg_seconds: 1738.125
+      calls: 9
+      total_seconds: 14316.0
+      avg_seconds: 1590.6666666666667
     develop-tdd:
       calls: 5
       total_seconds: 10063.0
       avg_seconds: 2012.6
+      _start: '2026-09-08T07:13:00Z'
     verify-work:
       calls: 3
       total_seconds: 1103.0
@@ -54,3 +57,11 @@ metrics:
       calls: 1
       total_seconds: 309.0
       avg_seconds: 309.0
+    slice-tasks:
+      calls: 1
+      total_seconds: 412.0
+      avg_seconds: 412.0
+    plan-tests:
+      calls: 1
+      total_seconds: 412.0
+      avg_seconds: 412.0

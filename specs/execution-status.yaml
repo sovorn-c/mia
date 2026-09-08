@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.6.0
-updated_at: '2026-09-05T10:07:19Z'
+updated_at: '2026-09-08T07:52:48Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-09-03T08:22:40Z'
@@ -87,7 +87,7 @@ epics:
     stories: {}
   e06:
     title: Agent Core Clean Break
-    status: passing
+    status: completed
     stories:
       e06s01:
         title: Canonical Agent Run Runtime
@@ -284,6 +284,43 @@ epics:
       e12s02:
         title: Reconcile CLI/REPL-Only Product Surface
         status: done
+        bcps: 2
+        risk: P1
+        tasks_total: 3
+        tasks_passing: 3
+        tasks_failing: 0
+  e13:
+    title: Inline REPL Visual and Interaction Experience
+    status: passing
+    bcps: 13
+    stories:
+      e13s01:
+        title: Truthful Inline Run and Stream Presentation
+        status: passing
+        bcps: 4
+        risk: P1
+        tasks_total: 3
+        tasks_passing: 3
+        tasks_failing: 0
+      e13s02:
+        title: Draft Composition and Safe Run Focus
+        status: passing
+        bcps: 4
+        risk: P0
+        tasks_total: 3
+        tasks_passing: 3
+        tasks_failing: 0
+      e13s03:
+        title: Discoverable Commands, Selectors, and Session Inspection
+        status: passing
+        bcps: 3
+        risk: P1
+        tasks_total: 3
+        tasks_passing: 3
+        tasks_failing: 0
+      e13s04:
+        title: Accessible and Resilient Inline Terminal Experience
+        status: passing
         bcps: 2
         risk: P1
         tasks_total: 3

@@ -973,3 +973,464 @@ def test_help_discovery_exposes_essential_keyboard_and_command_alternatives(
     assert "Esc Esc" in output
     assert "Quit / Exit" in output
     assert "/quit" in output
+
+
+def test_truthful_state_presentation_and_measured_metrics() -> None:
+    # 1. Unavailable window_tokens is not presented as measured capacity
+    tb_no_window = format_status_toolbar(
+        workspace_name="mia_proj",
+        model_name="mimo-v2.5",
+        tokens=12500,
+        window_tokens=None,
+        thinking_enabled=False,
+        agent_id="mia",
+        session_id="session_test123",
+        run_state="idle",
+    )
+    val = tb_no_window.value
+    assert "128k" not in val
+    assert "%" not in val
+    assert "12.5k" in val
+    assert "mia" in val
+    assert "session_test123" in val
+    assert "[idle]" in val
+
+    # 2. When window_tokens IS provided, capacity and percentage are shown
+    tb_with_window = format_status_toolbar(
+        workspace_name="mia_proj",
+        model_name="mimo-v2.5",
+        tokens=12500,
+        window_tokens=128000,
+        thinking_enabled=False,
+        agent_id="mia",
+        session_id="session_test123",
+        run_state="running",
+    )
+    val2 = tb_with_window.value
+    assert "12.5k/128k" in val2
+    assert "9.8%" in val2
+    assert "[running]" in val2
+
+
+@pytest.mark.asyncio
+async def test_stream_and_tool_grouping_readable_in_scrollback_without_duplicates(
+    tmp_path: Path,
+) -> None:
+    from mia_agent.events import (
+        AssistantChunkEvent,
+        StepEndEvent,
+        StepStartEvent,
+        ToolCallEvent,
+        ToolResultEvent,
+        TurnCompleteEvent,
+        TurnStartEvent,
+    )
+    from mia_agent.runtime_events import AgentEventEnvelope
+
+    async def mock_run(*args: object, **kwargs: object):
+        events = [
+            TurnStartEvent(turn_index=1, user_prompt="test prompt"),
+            StepStartEvent(step_index=1),
+            AssistantChunkEvent(delta_text="Thinking through task. "),
+            ToolCallEvent(call_id="c1", tool_name="read_file", arguments={"path": "doc.txt"}),
+            ToolResultEvent(
+                call_id="c1",
+                tool_name="read_file",
+                output="file content",
+                is_error=False,
+                duration_ms=5.0,
+            ),
+            AssistantChunkEvent(delta_text="Finished reading doc."),
+            StepEndEvent(step_index=1, input_tokens=10, output_tokens=20),
+            TurnCompleteEvent(total_steps=1, total_cost_usd=0.0001, stop_reason="stop"),
+        ]
+        for ev in events:
+            yield AgentEventEnvelope(
+                run_id="r1",
+                task_id="root",
+                agent_id="mia",
+                session_id="s1",
+                event=ev,
+            )
+
+    repl = MiaREPL(cwd=tmp_path)
+    repl.console = Console(record=True, width=120)
+    repl.stream_renderer.console = repl.console
+    repl.agent_runner.run = mock_run  # type: ignore[method-assign]
+
+    await repl.execute_turn("test prompt")
+    output = repl.console.export_text()
+
+    assert "Thinking through task." in output
+    assert "read_file" in output
+    assert "Finished reading doc." in output
+    assert "Turn completed" in output
+    # Ensure no duplicate message replay
+    assert output.count("Finished reading doc.") == 1
+
+
+@pytest.mark.asyncio
+async def test_terminal_truth_preserves_error_and_cancellation_outcomes(
+    tmp_path: Path,
+) -> None:
+    from mia_agent.runtime_events import AgentEventEnvelope, RunErrorEvent
+    from mia_cli.renderers.rich_stream import RichStreamRenderer
+
+    # Case A: RunErrorEvent with failure
+    async def mock_fail_run(*args: object, **kwargs: object):
+        yield AgentEventEnvelope(
+            run_id="r1",
+            task_id="root",
+            agent_id="mia",
+            session_id="s1",
+            event=RunErrorEvent(
+                stage="agent", error="rate limit hit", code="agent_error", cancelled=False
+            ),
+        )
+
+    repl_fail = MiaREPL(cwd=tmp_path)
+    rec_console_fail = Console(
+        record=True, width=120, force_terminal=False, no_color=True, highlight=False
+    )
+    repl_fail.console = rec_console_fail
+    repl_fail.stream_renderer = RichStreamRenderer(console=rec_console_fail, plain_mode=True)
+    repl_fail.agent_runner.run = mock_fail_run  # type: ignore[method-assign]
+
+    await repl_fail.execute_turn("trigger fail")
+    fail_output = rec_console_fail.export_text()
+    assert "[error] Run error (agent): rate limit hit" in fail_output
+    assert "Turn completed" not in fail_output
+
+    # Case B: RunErrorEvent with cancelled=True
+    async def mock_cancel_run(*args: object, **kwargs: object):
+        yield AgentEventEnvelope(
+            run_id="r2",
+            task_id="root",
+            agent_id="mia",
+            session_id="s1",
+            event=RunErrorEvent(
+                stage="runtime", error="user cancelled", code="cancelled", cancelled=True
+            ),
+        )
+
+    repl_cancel = MiaREPL(cwd=tmp_path)
+    rec_console_cancel = Console(
+        record=True, width=120, force_terminal=False, no_color=True, highlight=False
+    )
+    repl_cancel.console = rec_console_cancel
+    repl_cancel.stream_renderer = RichStreamRenderer(console=rec_console_cancel, plain_mode=True)
+    repl_cancel.agent_runner.run = mock_cancel_run  # type: ignore[method-assign]
+
+    await repl_cancel.execute_turn("trigger cancel")
+    cancel_output = rec_console_cancel.export_text()
+    assert "[cancelled] Run cancelled (runtime): user cancelled" in cancel_output
+    assert "Turn completed" not in cancel_output
+    assert "Run error" not in cancel_output
+
+    # Case C: Tool approval request has non-color semantic cue
+    from mia_middleware.access import ApprovalRequest
+
+    req = ApprovalRequest(
+        effect="side-effecting",
+        tool_name="bash",
+        arguments={"command": "rm -rf /"},
+        agent_id="mia",
+    )
+    with patch("builtins.input", return_value="n"):
+        rec_console_approval = Console(record=True, width=120)
+        repl_fail.console = rec_console_approval
+        repl_fail._request_tool_approval(req)
+        appr_output = rec_console_approval.export_text()
+        assert "[approval-required]" in appr_output
+
+
+def test_help_and_command_discovery_distinguishes_busy_availability(
+    tmp_path: Path,
+) -> None:
+    """SC-e13s03-P1-01: Help distinguishes actions unavailable while busy."""
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+
+    repl.handle_slash_command("/help")
+    output = repl.console.export_text()
+
+    assert "Availability" in output
+    assert "Idle only" in output
+    assert "Always" in output
+
+
+def test_selectors_and_session_inspection_preserve_draft(tmp_path: Path) -> None:
+    """SC-e13s03-P1-02: Selectors and session inspection preserve the prompt draft."""
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+    repl.prompt_session.set_draft("persisted draft text")
+
+    # 1. Model picker preserves draft
+    repl.scoped_models = ["openai::gpt-4o"]
+    repl.available_model_sources = {"openai::gpt-4o": "openai"}
+    with patch("mia_cli.repl.interactive_select", return_value=None):
+        repl.interactive_model_picker()
+    assert repl.prompt_session.get_draft() == "persisted draft text"
+
+    # 2. Inspect preserves draft
+    with patch.object(repl.stream_renderer, "render_audit_log"):
+        repl.handle_slash_command("/inspect")
+    assert repl.prompt_session.get_draft() == "persisted draft text"
+
+    # 3. Session resumer preserves draft
+    with patch("mia_cli.repl.interactive_select", return_value=None):
+        repl.interactive_session_resumer()
+    assert repl.prompt_session.get_draft() == "persisted draft text"
+
+
+def test_busy_state_retargeting_rejected_and_cannot_mutate_active_run(
+    tmp_path: Path,
+) -> None:
+    """SC-e13s03-P1-03: Active Run cannot be retargeted by Agent, model, or Session changes."""
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+    repl.agent_id = "mia"
+    repl.model_name = "mimo-v2.5"
+    orig_session = repl.session_id
+
+    # Mark REPL busy (active run)
+    repl.prompt_session.is_busy = True
+
+    # 1. Reject /agent change
+    repl.handle_slash_command("/agent researcher")
+    out = repl.console.export_text()
+    assert "Cannot change /agent while a Run is active" in out
+    assert repl.agent_id == "mia"
+
+    # 2. Reject /model change
+    repl.console = Console(record=True, width=120)
+    repl.handle_slash_command("/model gpt-4o")
+    out = repl.console.export_text()
+    assert "Cannot change /model while a Run is active" in out
+    assert repl.model_name == "mimo-v2.5"
+
+    # 3. Reject /resume change
+    repl.console = Console(record=True, width=120)
+    repl.handle_slash_command("/resume other_session")
+    out = repl.console.export_text()
+    assert "Cannot change /resume while a Run is active" in out
+    assert repl.session_id == orig_session
+
+    # 4. Reject /tree change
+    repl.console = Console(record=True, width=120)
+    repl.handle_slash_command("/tree")
+    out = repl.console.export_text()
+    assert "Cannot change /tree while a Run is active" in out
+
+
+@pytest.mark.asyncio
+async def test_repl_loop_concurrent_draft_composition_and_explicit_later_submission(
+    tmp_path: Path,
+) -> None:
+    """SC-e13s02 end-to-end: User composes draft during active Run; Enter does not submit while busy; explicit Enter submits after completion."""
+    from collections.abc import AsyncIterator
+
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+
+    from mia_ai.types import ChatMessage, StreamChunk, ToolDefinition
+
+    class ControlledProvider(MockProvider):
+        def __init__(self) -> None:
+            super().__init__()
+            self.turn1_started = asyncio.Event()
+            self.turn1_release = asyncio.Event()
+            self.turn2_started = asyncio.Event()
+
+        async def stream(
+            self,
+            *,
+            model: str,
+            messages: list[ChatMessage],
+            tools: list[ToolDefinition] | None = None,
+            system: str | None = None,
+            temperature: float = 0.7,
+            max_tokens: int | None = None,
+        ) -> AsyncIterator[StreamChunk]:
+            if not self.turn1_started.is_set():
+                self.turn1_started.set()
+                await self.turn1_release.wait()
+            else:
+                self.turn2_started.set()
+            async for chunk in super().stream(
+                model=model,
+                messages=messages,
+                tools=tools,
+                system=system,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            ):
+                yield chunk
+
+    provider = ControlledProvider()
+    provider.queue_text_response("Turn 1 complete")
+    provider.queue_text_response("Turn 2 complete")
+
+    with create_pipe_input() as pipe:
+        repl = MiaREPL(
+            cwd=tmp_path,
+            custom_provider=provider,
+            prompt_input=pipe,
+            prompt_output=DummyOutput(),
+        )
+        repl.console = Console(record=True, width=120)
+
+        loop_task = asyncio.create_task(repl.run_async())
+
+        # 1. Send first prompt to start Turn 1
+        pipe.send_text("first prompt\r")
+        await asyncio.wait_for(provider.turn1_started.wait(), timeout=3.0)
+
+        # Active turn is running and busy
+        assert repl.prompt_session.is_busy is True
+        assert repl._run_state == "running"
+
+        # 2. While Turn 1 is running, compose draft prompt and press Enter
+        pipe.send_text("draft prompt\r")
+        await asyncio.sleep(0.05)
+
+        # Draft is captured, but NOT submitted (no queue, no concurrent turn started)
+        assert repl.prompt_session.get_draft() == "draft prompt"
+        assert not provider.turn2_started.is_set()
+
+        # 3. Release Turn 1 to complete
+        provider.turn1_release.set()
+        await asyncio.sleep(0.1)
+
+        # Turn 1 finished; REPL is now idle and draft is preserved
+        assert repl.prompt_session.is_busy is False
+        assert repl._run_state == "idle"
+        assert repl.prompt_session.get_draft() == "draft prompt"
+        assert not provider.turn2_started.is_set()
+
+        # 4. Now press Enter to explicitly submit the composed draft
+        pipe.send_text("\r")
+        await asyncio.wait_for(provider.turn2_started.wait(), timeout=3.0)
+
+        # Cleanly exit REPL loop
+        pipe.send_text("/quit\r")
+        await asyncio.wait_for(loop_task, timeout=3.0)
+
+
+@pytest.mark.asyncio
+async def test_repl_loop_ctrl_c_cancels_active_run_and_preserves_draft(
+    tmp_path: Path,
+) -> None:
+    """SC-e13s02 end-to-end: Ctrl+C during active Run cancels the execution and preserves the composed draft."""
+    from collections.abc import AsyncIterator
+
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+
+    from mia_ai.types import ChatMessage, StreamChunk, ToolDefinition
+
+    class CancellableProvider(MockProvider):
+        def __init__(self) -> None:
+            super().__init__()
+            self.turn_started = asyncio.Event()
+
+        async def stream(
+            self,
+            *,
+            model: str,
+            messages: list[ChatMessage],
+            tools: list[ToolDefinition] | None = None,
+            system: str | None = None,
+            temperature: float = 0.7,
+            max_tokens: int | None = None,
+        ) -> AsyncIterator[StreamChunk]:
+            self.turn_started.set()
+            # Wait until cancelled
+            await asyncio.sleep(30.0)
+            async for chunk in super().stream(
+                model=model,
+                messages=messages,
+                tools=tools,
+                system=system,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            ):
+                yield chunk
+
+    provider = CancellableProvider()
+    provider.queue_text_response("Will not finish")
+
+    with create_pipe_input() as pipe:
+        repl = MiaREPL(
+            model="mimo-v2.5",
+            cwd=tmp_path,
+            custom_provider=provider,
+            prompt_input=pipe,
+            prompt_output=DummyOutput(),
+        )
+        repl.console = Console(record=True, width=120)
+
+        loop_task = asyncio.create_task(repl.run_async())
+
+        # Start active turn
+        pipe.send_text("slow turn prompt\r")
+        await asyncio.wait_for(provider.turn_started.wait(), timeout=3.0)
+
+        assert repl.prompt_session.is_busy is True
+
+        # Compose draft during active run
+        pipe.send_text("in-progress draft\r")
+        await asyncio.sleep(0.05)
+        assert repl.prompt_session.get_draft() == "in-progress draft"
+
+        # Send Ctrl+C to cancel the active turn
+        pipe.send_text("\x03")
+        await asyncio.sleep(0.1)
+
+        # Run halted, cancellation reached active run, REPL is back to idle
+        assert repl.prompt_session.is_busy is False
+        assert repl._run_state == "idle"
+
+        # Draft remains intact
+        assert repl.prompt_session.get_draft() == "in-progress draft"
+        output = repl.console.export_text()
+        assert "Turn halted by user (Ctrl+C)" in output
+
+        # Exit loop
+        pipe.send_text("\x03/quit\r")
+        await asyncio.wait_for(loop_task, timeout=3.0)
+
+
+@pytest.mark.asyncio
+async def test_repl_loop_approval_remains_distinct_and_preserves_draft(
+    tmp_path: Path,
+) -> None:
+    """SC-e13s02 end-to-end: Tool approval prompt does not consume the composed draft."""
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+
+    from mia_middleware.access import ApprovalRequest
+
+    with create_pipe_input() as pipe:
+        repl = MiaREPL(
+            cwd=tmp_path,
+            custom_provider=MockProvider(),
+            prompt_input=pipe,
+            prompt_output=DummyOutput(),
+        )
+        repl.console = Console(record=True, width=120)
+        repl.prompt_session.set_draft("composed user draft")
+
+        req = ApprovalRequest(
+            effect="side-effecting",
+            tool_name="write_file",
+            arguments={"path": "test.txt", "content": "hello"},
+            agent_id="mia",
+        )
+
+        with patch("builtins.input", return_value="y"):
+            approved = repl._request_tool_approval(req)
+            assert approved is True
+
+        # Draft text was NOT consumed as the approval answer
+        assert repl.prompt_session.get_draft() == "composed user draft"
