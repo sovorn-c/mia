@@ -33,3 +33,11 @@ No new unsafe shell interpolation, deserialization, SQL/HTTP sink, authenticatio
 - **Verdict:** PASS — no new security finding was introduced.
 - **Review:** The removed `mia tui` command and Textual dependency do not add an execution path. Artifact checks reject unexpected package members, and the supported CLI/REPL continues through the existing Agent runtime and security middleware.
 - **Verification:** `bash scripts/check-release-gate.sh`, `uv build --offline`, wheel-surface checks, and the full test suite passed. No credentials or secret-bearing values were added.
+
+## e13 follow-up — Inline REPL Visual and Interaction Experience (2026-09-08)
+
+- **Scope:** Inline REPL layout, streaming and Tool activity presentation, draft composition during runs, command/selector focus, and accessible terminal fallbacks.
+- **Verdict:** PASS — no security vulnerabilities or policy regressions identified.
+- **Review:** The canonical Agent execution path (`AgentRunner` → `AgentRuntimeFactory` → `AgentHarness` → Providers/Tools/Middleware/Session) is strictly preserved. Prompt drafting during active runs is strictly decoupled from Tool approval inputs and cannot bypass approval gates or trigger unauthorized tool calls. No new execution paths, network sinks, deserialization points, or runtime dependencies were introduced.
+- **Verification:** `bash scripts/check-release-gate.sh` (374 passed, strict mypy, 88% overall / 96% business boundary coverage, clean public surface), `uv build --offline`, wheel surface and artifact integrity verification, clean-install smoke test, and dry-run candidate verification passed cleanly.
+

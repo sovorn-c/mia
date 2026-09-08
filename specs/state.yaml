@@ -5,9 +5,9 @@ session:
   active_story_id: e13s04
   target_version: 0.6.0
 handoff:
-  next_skill: verify-work
-  summary: Story e13s04 passed. All 4 stories across epic e13 (Inline REPL Visual and
-    Interaction Experience) are passing. Ready for verification and quality gate.
+  next_skill: release-branch
+  summary: Epic e13 independent review and verification passed cleanly. All 4 stories,
+    offline quality gates, and candidate verification passed. Ready for solo-local release.
   open_decisions:
   - Run fresh v0.6 candidate verification after e13; do not publish automatically.
 git:
