@@ -9,7 +9,6 @@ import select
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -1229,7 +1228,7 @@ async def test_repl_loop_concurrent_draft_composition_and_explicit_later_submiss
     tmp_path: Path,
 ) -> None:
     """SC-e13s02 end-to-end: User composes draft during active Run; Enter does not submit while busy; explicit Enter submits after completion."""
-    from collections.abc import AsyncIterator, Sequence
+    from collections.abc import AsyncIterator
 
     from prompt_toolkit.input import create_pipe_input
     from prompt_toolkit.output import DummyOutput
@@ -1243,20 +1242,29 @@ async def test_repl_loop_concurrent_draft_composition_and_explicit_later_submiss
             self.turn1_release = asyncio.Event()
             self.turn2_started = asyncio.Event()
 
-        async def stream_chat(
+        async def stream(
             self,
-            messages: Sequence[ChatMessage],
-            tools: Sequence[ToolDefinition] | None = None,
-            model: str | None = None,
-            **kwargs: Any,
+            *,
+            model: str,
+            messages: list[ChatMessage],
+            tools: list[ToolDefinition] | None = None,
+            system: str | None = None,
+            temperature: float = 0.7,
+            max_tokens: int | None = None,
         ) -> AsyncIterator[StreamChunk]:
-            content = str(messages[-1].content or "")
-            if "first" in content.lower():
+            if not self.turn1_started.is_set():
                 self.turn1_started.set()
                 await self.turn1_release.wait()
-            elif "draft" in content.lower():
+            else:
                 self.turn2_started.set()
-            async for chunk in super().stream_chat(messages, tools=tools, model=model, **kwargs):
+            async for chunk in super().stream(
+                model=model,
+                messages=messages,
+                tools=tools,
+                system=system,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            ):
                 yield chunk
 
     provider = ControlledProvider()
@@ -1314,7 +1322,7 @@ async def test_repl_loop_ctrl_c_cancels_active_run_and_preserves_draft(
     tmp_path: Path,
 ) -> None:
     """SC-e13s02 end-to-end: Ctrl+C during active Run cancels the execution and preserves the composed draft."""
-    from collections.abc import AsyncIterator, Sequence
+    from collections.abc import AsyncIterator
 
     from prompt_toolkit.input import create_pipe_input
     from prompt_toolkit.output import DummyOutput
@@ -1326,17 +1334,27 @@ async def test_repl_loop_ctrl_c_cancels_active_run_and_preserves_draft(
             super().__init__()
             self.turn_started = asyncio.Event()
 
-        async def stream_chat(
+        async def stream(
             self,
-            messages: Sequence[ChatMessage],
-            tools: Sequence[ToolDefinition] | None = None,
-            model: str | None = None,
-            **kwargs: Any,
+            *,
+            model: str,
+            messages: list[ChatMessage],
+            tools: list[ToolDefinition] | None = None,
+            system: str | None = None,
+            temperature: float = 0.7,
+            max_tokens: int | None = None,
         ) -> AsyncIterator[StreamChunk]:
             self.turn_started.set()
             # Wait until cancelled
             await asyncio.sleep(30.0)
-            async for chunk in super().stream_chat(messages, tools=tools, model=model, **kwargs):
+            async for chunk in super().stream(
+                model=model,
+                messages=messages,
+                tools=tools,
+                system=system,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            ):
                 yield chunk
 
     provider = CancellableProvider()
@@ -1344,6 +1362,7 @@ async def test_repl_loop_ctrl_c_cancels_active_run_and_preserves_draft(
 
     with create_pipe_input() as pipe:
         repl = MiaREPL(
+            model="mimo-v2.5",
             cwd=tmp_path,
             custom_provider=provider,
             prompt_input=pipe,
@@ -1378,7 +1397,7 @@ async def test_repl_loop_ctrl_c_cancels_active_run_and_preserves_draft(
         assert "Turn halted by user (Ctrl+C)" in output
 
         # Exit loop
-        pipe.send_text("/quit\r")
+        pipe.send_text("\x03/quit\r")
         await asyncio.wait_for(loop_task, timeout=3.0)
 
 

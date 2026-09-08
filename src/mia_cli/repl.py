@@ -151,6 +151,8 @@ class MiaREPL:
         cwd: Path | None = None,
         custom_provider: LLMProvider | None = None,
         session_id: str | None = None,
+        prompt_input: Any = None,
+        prompt_output: Any = None,
     ) -> None:
         self.console = Console()
         self.cwd = cwd or Path.cwd()
@@ -189,6 +191,8 @@ class MiaREPL:
         self.show_thinking_trace = False
         self._run_state = "idle"
         self._approval_callback = self._request_tool_approval
+        self._active_prompt_task: asyncio.Task[str] | None = None
+        self._active_turn_task: asyncio.Task[None] | None = None
 
         self.stream_renderer = RichStreamRenderer(
             console=self.console, show_thinking_trace=self.show_thinking_trace
@@ -199,6 +203,8 @@ class MiaREPL:
         self.prompt_session = LivePromptSession(
             history_file=self._history_file,
             toolbar_callback=self._get_status_toolbar,
+            input=prompt_input,
+            output=prompt_output,
         )
         self._init_harness()
 
@@ -243,6 +249,10 @@ class MiaREPL:
     def _request_tool_approval(self, request: ApprovalRequest) -> bool:
         """Ask the interactive frontend for one sanitized side-effect decision with truthful non-color cues."""
         saved_draft = self.prompt_session.get_draft()
+        app = getattr(self.prompt_session.session, "app", None)
+        if app and getattr(app, "is_running", False):
+            app.exit(result="")
+
         if self.stream_renderer.plain_mode:
             self.console.print(
                 f"[approval-required] Approve {request.effect} Tool {request.tool_name} "
@@ -1260,7 +1270,13 @@ class MiaREPL:
 
         while True:
             try:
-                user_input = await self.prompt_session.read_prompt_async("› ")
+                if self._active_prompt_task is None or self._active_prompt_task.done():
+                    self._active_prompt_task = asyncio.create_task(
+                        self.prompt_session.read_prompt_async("› ")
+                    )
+
+                user_input = await self._active_prompt_task
+                self._active_prompt_task = None
 
                 if not user_input:
                     continue
@@ -1271,7 +1287,38 @@ class MiaREPL:
                         break
                     continue
 
-                await self.execute_turn(user_input)
+                # Set busy state and start turn
+                self.prompt_session.is_busy = True
+                turn_task = asyncio.create_task(self.execute_turn(user_input))
+                self._active_turn_task = turn_task
+                self.prompt_session.on_cancel_callback = lambda t=turn_task: t.cancel()
+
+                # Start concurrent draft prompt reader while turn executes
+                self._active_prompt_task = asyncio.create_task(
+                    self.prompt_session.read_prompt_async("› ")
+                )
+
+                try:
+                    while not turn_task.done():
+                        done, _ = await asyncio.wait(
+                            [turn_task, self._active_prompt_task],
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        if self._active_prompt_task in done and not turn_task.done():
+                            exc = self._active_prompt_task.exception()
+                            if exc is not None and isinstance(exc, (EOFError, KeyboardInterrupt)):
+                                turn_task.cancel()
+                                raise exc
+                            if self.prompt_session.is_busy:
+                                self._active_prompt_task = asyncio.create_task(
+                                    self.prompt_session.read_prompt_async("› ")
+                                )
+                    # Await turn completion
+                    await turn_task
+                finally:
+                    self.prompt_session.is_busy = False
+                    self.prompt_session.on_cancel_callback = None
+                    self._active_turn_task = None
 
             except (KeyboardInterrupt, EOFError):
                 self.console.print("\n[dim]Exiting Mia session... Goodbye![/dim]")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import sys
 import time
@@ -371,8 +372,12 @@ class LivePromptSession:
                 default=default_text,
                 reserve_space_for_menu=8,
             )
-            self.draft_text = ""
+            if not self.is_busy:
+                self.draft_text = ""
             return result.strip()
+        except asyncio.CancelledError:
+            self.get_draft()
+            raise
         except KeyboardInterrupt:
             # Handle empty Ctrl+C
             return ""
