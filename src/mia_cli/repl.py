@@ -39,6 +39,7 @@ from mia_ai.providers.base import LLMProvider
 from mia_cli.interactive_input import (
     COMMAND_HINTS,
     LivePromptSession,
+    format_status_toolbar,
     interactive_multi_select,
     interactive_select,
 )
@@ -166,6 +167,7 @@ class MiaREPL:
         self.total_cost_usd = 0.0
         self.total_tokens = 0
         self.show_thinking_trace = False
+        self._run_state = "idle"
         self._approval_callback = self._request_tool_approval
 
         self.stream_renderer = RichStreamRenderer(
@@ -173,11 +175,28 @@ class MiaREPL:
         )
         self._history_file = Path.home() / ".mia" / "history"
 
-        # Initialize prompt_toolkit session with floating slash completions
+        # Initialize prompt_toolkit session with floating slash completions and status toolbar
         self.prompt_session = LivePromptSession(
             history_file=self._history_file,
+            toolbar_callback=self._get_status_toolbar,
         )
         self._init_harness()
+
+    def _get_status_toolbar(self) -> Any:
+        """Construct truthful status toolbar data matching active runtime state."""
+        window_tokens = None
+        if self.agent_runtime and self.agent_runtime.effective_settings:
+            window_tokens = self.agent_runtime.effective_settings.context_window
+        return format_status_toolbar(
+            workspace_name=self.cwd.name or str(self.cwd),
+            model_name=self.model_name or "none",
+            tokens=self.total_tokens,
+            window_tokens=window_tokens,
+            thinking_enabled=self.show_thinking_trace,
+            agent_id=self.agent_id,
+            session_id=self.session_id,
+            run_state=getattr(self, "_run_state", "idle"),
+        )
 
     def _init_harness(self) -> None:
         """Instantiate the selected Agent through the canonical runtime factory."""
@@ -201,11 +220,18 @@ class MiaREPL:
         self.harness = self.agent_runtime.harness
 
     def _request_tool_approval(self, request: ApprovalRequest) -> bool:
-        """Ask the interactive frontend for one sanitized side-effect decision."""
-        self.console.print(
-            f"[yellow]Approve {request.effect} Tool [bold]{request.tool_name}[/bold] "
-            f"for Agent {request.agent_id or self.agent_id}?[/yellow]"
-        )
+        """Ask the interactive frontend for one sanitized side-effect decision with truthful non-color cues."""
+        if self.stream_renderer.plain_mode:
+            self.console.print(
+                f"[approval-required] Approve {request.effect} Tool {request.tool_name} "
+                f"for Agent {request.agent_id or self.agent_id}?",
+                markup=False,
+            )
+        else:
+            self.console.print(
+                f"[yellow]⚠️ [approval-required] Approve {request.effect} Tool [bold]{request.tool_name}[/bold] "
+                f"for Agent {request.agent_id or self.agent_id}?[/yellow]"
+            )
         try:
             return input("Approve? [y/N] ").strip().lower() in {"y", "yes"}
         except (EOFError, KeyboardInterrupt):
@@ -742,16 +768,34 @@ class MiaREPL:
         model_style = "bold #38BDF8" if self.model_name else "dim yellow"
         ws_name = self.cwd.name or str(self.cwd)
 
-        # Context window computation
-        window_tokens = 128000
-        pct = (self.total_tokens / max(1, window_tokens)) * 100
-        pct_str = f"{pct:.1f}%" if self.total_tokens > 0 else "0%"
+        # Context window computation (truthful, only if measured/configured)
+        window_tokens = None
+        if self.agent_runtime and self.agent_runtime.effective_settings:
+            window_tokens = self.agent_runtime.effective_settings.context_window
+
         tokens_str = (
             f"{self.total_tokens / 1000:.1f}k"
             if self.total_tokens >= 1000
             else str(self.total_tokens)
         )
-        window_str = f"{window_tokens // 1000}k" if window_tokens >= 1000 else str(window_tokens)
+        if window_tokens is not None and window_tokens > 0:
+            pct = (self.total_tokens / max(1, window_tokens)) * 100
+            pct_str = f"{pct:.1f}%" if self.total_tokens > 0 else "0%"
+            window_str = (
+                f"{window_tokens // 1000}k" if window_tokens >= 1000 else str(window_tokens)
+            )
+            token_display = f"{tokens_str}/{window_str} ({pct_str})"
+        else:
+            token_display = f"{tokens_str}"
+
+        run_state = getattr(self, "_run_state", "idle")
+        if self.stream_renderer.plain_mode:
+            self.console.print(
+                f"[Mia v0.6.0] Workspace: {ws_name} | Agent: {self.agent_id} | Model: {model_display} | "
+                f"Session: {self.session_id} | Tokens: {token_display} | State: [{run_state}]",
+                markup=False,
+            )
+            return
 
         thinking_text = "on" if self.show_thinking_trace else "off"
         thinking_style = "bold #FF7A00" if self.show_thinking_trace else "dim #9CA3AF"
@@ -759,12 +803,18 @@ class MiaREPL:
         banner_content = Text.assemble(
             ("📁 ", "dim #9CA3AF"),
             (f"{ws_name}  ", "bold white"),
+            ("│  🤖 ", "dim #9CA3AF"),
+            (f"{self.agent_id}  ", "bold cyan"),
             ("│  🧠 ", "dim #9CA3AF"),
             (f"{model_display}  ", model_style),
+            ("│  🆔 ", "dim #9CA3AF"),
+            (f"{self.session_id[:12]}  ", "dim #9CA3AF"),
             ("│  ⚡ ", "dim #9CA3AF"),
-            (f"{tokens_str}/{window_str} ({pct_str})  ", "dim #9CA3AF"),
+            (f"{token_display}  ", "dim #9CA3AF"),
             ("│  💭 ", "dim #9CA3AF"),
             (f"{thinking_text}  ", thinking_style),
+            ("│  ", "dim #9CA3AF"),
+            (f"[{run_state}]  ", "bold #FF7A00"),
             ("│  ^O ", "bold #FF7A00"),
             ("audit  ", "dim #9CA3AF"),
             ("│  ^T ", "bold #FF7A00"),
@@ -804,8 +854,7 @@ class MiaREPL:
             actions_table.add_row("Cycle scoped models", "Ctrl+P or /model next")
             actions_table.add_row("Inspect audit details", "Ctrl+O or /inspect")
             actions_table.add_row("Session tree navigator", "Esc Esc or /tree")
-            actions_table.add_row("Toggle thinking trace", "Ctrl+T / Shift+Tab or /thinking")
-            actions_table.add_row("Quit / Exit", "/quit, /exit, or Ctrl+D")
+            actions_table.add_row("Quit / Exit", "/quit or /exit")
             self.console.print(actions_table)
             self.console.print()
 
@@ -850,6 +899,7 @@ class MiaREPL:
         assert self.harness is not None
         assert self.agent_runtime is not None
 
+        self._run_state = "running"
         try:
             self.stream_renderer.show_thinking_trace = self.show_thinking_trace
             request = RunRequest(
@@ -869,10 +919,7 @@ class MiaREPL:
                 async for envelope in stream:
                     event = envelope.event
                     if isinstance(event, RunErrorEvent):
-                        self.stream_renderer._stop_status()
-                        self.console.print(
-                            f"[bold red]Run error ({event.stage}): {event.error}[/bold red]"
-                        )
+                        self.stream_renderer.on_event(event)
                         continue
                     if isinstance(event, PluginDiagnosticEvent):
                         continue
@@ -887,10 +934,18 @@ class MiaREPL:
 
         except asyncio.CancelledError:
             self.stream_renderer._stop_status()
-            self.console.print("\n[yellow]⚠️  Turn halted by user (Ctrl+C).[/yellow]\n")
+            if self.stream_renderer.plain_mode:
+                self.console.print("[cancelled] Turn halted by user (Ctrl+C).", markup=False)
+            else:
+                self.console.print("\n[yellow]⚠️  Turn halted by user (Ctrl+C).[/yellow]\n")
         except Exception as exc:
             self.stream_renderer._stop_status()
-            self.console.print(f"\n[bold red]Error during execution:[/bold red] {exc}\n")
+            if self.stream_renderer.plain_mode:
+                self.console.print(f"[error] Error during execution: {exc}", markup=False)
+            else:
+                self.console.print(f"\n[bold red]Error during execution:[/bold red] {exc}\n")
+        finally:
+            self._run_state = "idle"
 
     def handle_slash_command(self, cmd_line: str) -> bool:
         """Handle slash commands with alias resolution and prefix matching."""

@@ -122,14 +122,22 @@ def format_status_toolbar(
     workspace_name: str = "mia",
     model_name: str = "mimo-v2.5",
     tokens: int = 0,
-    window_tokens: int = 128000,
+    window_tokens: int | None = None,
     thinking_enabled: bool = False,
+    *,
+    agent_id: str | None = None,
+    session_id: str | None = None,
+    run_state: str = "idle",
 ) -> HTML:
     """Render clean status info line below the prompt, adjusted with zero background."""
-    pct = (tokens / max(1, window_tokens)) * 100
-    pct_str = f"{pct:.1f}%" if tokens > 0 else "0%"
     tokens_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(tokens)
-    window_str = f"{window_tokens // 1000}k" if window_tokens >= 1000 else str(window_tokens)
+    if window_tokens is not None and window_tokens > 0:
+        pct = (tokens / max(1, window_tokens)) * 100
+        pct_str = f"{pct:.1f}%" if tokens > 0 else "0%"
+        window_str = f"{window_tokens // 1000}k" if window_tokens >= 1000 else str(window_tokens)
+        token_display = f"⚡ {tokens_str}/{window_str} ({pct_str})"
+    else:
+        token_display = f"⚡ {tokens_str}"
 
     thinking_badge = (
         " <style fg='#FF7A00'>[💭 on]</style>"
@@ -137,10 +145,17 @@ def format_status_toolbar(
         else " <style fg='#6B7280'>[💭 off]</style>"
     )
 
+    agent_part = f"🤖 <b>{agent_id}</b> │ " if agent_id else ""
+    session_part = f"🆔 <b>{session_id}</b> │ " if session_id else ""
+    state_badge = f" <style fg='#FF7A00'>[{run_state}]</style> │" if run_state else ""
+
     return HTML(
         f"<style fg='#9CA3AF'>  📁 <b>{workspace_name}</b> │ "
+        f"{agent_part}"
         f"🧠 <b>{model_name}</b> │ "
-        f"⚡ {tokens_str}/{window_str} ({pct_str}){thinking_badge} │ "
+        f"{session_part}"
+        f"{token_display}{thinking_badge} │"
+        f"{state_badge} "
         f"<b>/help</b></style>"
     )
 
@@ -159,6 +174,7 @@ class LivePromptSession:
         output: Any = None,
     ) -> None:
         self.history_file = history_file or (Path.home() / ".mia" / "history")
+        self.toolbar_callback = toolbar_callback
         self.history = SafeFileHistory(str(self.history_file))
         self.completer = SlashCompleter()
         self._last_escape_time = 0.0
@@ -262,10 +278,16 @@ class LivePromptSession:
                 raise
 
         formatted_prompt: AnyFormattedText = [("class:prompt", prompt_prefix)]
+        active_toolbar = (
+            bottom_toolbar
+            if bottom_toolbar is not None
+            else (self.toolbar_callback() if self.toolbar_callback else None)
+        )
 
         try:
             result = await self.session.prompt_async(
                 formatted_prompt,
+                bottom_toolbar=active_toolbar,
                 reserve_space_for_menu=8,
             )
             return result.strip()
@@ -290,10 +312,16 @@ class LivePromptSession:
                 raise
 
         formatted_prompt: AnyFormattedText = [("class:prompt", prompt_prefix)]
+        active_toolbar = (
+            bottom_toolbar
+            if bottom_toolbar is not None
+            else (self.toolbar_callback() if self.toolbar_callback else None)
+        )
 
         try:
             result = self.session.prompt(
                 formatted_prompt,
+                bottom_toolbar=active_toolbar,
                 reserve_space_for_menu=8,
             )
             return result.strip()

@@ -26,6 +26,7 @@ from mia_agent.events import (
     TurnCompleteEvent,
     TurnStartEvent,
 )
+from mia_agent.runtime_events import RunErrorEvent
 
 
 def resolve_plain_mode(
@@ -174,7 +175,7 @@ class RichStreamRenderer:
             self._active_status = None
             self._status_widget = None
 
-    def on_event(self, event: AgentEvent) -> None:
+    def on_event(self, event: AgentEvent | RunErrorEvent) -> None:
         """Handle a single AgentEvent and print minimalist output."""
         if isinstance(event, TurnStartEvent):
             if self.turn_start_time <= 0:
@@ -316,7 +317,29 @@ class RichStreamRenderer:
             if self.plain_mode:
                 self.console.print(f"[error] Agent error: {event.error}", markup=False)
             else:
-                self.console.print(f"[bold red]Agent error: {event.error}[/bold red]")
+                self.console.print(f"[bold red]✗ Agent error: {event.error}[/bold red]")
+
+        elif isinstance(event, RunErrorEvent):
+            self._stop_status()
+            self._end_streams()
+            if event.cancelled:
+                if self.plain_mode:
+                    self.console.print(
+                        f"[cancelled] Run cancelled ({event.stage}): {event.error}", markup=False
+                    )
+                else:
+                    self.console.print(
+                        f"[yellow]⚠️  Run cancelled ({event.stage}): {event.error}[/yellow]"
+                    )
+            else:
+                if self.plain_mode:
+                    self.console.print(
+                        f"[error] Run error ({event.stage}): {event.error}", markup=False
+                    )
+                else:
+                    self.console.print(
+                        f"[bold red]✗ Run error ({event.stage}): {event.error}[/bold red]"
+                    )
 
         elif isinstance(event, TurnCompleteEvent):
             self._stop_status()

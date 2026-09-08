@@ -1083,11 +1083,15 @@ async def test_terminal_truth_preserves_error_and_cancellation_outcomes(
             task_id="root",
             agent_id="mia",
             session_id="s1",
-            event=RunErrorEvent(stage="agent", error="rate limit hit", code="agent_error", cancelled=False),
+            event=RunErrorEvent(
+                stage="agent", error="rate limit hit", code="agent_error", cancelled=False
+            ),
         )
 
     repl_fail = MiaREPL(cwd=tmp_path)
-    rec_console_fail = Console(record=True, width=120, force_terminal=False, no_color=True, highlight=False)
+    rec_console_fail = Console(
+        record=True, width=120, force_terminal=False, no_color=True, highlight=False
+    )
     repl_fail.console = rec_console_fail
     repl_fail.stream_renderer = RichStreamRenderer(console=rec_console_fail, plain_mode=True)
     repl_fail.agent_runner.run = mock_fail_run  # type: ignore[method-assign]
@@ -1104,11 +1108,15 @@ async def test_terminal_truth_preserves_error_and_cancellation_outcomes(
             task_id="root",
             agent_id="mia",
             session_id="s1",
-            event=RunErrorEvent(stage="runtime", error="user cancelled", code="cancelled", cancelled=True),
+            event=RunErrorEvent(
+                stage="runtime", error="user cancelled", code="cancelled", cancelled=True
+            ),
         )
 
     repl_cancel = MiaREPL(cwd=tmp_path)
-    rec_console_cancel = Console(record=True, width=120, force_terminal=False, no_color=True, highlight=False)
+    rec_console_cancel = Console(
+        record=True, width=120, force_terminal=False, no_color=True, highlight=False
+    )
     repl_cancel.console = rec_console_cancel
     repl_cancel.stream_renderer = RichStreamRenderer(console=rec_console_cancel, plain_mode=True)
     repl_cancel.agent_runner.run = mock_cancel_run  # type: ignore[method-assign]
@@ -1121,8 +1129,9 @@ async def test_terminal_truth_preserves_error_and_cancellation_outcomes(
 
     # Case C: Tool approval request has non-color semantic cue
     from mia_middleware.access import ApprovalRequest
+
     req = ApprovalRequest(
-        effect="destructive",
+        effect="side-effecting",
         tool_name="bash",
         arguments={"command": "rm -rf /"},
         agent_id="mia",
@@ -1133,4 +1142,3 @@ async def test_terminal_truth_preserves_error_and_cancellation_outcomes(
         repl_fail._request_tool_approval(req)
         appr_output = rec_console_approval.export_text()
         assert "[approval-required]" in appr_output
-
