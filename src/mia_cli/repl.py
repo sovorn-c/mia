@@ -216,6 +216,7 @@ class MiaREPL:
             agent_id=self.agent_id,
             session_id=self.session_id,
             run_state=getattr(self, "_run_state", "idle"),
+            width=self.console.width,
         )
 
     def _init_harness(self) -> None:
@@ -829,6 +830,28 @@ class MiaREPL:
                 f"[Mia v0.6.0] Workspace: {ws_name} | Agent: {self.agent_id} | Model: {model_display} | "
                 f"Session: {self.session_id} | Tokens: {token_display} | State: [{run_state}]",
                 markup=False,
+            )
+            return
+
+        width = self.console.width
+        if width and width <= 60:
+            compact_text = Text.assemble(
+                ("📁 ", "dim #9CA3AF"),
+                (f"{ws_name} ", "bold white"),
+                ("│ 🤖 ", "dim #9CA3AF"),
+                (f"{self.agent_id} ", "bold cyan"),
+                ("│ 🧠 ", "dim #9CA3AF"),
+                (f"{model_display} ", model_style),
+                ("│ ", "dim #9CA3AF"),
+                (f"[{run_state}]", "bold #FF7A00"),
+            )
+            self.console.print(
+                Panel(
+                    compact_text,
+                    title="[bold #FF7A00]🥕 Mia v0.6.0[/bold #FF7A00]",
+                    border_style="#2D3342",
+                    padding=(0, 1),
+                )
             )
             return
 

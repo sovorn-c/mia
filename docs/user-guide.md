@@ -178,12 +178,18 @@ uv run mia
 
 | Context | Key / Command | Action |
 |---|---|---|
-| **REPL** | `Enter` | Submit prompt |
-| **REPL** | `Esc` or `/help` | Open slash command menu |
-| **REPL** | `Ctrl+C` or `/stop` | Cancel active turn without exiting |
-| **REPL** | `Ctrl+D` | Exit REPL cleanly |
-| **Approval Modal** | `y` | Approve Tool execution |
-| **Approval Modal** | `n` or `Esc` | Reject Tool execution |
+| **REPL** | `Enter` | Submit prompt (idle only) |
+| **REPL** | `Ctrl+J` or `Alt+Enter` | Insert newline for multiline prompt |
+| **REPL** | `Ctrl+C` or `Esc` | Clear prompt / Cancel active turn without dropping draft |
+| **REPL** | `Esc` or `/help` | Help & command discovery |
+| **REPL** | `Ctrl+L` or `/model` | Switch active model selector |
+| **REPL** | `Ctrl+P` or `/model next` | Cycle scoped models |
+| **REPL** | `Ctrl+O` or `/inspect` | Inspect turn audit log |
+| **REPL** | `Ctrl+T` or `/thinking` | Toggle model reasoning trace |
+| **REPL** | `Esc Esc` or `/tree` | Session tree navigator |
+| **REPL** | `/quit`, `/exit`, or `Ctrl+D` | Exit REPL cleanly |
+| **Tool Approval** | `y` | Approve Tool execution |
+| **Tool Approval** | `n` or `Esc` | Reject Tool execution |
 
 ---
 

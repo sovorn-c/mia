@@ -128,6 +128,7 @@ def format_status_toolbar(
     agent_id: str | None = None,
     session_id: str | None = None,
     run_state: str = "idle",
+    width: int | None = None,
 ) -> HTML:
     """Render clean status info line below the prompt, adjusted with zero background."""
     tokens_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(tokens)
@@ -138,6 +139,12 @@ def format_status_toolbar(
         token_display = f"⚡ {tokens_str}/{window_str} ({pct_str})"
     else:
         token_display = f"⚡ {tokens_str}"
+
+    if width is not None and width < 60:
+        return HTML(
+            f"<style fg='#9CA3AF'>📁 <b>{workspace_name}</b> │ 🧠 <b>{model_name}</b> │ "
+            f"{token_display} │ <style fg='#FF7A00'>[{run_state}]</style></style>"
+        )
 
     thinking_badge = (
         " <style fg='#FF7A00'>[💭 on]</style>"
