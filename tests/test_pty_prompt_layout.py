@@ -102,11 +102,13 @@ def test_draft_preserved_across_cancellation() -> None:
 
 def test_approval_focus_is_distinct_and_restores_draft() -> None:
     """SC-e13s02-P0-03: Approval input is separate and preserves existing draft."""
-    from unittest.mock import patch
     from pathlib import Path
+    from unittest.mock import patch
+
+    from rich.console import Console
+
     from mia_cli.repl import MiaREPL
     from mia_middleware.access import ApprovalRequest
-    from rich.console import Console
 
     repl = MiaREPL(cwd=Path("/tmp"))
     repl.console = Console(record=True, width=120)
@@ -126,4 +128,3 @@ def test_approval_focus_is_distinct_and_restores_draft() -> None:
 
     # Draft remains intact and was not consumed as approval
     assert repl.prompt_session.get_draft() == "in-progress user prompt"
-

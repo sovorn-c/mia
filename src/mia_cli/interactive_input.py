@@ -178,6 +178,9 @@ class LivePromptSession:
         self.history = SafeFileHistory(str(self.history_file))
         self.completer = SlashCompleter()
         self._last_escape_time = 0.0
+        self.is_busy: bool = False
+        self.draft_text: str = ""
+        self.on_cancel_callback: Callable[[], None] | None = None
         self.bindings = self._create_keybindings()
         self.session: PromptSession[str] = PromptSession(
             history=self.history,
@@ -190,9 +193,42 @@ class LivePromptSession:
             reserve_space_for_menu=8,
         )
 
+    def get_draft(self) -> str:
+        """Return the current draft text from the active buffer or stored draft."""
+        with contextlib.suppress(Exception):
+            if (
+                hasattr(self.session, "app")
+                and self.session.app
+                and self.session.app.current_buffer
+            ):
+                text = self.session.app.current_buffer.text
+                if text:
+                    self.draft_text = text
+        return self.draft_text
+
+    def set_draft(self, text: str) -> None:
+        """Set the draft text in storage and the active buffer if available."""
+        self.draft_text = text
+        with contextlib.suppress(Exception):
+            if (
+                hasattr(self.session, "app")
+                and self.session.app
+                and self.session.app.current_buffer
+            ):
+                self.session.app.current_buffer.text = text
+
+    def restore_draft(self, text: str | None = None) -> None:
+        """Restore draft text to active buffer or storage."""
+        target = text if text is not None else self.draft_text
+        self.set_draft(target)
+
     def _handle_escape(self, event: KeyPressEvent) -> None:
         """Apply Pi-style escape behavior to the current prompt buffer."""
         buffer = event.current_buffer
+        if self.is_busy:
+            if buffer.complete_state:
+                buffer.cancel_completion()
+            return
         if buffer.complete_state:
             buffer.cancel_completion()
             self._last_escape_time = 0.0
@@ -211,10 +247,26 @@ class LivePromptSession:
     def _create_keybindings(self) -> KeyBindings:
         kb = KeyBindings()
 
-        # Ctrl+C: Clear active input buffer without killing session
+        # Enter: Submit prompt when idle, block submission during an active Run without queueing
+        @kb.add("enter")
+        def _handle_enter(event: KeyPressEvent) -> None:
+            if self.is_busy:
+                if event.current_buffer.text:
+                    self.draft_text = event.current_buffer.text
+                return
+            event.current_buffer.validate_and_handle()
+
+        # Ctrl+C: Clear active input buffer when idle; signal cancel while busy without dropping draft
         @kb.add("c-c")
         def _clear_buffer(event: KeyPressEvent) -> None:
+            if self.is_busy:
+                if event.current_buffer.text:
+                    self.draft_text = event.current_buffer.text
+                if self.on_cancel_callback:
+                    self.on_cancel_callback()
+                return
             event.current_buffer.reset()
+            self.draft_text = ""
 
         # Ctrl+J / Alt+Enter: Insert newline for multi-line prompts
         @kb.add("c-j")
@@ -234,17 +286,29 @@ class LivePromptSession:
         # Pi-style model selection and scoped-model cycling.
         @kb.add("c-l")
         def _model_picker_shortcut(event: KeyPressEvent) -> None:
+            if self.is_busy:
+                return
+            if event.current_buffer.text and not event.current_buffer.text.startswith("/"):
+                self.draft_text = event.current_buffer.text
             event.current_buffer.text = "/model"
             event.current_buffer.validate_and_handle()
 
         @kb.add("c-p")
         def _model_cycle_shortcut(event: KeyPressEvent) -> None:
+            if self.is_busy:
+                return
+            if event.current_buffer.text and not event.current_buffer.text.startswith("/"):
+                self.draft_text = event.current_buffer.text
             event.current_buffer.text = "/model next"
             event.current_buffer.validate_and_handle()
 
         # Ctrl+O: Post-turn detail audit inspector shortcut
         @kb.add("c-o")
         def _inspect_shortcut(event: KeyPressEvent) -> None:
+            if self.is_busy:
+                return
+            if event.current_buffer.text and not event.current_buffer.text.startswith("/"):
+                self.draft_text = event.current_buffer.text
             event.current_buffer.text = "/inspect"
             event.current_buffer.validate_and_handle()
 
@@ -252,12 +316,20 @@ class LivePromptSession:
         # in standard terminal input, so binding it would break completion.
         @kb.add("s-tab")
         def _thinking_cycle_shortcut(event: KeyPressEvent) -> None:
+            if self.is_busy:
+                return
+            if event.current_buffer.text and not event.current_buffer.text.startswith("/"):
+                self.draft_text = event.current_buffer.text
             event.current_buffer.text = "/thinking"
             event.current_buffer.validate_and_handle()
 
         # Ctrl+T: Toggle thinking trace shortcut
         @kb.add("c-t")
         def _thinking_shortcut(event: KeyPressEvent) -> None:
+            if self.is_busy:
+                return
+            if event.current_buffer.text and not event.current_buffer.text.startswith("/"):
+                self.draft_text = event.current_buffer.text
             event.current_buffer.text = "/thinking"
             event.current_buffer.validate_and_handle()
 
@@ -285,11 +357,14 @@ class LivePromptSession:
         )
 
         try:
+            default_text = self.draft_text or ""
             result = await self.session.prompt_async(
                 formatted_prompt,
                 bottom_toolbar=active_toolbar,
+                default=default_text,
                 reserve_space_for_menu=8,
             )
+            self.draft_text = ""
             return result.strip()
         except KeyboardInterrupt:
             # Handle empty Ctrl+C
@@ -319,11 +394,14 @@ class LivePromptSession:
         )
 
         try:
+            default_text = self.draft_text or ""
             result = self.session.prompt(
                 formatted_prompt,
                 bottom_toolbar=active_toolbar,
+                default=default_text,
                 reserve_space_for_menu=8,
             )
+            self.draft_text = ""
             return result.strip()
         except KeyboardInterrupt:
             # Handle empty Ctrl+C

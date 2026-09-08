@@ -221,6 +221,7 @@ class MiaREPL:
 
     def _request_tool_approval(self, request: ApprovalRequest) -> bool:
         """Ask the interactive frontend for one sanitized side-effect decision with truthful non-color cues."""
+        saved_draft = self.prompt_session.get_draft()
         if self.stream_renderer.plain_mode:
             self.console.print(
                 f"[approval-required] Approve {request.effect} Tool {request.tool_name} "
@@ -236,6 +237,8 @@ class MiaREPL:
             return input("Approve? [y/N] ").strip().lower() in {"y", "yes"}
         except (EOFError, KeyboardInterrupt):
             return False
+        finally:
+            self.prompt_session.restore_draft(saved_draft)
 
     def interactive_login(self, provider_hint: str | None = None) -> None:
         """Step 1: Choose Authentication Method (API Key or OpenAI Auth)."""
@@ -900,6 +903,7 @@ class MiaREPL:
         assert self.agent_runtime is not None
 
         self._run_state = "running"
+        self.prompt_session.is_busy = True
         try:
             self.stream_renderer.show_thinking_trace = self.show_thinking_trace
             request = RunRequest(
@@ -945,6 +949,7 @@ class MiaREPL:
             else:
                 self.console.print(f"\n[bold red]Error during execution:[/bold red] {exc}\n")
         finally:
+            self.prompt_session.is_busy = False
             self._run_state = "idle"
 
     def handle_slash_command(self, cmd_line: str) -> bool:
