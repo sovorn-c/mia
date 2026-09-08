@@ -5,9 +5,9 @@ session:
   active_story_id: e13s04
   target_version: 0.6.0
 handoff:
-  next_skill: develop-tdd
-  summary: Story e13s03 passed. Story e13s04 Accessible and Resilient Inline Terminal
-    Experience is the active cursor. Build continues across epic e13.
+  next_skill: verify-work
+  summary: Story e13s04 passed. All 4 stories across epic e13 (Inline REPL Visual and
+    Interaction Experience) are passing. Ready for verification and quality gate.
   open_decisions:
   - Run fresh v0.6 candidate verification after e13; do not publish automatically.
 git:

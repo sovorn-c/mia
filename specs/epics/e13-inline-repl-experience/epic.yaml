@@ -2,7 +2,7 @@ id: e13
 slug: inline-repl-experience
 title: Inline REPL Visual and Interaction Experience
 type: feature
-status: in_progress
+status: passing
 planning_stage: planned
 target_version: 0.6.0
 risk: P1
@@ -94,7 +94,7 @@ stories:
   tasks_file: e13s02-tasks.yaml
 - id: e13s03
   title: Discoverable Commands, Selectors, and Session Inspection
-  status: todo
+  status: passing
   bcps: 3
   risk: P1
   delta: ADDED
@@ -106,7 +106,7 @@ stories:
   tasks_file: e13s03-tasks.yaml
 - id: e13s04
   title: Accessible and Resilient Inline Terminal Experience
-  status: todo
+  status: passing
   bcps: 2
   risk: P1
   delta: ADDED
@@ -118,4 +118,4 @@ stories:
   spec_file: e13s04-accessible-and-resilient-inline-terminal-experience.md
   tasks: e13s04-tasks.yaml
   tasks_file: e13s04-tasks.yaml
-next_skill: develop-tdd
+next_skill: verify-work
