@@ -118,4 +118,4 @@ stories:
   spec_file: e13s04-accessible-and-resilient-inline-terminal-experience.md
   tasks: e13s04-tasks.yaml
   tasks_file: e13s04-tasks.yaml
-next_skill: kickoff-branch
+next_skill: develop-tdd
