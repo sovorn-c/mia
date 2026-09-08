@@ -973,3 +973,164 @@ def test_help_discovery_exposes_essential_keyboard_and_command_alternatives(
     assert "Esc Esc" in output
     assert "Quit / Exit" in output
     assert "/quit" in output
+
+
+def test_truthful_state_presentation_and_measured_metrics() -> None:
+    # 1. Unavailable window_tokens is not presented as measured capacity
+    tb_no_window = format_status_toolbar(
+        workspace_name="mia_proj",
+        model_name="mimo-v2.5",
+        tokens=12500,
+        window_tokens=None,
+        thinking_enabled=False,
+        agent_id="mia",
+        session_id="session_test123",
+        run_state="idle",
+    )
+    val = tb_no_window.value
+    assert "128k" not in val
+    assert "%" not in val
+    assert "12.5k" in val
+    assert "mia" in val
+    assert "session_test123" in val
+    assert "[idle]" in val
+
+    # 2. When window_tokens IS provided, capacity and percentage are shown
+    tb_with_window = format_status_toolbar(
+        workspace_name="mia_proj",
+        model_name="mimo-v2.5",
+        tokens=12500,
+        window_tokens=128000,
+        thinking_enabled=False,
+        agent_id="mia",
+        session_id="session_test123",
+        run_state="running",
+    )
+    val2 = tb_with_window.value
+    assert "12.5k/128k" in val2
+    assert "9.8%" in val2
+    assert "[running]" in val2
+
+
+@pytest.mark.asyncio
+async def test_stream_and_tool_grouping_readable_in_scrollback_without_duplicates(
+    tmp_path: Path,
+) -> None:
+    from mia_agent.events import (
+        AssistantChunkEvent,
+        StepEndEvent,
+        StepStartEvent,
+        ToolCallEvent,
+        ToolResultEvent,
+        TurnCompleteEvent,
+        TurnStartEvent,
+    )
+    from mia_agent.runtime_events import AgentEventEnvelope
+
+    async def mock_run(*args: object, **kwargs: object):
+        events = [
+            TurnStartEvent(turn_index=1, user_prompt="test prompt"),
+            StepStartEvent(step_index=1),
+            AssistantChunkEvent(delta_text="Thinking through task. "),
+            ToolCallEvent(call_id="c1", tool_name="read_file", arguments={"path": "doc.txt"}),
+            ToolResultEvent(
+                call_id="c1",
+                tool_name="read_file",
+                output="file content",
+                is_error=False,
+                duration_ms=5.0,
+            ),
+            AssistantChunkEvent(delta_text="Finished reading doc."),
+            StepEndEvent(step_index=1, input_tokens=10, output_tokens=20),
+            TurnCompleteEvent(total_steps=1, total_cost_usd=0.0001, stop_reason="stop"),
+        ]
+        for ev in events:
+            yield AgentEventEnvelope(
+                run_id="r1",
+                task_id="root",
+                agent_id="mia",
+                session_id="s1",
+                event=ev,
+            )
+
+    repl = MiaREPL(cwd=tmp_path)
+    repl.console = Console(record=True, width=120)
+    repl.stream_renderer.console = repl.console
+    repl.agent_runner.run = mock_run  # type: ignore[method-assign]
+
+    await repl.execute_turn("test prompt")
+    output = repl.console.export_text()
+
+    assert "Thinking through task." in output
+    assert "read_file" in output
+    assert "Finished reading doc." in output
+    assert "Turn completed" in output
+    # Ensure no duplicate message replay
+    assert output.count("Finished reading doc.") == 1
+
+
+@pytest.mark.asyncio
+async def test_terminal_truth_preserves_error_and_cancellation_outcomes(
+    tmp_path: Path,
+) -> None:
+    from mia_agent.runtime_events import AgentEventEnvelope, RunErrorEvent
+    from mia_cli.renderers.rich_stream import RichStreamRenderer
+
+    # Case A: RunErrorEvent with failure
+    async def mock_fail_run(*args: object, **kwargs: object):
+        yield AgentEventEnvelope(
+            run_id="r1",
+            task_id="root",
+            agent_id="mia",
+            session_id="s1",
+            event=RunErrorEvent(stage="agent", error="rate limit hit", code="agent_error", cancelled=False),
+        )
+
+    repl_fail = MiaREPL(cwd=tmp_path)
+    rec_console_fail = Console(record=True, width=120, force_terminal=False, no_color=True, highlight=False)
+    repl_fail.console = rec_console_fail
+    repl_fail.stream_renderer = RichStreamRenderer(console=rec_console_fail, plain_mode=True)
+    repl_fail.agent_runner.run = mock_fail_run  # type: ignore[method-assign]
+
+    await repl_fail.execute_turn("trigger fail")
+    fail_output = rec_console_fail.export_text()
+    assert "[error] Run error (agent): rate limit hit" in fail_output
+    assert "Turn completed" not in fail_output
+
+    # Case B: RunErrorEvent with cancelled=True
+    async def mock_cancel_run(*args: object, **kwargs: object):
+        yield AgentEventEnvelope(
+            run_id="r2",
+            task_id="root",
+            agent_id="mia",
+            session_id="s1",
+            event=RunErrorEvent(stage="runtime", error="user cancelled", code="cancelled", cancelled=True),
+        )
+
+    repl_cancel = MiaREPL(cwd=tmp_path)
+    rec_console_cancel = Console(record=True, width=120, force_terminal=False, no_color=True, highlight=False)
+    repl_cancel.console = rec_console_cancel
+    repl_cancel.stream_renderer = RichStreamRenderer(console=rec_console_cancel, plain_mode=True)
+    repl_cancel.agent_runner.run = mock_cancel_run  # type: ignore[method-assign]
+
+    await repl_cancel.execute_turn("trigger cancel")
+    cancel_output = rec_console_cancel.export_text()
+    assert "[cancelled] Run cancelled (runtime): user cancelled" in cancel_output
+    assert "Turn completed" not in cancel_output
+    assert "Run error" not in cancel_output
+
+    # Case C: Tool approval request has non-color semantic cue
+    from mia_middleware.access import ApprovalRequest
+    req = ApprovalRequest(
+        effect="destructive",
+        tool_name="bash",
+        arguments={"command": "rm -rf /"},
+        agent_id="mia",
+    )
+    with patch("builtins.input", return_value="n"):
+        rec_console_approval = Console(record=True, width=120)
+        repl_fail.console = rec_console_approval
+        repl_fail._request_tool_approval(req)
+        appr_output = rec_console_approval.export_text()
+        assert "[approval-required]" in appr_output
+
