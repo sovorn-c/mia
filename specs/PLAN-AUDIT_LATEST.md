@@ -1,3 +1,40 @@
+# Plan Audit — e13 Inline REPL Feature Blueprint
+
+**Date:** 2026-09-08 · **Verdict:** READY (epic blueprint only)
+
+## Principles and integration
+
+- Approved: both visual and interaction redesign, extending unpublished v0.6.
+- One new epic, e13, maps to scope `inline-repl-experience`; no archived epic was reopened.
+- Explicit boundaries and observable success criteria cover presentation, input/focus, draft preservation, approval, terminal truth, accessibility, and renewed verification.
+- Dependencies e07/e10/e12 are completed. Provisional BCP 13 and WSJF (8+5+5)/5 = 3.6 are consistent across the blueprint; refine estimates during story planning.
+- Existing runtime/interface decisions are reused. Compose while running means draft editing only: no automatic queue or concurrent submission.
+- High regression risk is recorded in IMPACT_LATEST.md with existing test surfaces and coverage gaps for downstream planning.
+- Stable historical IDs, completed artifacts, and previous reports are preserved. e13 is the active epic; story cursor is null until slicing.
+- Story slicing, detailed acceptance scenarios, task commands, and test-plan decomposition are intentionally deferred to bp-plan. This is not permission to skip that phase.
+
+## Conventions and pre-flight
+
+Existing Python application; Rich/prompt-toolkit frontend; headless Agent Core. AGENTS.md, CLAUDE.md, and CONVENTIONS.md govern implementation. Workflow is solo-git. GitHub Actions configuration exists under `.github/workflows/`; no CI run was triggered.
+
+Required delivery commands: `uv run --offline ruff format .`, `uv run --offline ruff check .`, `uv run --offline mypy src`, `uv run --offline pytest`, and `uv build --offline`. Also rerun applicable coverage, public-surface, and clean-install/artifact gates. These were not run during blueprinting; earlier release evidence does not cover e13.
+
+## Blueprint validation evidence
+
+- `bash scripts/sync-status-from-epics.sh`: passed; e13 seeded without changing historical statuses.
+- `uv run --offline python scripts/check-spec-consistency.py`: passed, specification consistency clean.
+- `git diff --check`: passed before final report update; repeated at final validation.
+- Generic `scripts/validate-specs-yaml.sh` is absent. The repository's existing check-spec-consistency.py supplies YAML, inventory, dependency, and capsule validation; no missing generic helper is claimed to have run.
+- Story-level plan-consistency checks are not applicable to an intentionally unsliced blueprint.
+
+## Handoff
+
+READY for `/orca-loop-run-build e13` or the user's Pi-only loop variant, not direct implementation. The loop must run bp-plan first. No feature implementation, product tests, release, or commit was performed. Publication remains separately authorized. No unresolved blueprint decision remains; exact key/layout choices belong to story planning within the approved design contract.
+
+---
+
+## Preserved previous audit
+
 # Plan Audit — Mia v0.6.0 Production Agent Core
 
 **Date:** 2026-09-04 · **Verdict:** READY

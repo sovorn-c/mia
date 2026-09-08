@@ -1,14 +1,20 @@
 workflow_mode: solo-git
 session:
   active_flow: plan
-  active_epic_id: null
-  active_story_id: null
+  active_epic_id: e13
+  active_story_id: e13s01
   target_version: 0.6.0
 handoff:
-  next_skill: survey-context
-  summary: 'Epic e12 CLI-Only Frontend Cleanup was completed and archived. The full-screen Textual frontend, `mia tui` command, dependency, tests, package checks, and current documentation promises were removed. The inline CLI/REPL remains supported; the v0.6.0 release candidate passes the offline quality and artifact checks, but the project is not formally finished or published.'
+  next_skill: kickoff-branch
+  summary: Epic e13 Inline REPL Visual and Interaction Experience is fully sliced
+    and task-planned for the approved unpublished v0.6 scope. Four stories are implementation-ready
+    in manifest order; e13s01 is the first cursor. Build the whole epic on one branch;
+    preserve e01-e12 archives. No code has been built and v0.6 publication remains
+    unauthorized.
   open_decisions:
-    - 'Decide when to authorize v0.6.0 publication and formal release closure; do not publish automatically.'
+  - Choose or reuse one e13 feature branch through kickoff-branch without creating
+    a worktree.
+  - Run fresh v0.6 candidate verification after e13; do not publish automatically.
 git:
   branch: chore/reconcile-release-candidate-state
 environment:
@@ -24,9 +30,9 @@ metrics:
   story_start: '2026-09-01T08:57:36Z'
   skill_timings:
     plan-work:
-      calls: 8
-      total_seconds: 13905.0
-      avg_seconds: 1738.125
+      calls: 9
+      total_seconds: 14316.0
+      avg_seconds: 1590.6666666666667
     develop-tdd:
       calls: 5
       total_seconds: 10063.0
@@ -55,3 +61,11 @@ metrics:
       calls: 1
       total_seconds: 309.0
       avg_seconds: 309.0
+    slice-tasks:
+      calls: 1
+      total_seconds: 412.0
+      avg_seconds: 412.0
+    plan-tests:
+      calls: 1
+      total_seconds: 412.0
+      avg_seconds: 412.0

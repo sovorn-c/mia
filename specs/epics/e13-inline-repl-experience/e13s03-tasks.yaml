@@ -1,0 +1,30 @@
+story_id: e13s03
+title: Discoverable Commands, Selectors, and Session Inspection
+status: failing
+bcps: 3
+spec: e13s03-discoverable-commands-selectors-and-session-inspection.md
+tasks:
+  - id: 1
+    description: Add tests for command/key discovery, selectors, Session inspection, and focus-preserving Agent/model/Session changes
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_pty_prompt_layout.py -q
+    risk: P1
+    status: failing
+    allure:
+      severity: high
+      categories: [e13, cli-repl, unit]
+  - id: 2
+    description: Implement discoverable interaction vocabulary and explicit selector/inspection focus behavior using existing command infrastructure
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_pty_prompt_layout.py -q
+    risk: P1
+    status: failing
+    allure:
+      severity: high
+      categories: [e13, cli-repl, integration]
+  - id: 3
+    description: Verify busy-state retargeting is rejected or deferred explicitly and cannot mutate an active Run
+    verify: uv run --offline python scripts/check-spec-consistency.py && uv run --offline pytest tests/test_cli_repl.py -q
+    risk: P1
+    status: failing
+    allure:
+      severity: high
+      categories: [e13, cli-repl, integration]
