@@ -82,7 +82,7 @@ stories:
   tasks_file: e13s01-tasks.yaml
 - id: e13s02
   title: Draft Composition and Safe Run Focus
-  status: todo
+  status: passing
   bcps: 4
   risk: P0
   delta: ADDED

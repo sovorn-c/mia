@@ -2,12 +2,12 @@ workflow_mode: solo-git
 session:
   active_flow: build
   active_epic_id: e13
-  active_story_id: e13s02
+  active_story_id: e13s03
   target_version: 0.6.0
 handoff:
   next_skill: develop-tdd
-  summary: Story e13s01 passed. Story e13s02 Draft Composition and Safe Run Focus is
-    the active cursor. Build continues across epic e13.
+  summary: Story e13s02 passed. Story e13s03 Discoverable Commands, Selectors, and
+    Session Inspection is the active cursor. Build continues across epic e13.
   open_decisions:
   - Run fresh v0.6 candidate verification after e13; do not publish automatically.
 git:
