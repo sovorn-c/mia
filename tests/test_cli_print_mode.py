@@ -290,3 +290,30 @@ def test_run_command_plain_mode_preserves_exit_codes_on_failure_and_success() ->
         mock_loop.return_value = True
         res_ok = runner.invoke(app, ["run", "-p", "Ok test", "--plain"])
         assert res_ok.exit_code == 0
+
+
+def test_plain_mode_and_narrow_width_repl_banner(tmp_path: Path) -> None:
+    """SC-e13s04-P1-01: Plain mode and narrow terminals render accessible non-color banners."""
+    from rich.console import Console
+
+    from mia_cli.repl import MiaREPL
+
+    # 1. Plain mode banner has no ANSI escape codes and includes semantic state
+    rec_console = Console(record=True, width=120)
+    repl = MiaREPL(cwd=tmp_path)
+    repl.console = rec_console
+    repl.stream_renderer.plain_mode = True
+    repl.print_banner()
+    output = rec_console.export_text()
+    assert "[Mia v0.6.0]" in output
+    assert "State: [idle]" in output
+    assert "\x1b[" not in output
+
+    # 2. Narrow width (<= 60) banner adapts gracefully without crashing
+    narrow_console = Console(record=True, width=50)
+    repl.console = narrow_console
+    repl.stream_renderer.plain_mode = False
+    repl.print_banner()
+    narrow_output = narrow_console.export_text()
+    assert "mia" in narrow_output
+    assert "idle" in narrow_output
