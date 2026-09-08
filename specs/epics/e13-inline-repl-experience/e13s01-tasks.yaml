@@ -1,6 +1,6 @@
 story_id: e13s01
 title: Truthful Inline Run and Stream Presentation
-status: failing
+status: passing
 bcps: 4
 spec: e13s01-truthful-inline-run-and-stream-presentation.md
 tasks:
@@ -8,7 +8,7 @@ tasks:
     description: Add focused tests for truthful idle/running/approval/completed/cancelled/error presentation and attributed stream/Tool grouping
     verify: uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py -q
     risk: P1
-    status: failing
+    status: passing
     allure:
       severity: high
       categories: [e13, cli-repl, unit]
@@ -16,7 +16,7 @@ tasks:
     description: Implement compact inline status and stream presentation through the existing REPL adapter without changing Core event semantics
     verify: uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py -q
     risk: P1
-    status: failing
+    status: passing
     allure:
       severity: high
       categories: [e13, cli-repl, integration]
@@ -24,7 +24,7 @@ tasks:
     description: Verify specification, lint, and focused CLI contracts after the presentation change
     verify: uv run --offline python scripts/check-spec-consistency.py && uv run --offline ruff check src/mia_cli tests/test_cli_repl.py tests/test_cli_print_mode.py
     risk: P1
-    status: failing
+    status: passing
     allure:
       severity: high
       categories: [e13, cli-repl, integration]

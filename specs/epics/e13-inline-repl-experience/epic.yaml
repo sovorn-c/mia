@@ -71,7 +71,7 @@ references:
 stories:
 - id: e13s01
   title: Truthful Inline Run and Stream Presentation
-  status: todo
+  status: passing
   bcps: 4
   risk: P1
   delta: ADDED
