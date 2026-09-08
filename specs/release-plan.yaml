@@ -277,7 +277,7 @@ epics:
   - id: e13
     slug: inline-repl-experience
     title: Inline REPL Visual and Interaction Experience
-    status: planned
+    status: passing
     capsule_dir: specs/epics/e13-inline-repl-experience
     outcome: Users can read, navigate, control, and compose work in a coherent inline REPL without compromising Run truth or drafts.
     boundaries:

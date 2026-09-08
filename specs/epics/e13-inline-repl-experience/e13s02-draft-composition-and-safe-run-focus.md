@@ -7,7 +7,7 @@
 - **Type:** feat
 - **Risk:** P0
 - **BCPs:** 4
-- **Status:** planned
+- **Status:** passing
 - **Requirement delta:** ADDED
 
 ## 2. User Story
