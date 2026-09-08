@@ -68,6 +68,26 @@ COMMAND_ALIASES: dict[str, str] = {
     "/exit": "/quit",
 }
 
+COMMAND_AVAILABILITY: dict[str, str] = {
+    "/help": "Always",
+    "/login": "Idle only",
+    "/logout": "Idle only",
+    "/model": "Idle only",
+    "/scoped-models": "Idle only",
+    "/agent": "Idle only",
+    "/diff": "Always",
+    "/cost": "Always",
+    "/compact": "Idle only",
+    "/sessions": "Always",
+    "/resume": "Idle only",
+    "/tree": "Idle only",
+    "/inspect": "Always",
+    "/thinking": "Always",
+    "/init": "Always",
+    "/clear": "Always",
+    "/quit": "Always",
+}
+
 PROVIDER_CATALOG: dict[str, dict[str, Any]] = {
     "1": {
         "id": "opencode-go",
@@ -544,43 +564,47 @@ class MiaREPL:
 
     def interactive_model_picker(self) -> None:
         """Select the active model from the discovered scoped-model list."""
-        if not self.scoped_models:
-            self.console.print(
-                "[yellow]No scoped models. Run /scoped-models to discover connected models first.[/yellow]\n"
+        saved_draft = self.prompt_session.get_draft()
+        try:
+            if not self.scoped_models:
+                self.console.print(
+                    "[yellow]No scoped models. Run /scoped-models to discover connected models first.[/yellow]\n"
+                )
+                return
+
+            model_options: list[tuple[str, str, str]] = []
+            default_idx = 0
+            config = self.config_mgr.config
+            for model_id in self.scoped_models:
+                provider_id = self.available_model_sources.get(model_id)
+                if not provider_id:
+                    continue
+                model = model_id.split("::", 1)[1]
+                is_active = provider_id == config.default_provider and model == self.model_name
+                if is_active:
+                    default_idx = len(model_options)
+                label = self._model_label(model_id) + (" (Active)" if is_active else "")
+                model_options.append((model_id, label, ""))
+
+            if not model_options:
+                self.console.print(
+                    "[yellow]No scoped models. Run /scoped-models to refresh the list.[/yellow]\n"
+                )
+                return
+
+            selected = interactive_select(
+                "🤖 Switch Active Model", model_options, default_idx=default_idx
             )
-            return
+            if not selected:
+                return
 
-        model_options: list[tuple[str, str, str]] = []
-        default_idx = 0
-        config = self.config_mgr.config
-        for model_id in self.scoped_models:
-            provider_id = self.available_model_sources.get(model_id)
-            if not provider_id:
-                continue
-            model = model_id.split("::", 1)[1]
-            is_active = provider_id == config.default_provider and model == self.model_name
-            if is_active:
-                default_idx = len(model_options)
-            label = self._model_label(model_id) + (" (Active)" if is_active else "")
-            model_options.append((model_id, label, ""))
-
-        if not model_options:
-            self.console.print(
-                "[yellow]No scoped models. Run /scoped-models to refresh the list.[/yellow]\n"
-            )
-            return
-
-        selected = interactive_select(
-            "🤖 Switch Active Model", model_options, default_idx=default_idx
-        )
-        if not selected:
-            return
-
-        provider_id = self.available_model_sources[selected]
-        self.model_name = selected.split("::", 1)[1]
-        self._save_model_selection(provider_id, self.model_name)
-        self._init_harness()
-        self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
+            provider_id = self.available_model_sources[selected]
+            self.model_name = selected.split("::", 1)[1]
+            self._save_model_selection(provider_id, self.model_name)
+            self._init_harness()
+            self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
+        finally:
+            self.prompt_session.restore_draft(saved_draft)
 
     def _session_file(self, session_id: str | None = None) -> Path:
         """Return the JSONL path for the active Agent and Session."""
@@ -649,45 +673,49 @@ class MiaREPL:
 
     def interactive_tree_navigator(self) -> None:
         """Navigate the full JSONL tree and fork future prompts from the selected entry."""
-        if not self.harness:
-            self.console.print("[dim]No active session tree to navigate.[/dim]\n")
-            return
-
-        session_file = self._session_file()
-        if not session_file.exists():
-            self.console.print("[dim]No conversation turns in this session yet.[/dim]\n")
-            return
-
+        saved_draft = self.prompt_session.get_draft()
         try:
-            store = JsonlSessionStore(session_file)
-            entries = store.load_entries()
-            tree = SessionTree(entries)
-            active_path = tree.get_active_path()
-            active_ids = {entry.id for entry in active_path}
-            options, default_idx = self._tree_options(entries, active_ids)
-            if not options:
-                self.console.print("[dim]No past turns to branch from.[/dim]\n")
+            if not self.harness:
+                self.console.print("[dim]No active session tree to navigate.[/dim]\n")
                 return
 
-            chosen = interactive_select(
-                "🌿 Session Tree (↑/↓ choose checkpoint, Enter forks here)",
-                options,
-                default_idx=default_idx,
-            )
-            if not chosen:
-                return
-            if active_path and chosen == active_path[-1].id:
-                self.console.print("[dim]Already at this checkpoint.[/dim]\n")
+            session_file = self._session_file()
+            if not session_file.exists():
+                self.console.print("[dim]No conversation turns in this session yet.[/dim]\n")
                 return
 
-            messages = self.harness.navigate_to(chosen)
-            self.console.print(
-                f"\n[bold green]✓ Branched from checkpoint {chosen[:8]}[/bold green]\n"
-            )
-            self._render_restored_messages(messages)
-            self.console.print()
-        except Exception as exc:
-            self.console.print(f"[red]Failed to navigate session tree: {exc}[/red]\n")
+            try:
+                store = JsonlSessionStore(session_file)
+                entries = store.load_entries()
+                tree = SessionTree(entries)
+                active_path = tree.get_active_path()
+                active_ids = {entry.id for entry in active_path}
+                options, default_idx = self._tree_options(entries, active_ids)
+                if not options:
+                    self.console.print("[dim]No past turns to branch from.[/dim]\n")
+                    return
+
+                chosen = interactive_select(
+                    "🌿 Session Tree (↑/↓ choose checkpoint, Enter forks here)",
+                    options,
+                    default_idx=default_idx,
+                )
+                if not chosen:
+                    return
+                if active_path and chosen == active_path[-1].id:
+                    self.console.print("[dim]Already at this checkpoint.[/dim]\n")
+                    return
+
+                messages = self.harness.navigate_to(chosen)
+                self.console.print(
+                    f"\n[bold green]✓ Branched from checkpoint {chosen[:8]}[/bold green]\n"
+                )
+                self._render_restored_messages(messages)
+                self.console.print()
+            except Exception as exc:
+                self.console.print(f"[red]Failed to navigate session tree: {exc}[/red]\n")
+        finally:
+            self.prompt_session.restore_draft(saved_draft)
 
     def delete_session(self, session_id: str) -> None:
         """Delete a saved session, but never remove the active session file."""
@@ -700,43 +728,47 @@ class MiaREPL:
 
     def interactive_session_resumer(self) -> None:
         """Pick a saved Session for the current Agent and restore its active branch."""
-        session_dir = self.agent_mgr.get_session_dir(self.agent_id)
-        session_files = sorted(
-            session_dir.glob("*.jsonl"), key=lambda path: path.stat().st_mtime, reverse=True
-        )
-        options: list[tuple[str, str, str]] = []
-        for path in session_files:
-            try:
-                entries = JsonlSessionStore(path).load_entries()
-                tree = SessionTree(entries)
-                messages = tree.extract_messages_from_path(tree.get_active_path())
-                first_user = next((m for m in messages if m.role == "user"), None)
-                preview = str(first_user.content if first_user else "(empty session)")
-                preview = preview.replace("\n", " ").strip()[:52]
-                user_count = sum(1 for m in messages if m.role == "user")
-                current = " • current" if path.stem == self.session_id else ""
-                options.append(
-                    (
-                        path.stem,
-                        f"{preview or '(empty session)'}{current}",
-                        f"{user_count} prompt(s) • {path.stat().st_size / 1024:.1f} KB",
+        saved_draft = self.prompt_session.get_draft()
+        try:
+            session_dir = self.agent_mgr.get_session_dir(self.agent_id)
+            session_files = sorted(
+                session_dir.glob("*.jsonl"), key=lambda path: path.stat().st_mtime, reverse=True
+            )
+            options: list[tuple[str, str, str]] = []
+            for path in session_files:
+                try:
+                    entries = JsonlSessionStore(path).load_entries()
+                    tree = SessionTree(entries)
+                    messages = tree.extract_messages_from_path(tree.get_active_path())
+                    first_user = next((m for m in messages if m.role == "user"), None)
+                    preview = str(first_user.content if first_user else "(empty session)")
+                    preview = preview.replace("\n", " ").strip()[:52]
+                    user_count = sum(1 for m in messages if m.role == "user")
+                    current = " • current" if path.stem == self.session_id else ""
+                    options.append(
+                        (
+                            path.stem,
+                            f"{preview or '(empty session)'}{current}",
+                            f"{user_count} prompt(s) • {path.stat().st_size / 1024:.1f} KB",
+                        )
                     )
-                )
-            except Exception:
-                continue
+                except Exception:
+                    continue
 
-        if not options:
-            self.console.print("[dim]No saved Sessions found for this Agent.[/dim]\n")
-            return
+            if not options:
+                self.console.print("[dim]No saved Sessions found for this Agent.[/dim]\n")
+                return
 
-        chosen = interactive_select(
-            "↩ Resume Session (↑/↓ choose, Enter resume, Ctrl+D/d delete)",
-            options,
-            default_idx=0,
-            on_delete=self.delete_session,
-        )
-        if chosen:
-            self.resume_session(chosen)
+            chosen = interactive_select(
+                "↩ Resume Session (↑/↓ choose, Enter resume, Ctrl+D/d delete)",
+                options,
+                default_idx=0,
+                on_delete=self.delete_session,
+            )
+            if chosen:
+                self.resume_session(chosen)
+        finally:
+            self.prompt_session.restore_draft(saved_draft)
 
     def resume_session(self, session_id: str) -> None:
         """Restore a saved session and its active branch into the live harness."""
@@ -848,16 +880,17 @@ class MiaREPL:
             )
             actions_table.add_column("Action", style="white", width=26)
             actions_table.add_column("Key / Command Equivalent", style="bold #FF7A00")
-            actions_table.add_row("Submit prompt", "Enter")
-            actions_table.add_row("Insert newline", "Ctrl+J / Alt+Enter")
-            actions_table.add_row("Clear prompt / Cancel", "Ctrl+C / Esc")
-            actions_table.add_row("Help & Discovery", "/help or /?")
-            actions_table.add_row("Switch Agent", "/agent <id>")
-            actions_table.add_row("Switch model", "Ctrl+L or /model")
-            actions_table.add_row("Cycle scoped models", "Ctrl+P or /model next")
-            actions_table.add_row("Inspect audit details", "Ctrl+O or /inspect")
-            actions_table.add_row("Session tree navigator", "Esc Esc or /tree")
-            actions_table.add_row("Quit / Exit", "/quit or /exit")
+            actions_table.add_column("Availability", style="dim cyan", width=14)
+            actions_table.add_row("Submit prompt", "Enter", "Idle only")
+            actions_table.add_row("Insert newline", "Ctrl+J / Alt+Enter", "Always")
+            actions_table.add_row("Clear prompt / Cancel", "Ctrl+C / Esc", "Always")
+            actions_table.add_row("Help & Discovery", "/help or /?", "Always")
+            actions_table.add_row("Switch Agent", "/agent <id>", "Idle only")
+            actions_table.add_row("Switch model", "Ctrl+L or /model", "Idle only")
+            actions_table.add_row("Cycle scoped models", "Ctrl+P or /model next", "Idle only")
+            actions_table.add_row("Inspect audit details", "Ctrl+O or /inspect", "Always")
+            actions_table.add_row("Session tree navigator", "Esc Esc or /tree", "Idle only")
+            actions_table.add_row("Quit / Exit", "/quit or /exit", "Always")
             self.console.print(actions_table)
             self.console.print()
 
@@ -869,10 +902,11 @@ class MiaREPL:
         )
         table.add_column("Command", style="bold #FF7A00", width=22)
         table.add_column("Usage & Description", style="white")
+        table.add_column("Availability", style="dim cyan", width=14)
 
         for cmd, desc in COMMAND_DESCRIPTIONS.items():
             if not filter_prefix or cmd.startswith(filter_prefix):
-                table.add_row(cmd, desc)
+                table.add_row(cmd, desc, COMMAND_AVAILABILITY.get(cmd, "Always"))
 
         self.console.print(table)
         self.console.print(
@@ -960,6 +994,25 @@ class MiaREPL:
         args = parts[1].strip() if len(parts) > 1 else ""
 
         cmd = COMMAND_ALIASES.get(raw_cmd, raw_cmd)
+
+        if self.prompt_session.is_busy and cmd in (
+            "/agent",
+            "/model",
+            "/llm",
+            "/scoped-models",
+            "/resume",
+            "/compact",
+            "/compress",
+            "/tree",
+            "/branch",
+            "/login",
+            "/auth",
+            "/logout",
+            "/signout",
+            "/disconnect",
+        ):
+            self.console.print(f"[yellow]Cannot change {raw_cmd} while a Run is active.[/yellow]\n")
+            return True
 
         if cmd in ("/", "/?", "/help"):
             self.print_command_menu()
@@ -1123,7 +1176,11 @@ class MiaREPL:
             self.interactive_tree_navigator()
 
         elif cmd in ("/inspect", "/logs"):
-            self.stream_renderer.render_audit_log()
+            saved_draft = self.prompt_session.get_draft()
+            try:
+                self.stream_renderer.render_audit_log()
+            finally:
+                self.prompt_session.restore_draft(saved_draft)
 
         elif cmd in ("/thinking", "/trace"):
             self.show_thinking_trace = not self.show_thinking_trace
