@@ -1,17 +1,20 @@
 workflow_mode: solo-git
 session:
-  active_flow: build
-  active_epic_id: e13
-  active_story_id: e13s04
+  active_flow: plan
+  active_epic_id: null
+  active_story_id: null
   target_version: 0.6.0
 handoff:
-  next_skill: release-branch
-  summary: Epic e13 independent review and verification passed cleanly. All 4 stories,
-    offline quality gates, and candidate verification passed. Ready for solo-local release.
-  open_decisions:
-  - Run fresh v0.6 candidate verification after e13; do not publish automatically.
+  next_skill: survey-context
+  summary: >-
+    Epic e13 Inline REPL Visual and Interaction Experience was merged into local
+    main and its reviewed capsule was archived. Release gates passed: 374 tests, Ruff,
+    mypy, offline build, coverage, public-surface, artifact-integrity, clean-install,
+    and publication checks. All 4 stories (e13s01, e13s02, e13s03, e13s04) and 12 tasks
+    are marked done and epic e13 is complete.
+  open_decisions: []
 git:
-  branch: e13-inline-repl-experience
+  branch: main
 environment:
   package_manager: uv 0.10.11
   python: 3.14.6

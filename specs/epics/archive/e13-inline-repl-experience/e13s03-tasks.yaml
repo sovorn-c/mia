@@ -1,6 +1,6 @@
 story_id: e13s03
 title: Discoverable Commands, Selectors, and Session Inspection
-status: passing
+status: done
 bcps: 3
 spec: e13s03-discoverable-commands-selectors-and-session-inspection.md
 tasks:

@@ -1,6 +1,6 @@
 story_id: e13s01
 title: Truthful Inline Run and Stream Presentation
-status: passing
+status: done
 bcps: 4
 spec: e13s01-truthful-inline-run-and-stream-presentation.md
 tasks:
