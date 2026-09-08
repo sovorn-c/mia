@@ -1142,3 +1142,83 @@ async def test_terminal_truth_preserves_error_and_cancellation_outcomes(
         repl_fail._request_tool_approval(req)
         appr_output = rec_console_approval.export_text()
         assert "[approval-required]" in appr_output
+
+
+def test_help_and_command_discovery_distinguishes_busy_availability(
+    tmp_path: Path,
+) -> None:
+    """SC-e13s03-P1-01: Help distinguishes actions unavailable while busy."""
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+
+    repl.handle_slash_command("/help")
+    output = repl.console.export_text()
+
+    assert "Availability" in output
+    assert "Idle only" in output
+    assert "Always" in output
+
+
+def test_selectors_and_session_inspection_preserve_draft(tmp_path: Path) -> None:
+    """SC-e13s03-P1-02: Selectors and session inspection preserve the prompt draft."""
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+    repl.prompt_session.set_draft("persisted draft text")
+
+    # 1. Model picker preserves draft
+    repl.scoped_models = ["openai::gpt-4o"]
+    repl.available_model_sources = {"openai::gpt-4o": "openai"}
+    with patch("mia_cli.repl.interactive_select", return_value=None):
+        repl.interactive_model_picker()
+    assert repl.prompt_session.get_draft() == "persisted draft text"
+
+    # 2. Inspect preserves draft
+    with patch.object(repl.stream_renderer, "render_audit_log"):
+        repl.handle_slash_command("/inspect")
+    assert repl.prompt_session.get_draft() == "persisted draft text"
+
+    # 3. Session resumer preserves draft
+    with patch("mia_cli.repl.interactive_select", return_value=None):
+        repl.interactive_session_resumer()
+    assert repl.prompt_session.get_draft() == "persisted draft text"
+
+
+def test_busy_state_retargeting_rejected_and_cannot_mutate_active_run(
+    tmp_path: Path,
+) -> None:
+    """SC-e13s03-P1-03: Active Run cannot be retargeted by Agent, model, or Session changes."""
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+    repl.agent_id = "mia"
+    repl.model_name = "mimo-v2.5"
+    orig_session = repl.session_id
+
+    # Mark REPL busy (active run)
+    repl.prompt_session.is_busy = True
+
+    # 1. Reject /agent change
+    repl.handle_slash_command("/agent researcher")
+    out = repl.console.export_text()
+    assert "Cannot change /agent while a Run is active" in out
+    assert repl.agent_id == "mia"
+
+    # 2. Reject /model change
+    repl.console = Console(record=True, width=120)
+    repl.handle_slash_command("/model gpt-4o")
+    out = repl.console.export_text()
+    assert "Cannot change /model while a Run is active" in out
+    assert repl.model_name == "mimo-v2.5"
+
+    # 3. Reject /resume change
+    repl.console = Console(record=True, width=120)
+    repl.handle_slash_command("/resume other_session")
+    out = repl.console.export_text()
+    assert "Cannot change /resume while a Run is active" in out
+    assert repl.session_id == orig_session
+
+    # 4. Reject /tree change
+    repl.console = Console(record=True, width=120)
+    repl.handle_slash_command("/tree")
+    out = repl.console.export_text()
+    assert "Cannot change /tree while a Run is active" in out
+
