@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.6.0
-updated_at: '2026-09-08T07:21:56Z'
+updated_at: '2026-09-08T07:26:05Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-09-03T08:22:40Z'
@@ -315,8 +315,8 @@ epics:
         bcps: 3
         risk: P1
         tasks_total: 3
-        tasks_passing: 0
-        tasks_failing: 3
+        tasks_passing: 3
+        tasks_failing: 0
       e13s04:
         title: Accessible and Resilient Inline Terminal Experience
         status: todo
