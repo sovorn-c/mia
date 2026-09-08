@@ -1221,4 +1221,3 @@ def test_busy_state_retargeting_rejected_and_cannot_mutate_active_run(
     repl.handle_slash_command("/tree")
     out = repl.console.export_text()
     assert "Cannot change /tree while a Run is active" in out
-
