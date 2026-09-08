@@ -9,6 +9,7 @@ import select
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -1221,3 +1222,196 @@ def test_busy_state_retargeting_rejected_and_cannot_mutate_active_run(
     repl.handle_slash_command("/tree")
     out = repl.console.export_text()
     assert "Cannot change /tree while a Run is active" in out
+
+
+@pytest.mark.asyncio
+async def test_repl_loop_concurrent_draft_composition_and_explicit_later_submission(
+    tmp_path: Path,
+) -> None:
+    """SC-e13s02 end-to-end: User composes draft during active Run; Enter does not submit while busy; explicit Enter submits after completion."""
+    from collections.abc import AsyncIterator, Sequence
+
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+
+    from mia_ai.types import ChatMessage, StreamChunk, ToolDefinition
+
+    class ControlledProvider(MockProvider):
+        def __init__(self) -> None:
+            super().__init__()
+            self.turn1_started = asyncio.Event()
+            self.turn1_release = asyncio.Event()
+            self.turn2_started = asyncio.Event()
+
+        async def stream_chat(
+            self,
+            messages: Sequence[ChatMessage],
+            tools: Sequence[ToolDefinition] | None = None,
+            model: str | None = None,
+            **kwargs: Any,
+        ) -> AsyncIterator[StreamChunk]:
+            content = str(messages[-1].content or "")
+            if "first" in content.lower():
+                self.turn1_started.set()
+                await self.turn1_release.wait()
+            elif "draft" in content.lower():
+                self.turn2_started.set()
+            async for chunk in super().stream_chat(messages, tools=tools, model=model, **kwargs):
+                yield chunk
+
+    provider = ControlledProvider()
+    provider.queue_text_response("Turn 1 complete")
+    provider.queue_text_response("Turn 2 complete")
+
+    with create_pipe_input() as pipe:
+        repl = MiaREPL(
+            cwd=tmp_path,
+            custom_provider=provider,
+            prompt_input=pipe,
+            prompt_output=DummyOutput(),
+        )
+        repl.console = Console(record=True, width=120)
+
+        loop_task = asyncio.create_task(repl.run_async())
+
+        # 1. Send first prompt to start Turn 1
+        pipe.send_text("first prompt\r")
+        await asyncio.wait_for(provider.turn1_started.wait(), timeout=3.0)
+
+        # Active turn is running and busy
+        assert repl.prompt_session.is_busy is True
+        assert repl._run_state == "running"
+
+        # 2. While Turn 1 is running, compose draft prompt and press Enter
+        pipe.send_text("draft prompt\r")
+        await asyncio.sleep(0.05)
+
+        # Draft is captured, but NOT submitted (no queue, no concurrent turn started)
+        assert repl.prompt_session.get_draft() == "draft prompt"
+        assert not provider.turn2_started.is_set()
+
+        # 3. Release Turn 1 to complete
+        provider.turn1_release.set()
+        await asyncio.sleep(0.1)
+
+        # Turn 1 finished; REPL is now idle and draft is preserved
+        assert repl.prompt_session.is_busy is False
+        assert repl._run_state == "idle"
+        assert repl.prompt_session.get_draft() == "draft prompt"
+        assert not provider.turn2_started.is_set()
+
+        # 4. Now press Enter to explicitly submit the composed draft
+        pipe.send_text("\r")
+        await asyncio.wait_for(provider.turn2_started.wait(), timeout=3.0)
+
+        # Cleanly exit REPL loop
+        pipe.send_text("/quit\r")
+        await asyncio.wait_for(loop_task, timeout=3.0)
+
+
+@pytest.mark.asyncio
+async def test_repl_loop_ctrl_c_cancels_active_run_and_preserves_draft(
+    tmp_path: Path,
+) -> None:
+    """SC-e13s02 end-to-end: Ctrl+C during active Run cancels the execution and preserves the composed draft."""
+    from collections.abc import AsyncIterator, Sequence
+
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+
+    from mia_ai.types import ChatMessage, StreamChunk, ToolDefinition
+
+    class CancellableProvider(MockProvider):
+        def __init__(self) -> None:
+            super().__init__()
+            self.turn_started = asyncio.Event()
+
+        async def stream_chat(
+            self,
+            messages: Sequence[ChatMessage],
+            tools: Sequence[ToolDefinition] | None = None,
+            model: str | None = None,
+            **kwargs: Any,
+        ) -> AsyncIterator[StreamChunk]:
+            self.turn_started.set()
+            # Wait until cancelled
+            await asyncio.sleep(30.0)
+            async for chunk in super().stream_chat(messages, tools=tools, model=model, **kwargs):
+                yield chunk
+
+    provider = CancellableProvider()
+    provider.queue_text_response("Will not finish")
+
+    with create_pipe_input() as pipe:
+        repl = MiaREPL(
+            cwd=tmp_path,
+            custom_provider=provider,
+            prompt_input=pipe,
+            prompt_output=DummyOutput(),
+        )
+        repl.console = Console(record=True, width=120)
+
+        loop_task = asyncio.create_task(repl.run_async())
+
+        # Start active turn
+        pipe.send_text("slow turn prompt\r")
+        await asyncio.wait_for(provider.turn_started.wait(), timeout=3.0)
+
+        assert repl.prompt_session.is_busy is True
+
+        # Compose draft during active run
+        pipe.send_text("in-progress draft\r")
+        await asyncio.sleep(0.05)
+        assert repl.prompt_session.get_draft() == "in-progress draft"
+
+        # Send Ctrl+C to cancel the active turn
+        pipe.send_text("\x03")
+        await asyncio.sleep(0.1)
+
+        # Run halted, cancellation reached active run, REPL is back to idle
+        assert repl.prompt_session.is_busy is False
+        assert repl._run_state == "idle"
+
+        # Draft remains intact
+        assert repl.prompt_session.get_draft() == "in-progress draft"
+        output = repl.console.export_text()
+        assert "Turn halted by user (Ctrl+C)" in output
+
+        # Exit loop
+        pipe.send_text("/quit\r")
+        await asyncio.wait_for(loop_task, timeout=3.0)
+
+
+@pytest.mark.asyncio
+async def test_repl_loop_approval_remains_distinct_and_preserves_draft(
+    tmp_path: Path,
+) -> None:
+    """SC-e13s02 end-to-end: Tool approval prompt does not consume the composed draft."""
+    from prompt_toolkit.input import create_pipe_input
+    from prompt_toolkit.output import DummyOutput
+
+    from mia_middleware.access import ApprovalRequest
+
+    with create_pipe_input() as pipe:
+        repl = MiaREPL(
+            cwd=tmp_path,
+            custom_provider=MockProvider(),
+            prompt_input=pipe,
+            prompt_output=DummyOutput(),
+        )
+        repl.console = Console(record=True, width=120)
+        repl.prompt_session.set_draft("composed user draft")
+
+        req = ApprovalRequest(
+            effect="side-effecting",
+            tool_name="write_file",
+            arguments={"path": "test.txt", "content": "hello"},
+            agent_id="mia",
+        )
+
+        with patch("builtins.input", return_value="y"):
+            approved = repl._request_tool_approval(req)
+            assert approved is True
+
+        # Draft text was NOT consumed as the approval answer
+        assert repl.prompt_session.get_draft() == "composed user draft"
