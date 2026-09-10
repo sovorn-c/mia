@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
@@ -45,6 +47,33 @@ async def test_prompt_execution_with_pipe_input() -> None:
         pipe.send_text("hello prompt\r")
         result = await session.read_prompt_async("› ")
         assert result == "hello prompt"
+
+
+@pytest.mark.asyncio
+async def test_slash_completion_anchors_at_slash_and_navigates_like_terminal() -> None:
+    """Slash completion stays over the command and supports arrow selection."""
+    with create_pipe_input() as pipe:
+        session = LivePromptSession(input=pipe, output=DummyOutput())
+        prompt_task = asyncio.create_task(session.read_prompt_async("› "))
+        pipe.send_text("/")
+        await asyncio.sleep(0.05)
+
+        buffer = session.session.default_buffer
+        assert buffer.complete_state is not None
+        assert session._completion_menu_position() == 0
+
+        pipe.send_bytes(b"\x1b[B")
+        await asyncio.sleep(0.05)
+        assert buffer.text == "/help"
+        pipe.send_bytes(b"\x1b[B")
+        await asyncio.sleep(0.05)
+        assert buffer.text == "/login"
+        pipe.send_bytes(b"\x1b[A")
+        await asyncio.sleep(0.05)
+        assert buffer.text == "/help"
+
+        pipe.send_bytes(b"\r")
+        assert await prompt_task == "/help"
 
 
 @pytest.mark.asyncio

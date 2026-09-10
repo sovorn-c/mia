@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import io
-import os
-import select
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from prompt_toolkit.document import Document
+from prompt_toolkit.input import create_pipe_input
+from prompt_toolkit.output import DummyOutput
 from rich.console import Console
 
 from mia_agent.agents import AgentManager
@@ -92,6 +91,10 @@ def test_format_status_toolbar() -> None:
     assert "mimo-v2.5" in toolbar_html.value
     assert "12.5k/128k" in toolbar_html.value
     assert "💭 on" in toolbar_html.value
+
+    escaped = format_status_toolbar(workspace_name="<mia>", model_name="model&name")
+    assert "&lt;mia&gt;" in escaped.value
+    assert "model&amp;name" in escaped.value
 
 
 def test_carrot_bounce_spinner() -> None:
@@ -270,66 +273,102 @@ def test_repl_pi_style_auth_and_model_scoper(tmp_path: Path) -> None:
     assert repl.model_name == "mimo-v2.5"
 
 
-def test_connected_provider_models_are_all_discovered_without_unconnected(tmp_path: Path) -> None:
+def test_model_picker_loads_persisted_scope_sources_on_startup(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.cred_store.path = tmp_path / "credentials.json"
+    repl.config_mgr.config_path = tmp_path / "config.json"
+    repl.cred_store.set_api_key("openai", "sk-test-openai")
+    repl.config_mgr.save_config(
+        repl.config_mgr.config.model_copy(
+            update={
+                "default_provider": "openai",
+                "default_model": "stored-model",
+                "model_catalog": {"openai": ["stored-model"]},
+                "scoped_models": ["openai::stored-model"],
+            }
+        )
+    )
+    repl.scoped_models = ["openai::stored-model"]
+    repl.model_name = "stored-model"
+
+    with (
+        patch("mia_cli.repl.discover_provider_models") as discover,
+        patch("mia_cli.repl.interactive_select", return_value="openai::stored-model") as select,
+    ):
+        repl.interactive_model_picker()
+
+    discover.assert_not_called()
+    assert select.call_args.args[1] == [
+        ("openai::stored-model", "openai: stored-model (Active)", "")
+    ]
+    assert repl.model_name == "stored-model"
+
+
+def test_connected_provider_models_use_stored_catalog_without_environment(
+    tmp_path: Path,
+) -> None:
     repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
     repl.cred_store.path = tmp_path / "credentials.json"
     repl.config_mgr.config_path = tmp_path / "config.json"
     repl.cred_store.set_api_key("openai", "sk-test-openai")
     repl.cred_store.set_api_key("deepseek", "sk-test-deepseek")
-    repl.console = Console(record=True, width=120)
+    repl.config_mgr.save_config(
+        repl.config_mgr.config.model_copy(
+            update={
+                "model_catalog": {
+                    "openai": ["openai-model"],
+                    "deepseek": ["deepseek-model"],
+                    "gemini": ["gemini-model"],
+                }
+            }
+        )
+    )
 
-    discovered: list[str] = []
-
-    def models_for(provider: str, **_: object) -> list[str]:
-        discovered.append(provider)
-        return [f"{provider}-model"]
-
-    with (
-        patch.dict("os.environ", {"GOOGLE_API_KEY": "google-key"}, clear=True),
-        patch("mia_cli.repl.discover_provider_models", side_effect=models_for),
-        patch(
-            "mia_cli.repl.interactive_multi_select",
-            return_value=[
-                "deepseek::deepseek-model",
-                "openai::openai-model",
-                "gemini::gemini-model",
-            ],
-        ),
+    with patch(
+        "mia_cli.repl.interactive_multi_select",
+        return_value=["deepseek::deepseek-model", "openai::openai-model"],
     ):
         repl.handle_slash_command("/scoped-models")
 
-    output = repl.console.export_text()
-    assert "Fetching live models" not in output
-    assert "Saved 3 scoped models." in output
-    assert discovered == ["deepseek", "openai", "gemini"]
     assert repl.scoped_models == [
         "deepseek::deepseek-model",
         "openai::openai-model",
-        "gemini::gemini-model",
     ]
-
-    with patch(
-        "mia_cli.repl.interactive_select",
-        return_value="openai::openai-model",
-    ) as select:
-        repl.interactive_model_picker()
-
-    select.assert_called_once()
-    assert select.call_args.args[0] == "🤖 Switch Active Model"
-    assert select.call_args.args[1][1][1] == "openai: openai-model"
-    assert select.call_args.args[1][1][2] == ""
-    assert repl.model_name == "openai-model"
-    assert repl.config_mgr.config.default_provider == "openai"
+    assert set(repl.available_model_sources.values()) == {"deepseek", "openai"}
+    assert "gemini" not in repl.available_model_sources.values()
 
     repl.cred_store.delete("openai")
+    repl.handle_slash_command("/scoped-models")
+    assert repl.available_model_sources == {"deepseek::deepseek-model": "deepseek"}
+
+
+def test_scoped_models_prunes_logged_out_provider_from_saved_scope(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.cred_store.path = tmp_path / "credentials.json"
+    repl.config_mgr.config_path = tmp_path / "config.json"
+    repl.cred_store.set_api_key("openai", "sk-test-openai")
+    repl.cred_store.set_api_key("deepseek", "sk-test-deepseek")
+    repl.scoped_models = ["openai::gpt-4o", "deepseek::deepseek-chat"]
+    repl._save_scoped_models()
+    repl.cred_store.delete("openai")
+
     with (
         patch.dict("os.environ", {}, clear=True),
-        patch("mia_cli.repl.discover_provider_models", side_effect=models_for),
+        patch("mia_cli.repl.discover_provider_models", return_value=["deepseek-chat"]),
+        patch("mia_cli.repl.interactive_multi_select", return_value=["deepseek::deepseek-chat"]),
     ):
         repl.handle_slash_command("/scoped-models")
 
-    assert repl.available_model_sources == {"deepseek::deepseek-model": "deepseek"}
-    assert repl.scoped_models == ["deepseek::deepseek-model"]
+    assert repl.available_model_sources == {"deepseek::deepseek-chat": "deepseek"}
+    assert repl.scoped_models == ["deepseek::deepseek-chat"]
+    assert repl.config_mgr.config.scoped_models == ["deepseek::deepseek-chat"]
+
+    repl.cred_store.delete("deepseek")
+    with patch("mia_cli.repl.interactive_select") as select:
+        repl.interactive_model_picker()
+    select.assert_not_called()
+    assert repl.scoped_models == []
+    assert repl.config_mgr.config.scoped_models == []
 
 
 def test_custom_connected_model_is_in_model_picker(tmp_path: Path) -> None:
@@ -349,7 +388,10 @@ def test_custom_connected_model_is_in_model_picker(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", {}, clear=True),
-        patch("mia_cli.repl.discover_provider_models", return_value=["other-local-model"]),
+        patch(
+            "mia_cli.repl.discover_provider_models",
+            return_value=["local-model", "other-local-model"],
+        ),
         patch(
             "mia_cli.repl.interactive_multi_select",
             return_value=["custom::local-model"],
@@ -386,6 +428,7 @@ def test_scoped_models_opens_selector_and_saves_selected_scope(tmp_path: Path) -
         assert repl.handle_slash_command("/scoped-models") is True
 
     selector.assert_called_once()
+    assert selector.call_args.kwargs["selected_ids"] == []
     assert repl.scoped_models == ["openai::gpt-4o"]
     assert repl.config_mgr.config.scoped_models == ["openai::gpt-4o"]
 
@@ -465,13 +508,16 @@ def test_repl_scoped_model_picker(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", {}, clear=True),
-        patch("mia_cli.repl.interactive_multi_select", return_value=["deepseek::deepseek-chat"]),
+        patch(
+            "mia_cli.repl.interactive_multi_select",
+            return_value=["deepseek::deepseek-v4-pro"],
+        ),
     ):
         repl.handle_slash_command("/scoped-models")
     with patch("builtins.input", return_value="1"):
         repl.interactive_model_picker()
 
-    assert repl.model_name == "deepseek-chat"
+    assert repl.model_name == "deepseek-v4-pro"
 
 
 @pytest.mark.asyncio
@@ -595,37 +641,81 @@ def test_interactive_multi_select_non_tty() -> None:
         assert interactive_multi_select("Select models", options) is None
 
 
-def test_interactive_multi_select_tty_navigation_and_scroll(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_interactive_multi_select_tty_navigation_and_scroll() -> None:
     options = [(f"model-{index}", f"model-{index}", "") for index in range(30)]
-    input_bytes = bytearray(b"\x1b[B" * 22 + b"\r")
-    output = io.StringIO()
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_bytes(b"\x1b[B" * 22 + b"\r")
+        assert (
+            interactive_multi_select(
+                "Select models",
+                options,
+                _input=pipe_input,
+                _output=DummyOutput(),
+            )
+            == []
+        )
 
-    class FakeStdin:
-        def isatty(self) -> bool:
-            return True
 
-        def fileno(self) -> int:
-            return 123
+def test_interactive_select_search_and_cancel() -> None:
+    options = [
+        ("opt_1", "Option One", "First item"),
+        ("opt_2", "Option Two", "Second item"),
+    ]
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_text("scond\r")
+        assert (
+            interactive_select(
+                "Test Title",
+                options,
+                _input=pipe_input,
+                _output=DummyOutput(),
+            )
+            == "opt_2"
+        )
 
-    def fake_read(_fd: int, _size: int) -> bytes:
-        if not input_bytes:
-            return b""
-        value = bytes((input_bytes[0],))
-        del input_bytes[0]
-        return value
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_bytes(b"\x1b")
+        assert (
+            interactive_select(
+                "Test Title",
+                options,
+                _input=pipe_input,
+                _output=DummyOutput(),
+            )
+            is None
+        )
 
-    monkeypatch.setattr(sys, "stdin", FakeStdin())
-    monkeypatch.setattr(sys, "stdout", output)
-    monkeypatch.setattr(os, "read", fake_read)
-    monkeypatch.setattr(select, "select", lambda *_: ([123], [], []))
-    monkeypatch.setattr("termios.tcgetattr", lambda _fd: [])
-    monkeypatch.setattr("termios.tcsetattr", lambda *_: None)
-    monkeypatch.setattr("tty.setcbreak", lambda _fd: None)
 
-    assert interactive_multi_select("Select models", options) == []
-    assert "🥕 \x1b[1;38;2;255;122;0m[ ] model-22" in output.getvalue()
+def test_interactive_select_delete_requires_list_focus() -> None:
+    deleted: list[str] = []
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_bytes(b"\td\r\x1b")
+        assert (
+            interactive_select(
+                "Test Title",
+                [("opt_1", "Option One", ""), ("opt_2", "Option Two", "")],
+                on_delete=deleted.append,
+                _input=pipe_input,
+                _output=DummyOutput(),
+            )
+            is None
+        )
+    assert deleted == ["opt_1"]
+
+
+@pytest.mark.asyncio
+async def test_interactive_select_works_inside_async_loop() -> None:
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_text("two\r")
+        assert (
+            interactive_select(
+                "Test Title",
+                [("one", "One", ""), ("two", "Two", "")],
+                _input=pipe_input,
+                _output=DummyOutput(),
+            )
+            == "two"
+        )
 
 
 def test_interactive_select_non_tty() -> None:
@@ -705,6 +795,34 @@ def test_openai_oauth_save_direct_token(tmp_path: Path) -> None:
         ok, msg = mgr.save_direct_token("oauth-test-token-123")
         assert ok is True
         assert cred_store.get_api_key("openai") == "oauth-test-token-123"
+
+
+def test_discover_gemini_models_uses_native_api_contract() -> None:
+    from mia_agent.auth.config import discover_provider_models
+
+    response = MagicMock(
+        status_code=200,
+        json=lambda: {
+            "models": [
+                {"name": "models/gemini-live", "supportedGenerationMethods": ["generateContent"]},
+                {"name": "models/gemini-embed", "supportedGenerationMethods": ["embedContent"]},
+            ]
+        },
+    )
+    with patch("httpx.get", return_value=response) as get:
+        models = discover_provider_models("gemini", api_key="gemini-key")
+
+    assert models == ["gemini-live"]
+    args = get.call_args
+    assert args.args[0] == "https://generativelanguage.googleapis.com/v1beta/models"
+    assert args.kwargs["params"]["key"] == "gemini-key"
+
+
+def test_discover_rejected_credentials_do_not_show_static_models() -> None:
+    from mia_agent.auth.config import discover_provider_models
+
+    with patch("httpx.get", return_value=MagicMock(status_code=401)):
+        assert discover_provider_models("openai", api_key="revoked-key") == []
 
 
 def test_discover_provider_models_live_and_fallback() -> None:

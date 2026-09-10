@@ -20,13 +20,11 @@ from rich.text import Text
 from mia_agent.agent_runner import AgentRunner
 from mia_agent.agents import AgentManager
 from mia_agent.auth.config import (
-    ENV_API_KEY_MAP,
     ConfigManager,
     MiaConfig,
     discover_provider_models,
     validate_api_key,
 )
-from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.auth.openai_auth import OpenAIOAuthManager
 from mia_agent.events import StepEndEvent, TurnCompleteEvent
 from mia_agent.harness import AgentHarness
@@ -136,6 +134,19 @@ PROVIDER_CATALOG: dict[str, dict[str, Any]] = {
         "base_url": "http://localhost:11434/v1",
         "models": [],
     },
+    "8": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex subscription (OAuth)",
+        "base_url": "https://chatgpt.com/backend-api",
+        "models": [
+            "gpt-5.5",
+            "gpt-5.4",
+            "gpt-5.4-mini",
+            "gpt-5.3-codex",
+            "gpt-5.3-codex-spark",
+            "gpt-5.2",
+        ],
+    },
 }
 
 
@@ -157,7 +168,7 @@ class MiaREPL:
         self.console = Console()
         self.cwd = cwd or Path.cwd()
         self.config_mgr = ConfigManager()
-        self.cred_store = FileCredentialStore()
+        self.cred_store = self.config_mgr.credential_store
         self.agent_mgr = agent_manager or AgentManager()
         self.agent_id = agent or self.agent_mgr.default_agent().agent_id
         self.custom_provider = custom_provider
@@ -172,14 +183,15 @@ class MiaREPL:
         )
         if initial_model and not custom_provider:
             inferred_prov = self.config_mgr.infer_provider(initial_model)
-            has_key = self.cred_store.get_api_key(inferred_prov) or os.environ.get(
-                f"{inferred_prov.upper()}_API_KEY"
+            has_key = self.cred_store.get_api_key(inferred_prov) or self.cred_store.get_oauth(
+                inferred_prov
             )
             if not has_key:
                 initial_model = None
 
         self.model_name: str | None = initial_model
         self.available_model_sources: dict[str, str] = {}
+        self._model_sources_refreshed = False
         self.scoped_models: list[str] = list(self.config_mgr.config.scoped_models)
         if session_id and (Path(session_id).name != session_id or session_id in {".", ".."}):
             raise ValueError("Invalid session ID")
@@ -275,17 +287,17 @@ class MiaREPL:
         """Step 1: Choose Authentication Method (API Key or OpenAI Auth)."""
         if provider_hint:
             clean_hint = provider_hint.strip().lower()
-            selected_provider = clean_hint
+            is_oauth = clean_hint in {"oauth", "openai-codex"}
+            selected_provider = "openai-codex" if clean_hint == "oauth" else clean_hint
             preset = next(
                 (
                     p
                     for p in PROVIDER_CATALOG.values()
-                    if clean_hint in (p["id"], p["id"].split("-")[0])
+                    if selected_provider in (p["id"], p["id"].split("-")[0])
                 ),
                 None,
             )
             base_url = preset["base_url"] if preset else "https://opencode.ai/zen/go/v1"
-            is_oauth = False
         else:
             auth_methods = [
                 (
@@ -306,9 +318,11 @@ class MiaREPL:
 
             if method == "oauth":
                 is_oauth = True
-                selected_provider = "openai"
-                preset = next((p for p in PROVIDER_CATALOG.values() if p["id"] == "openai"), None)
-                base_url = preset["base_url"] if preset else "https://api.openai.com/v1"
+                selected_provider = "openai-codex"
+                preset = next(
+                    (p for p in PROVIDER_CATALOG.values() if p["id"] == "openai-codex"), None
+                )
+                base_url = preset["base_url"] if preset else "https://chatgpt.com/backend-api"
             else:
                 is_oauth = False
                 provider_options = [
@@ -346,10 +360,10 @@ class MiaREPL:
             self.console.print("[dim]Opening browser. If prompted, approve Mia access.[/dim]")
 
             try:
-                prompt_str = "Enter OpenAI OAuth / Session Token (or press Enter to open browser): "
+                prompt_str = "Enter OpenAI Codex access token (or press Enter to open browser): "
                 manual_token = input(prompt_str).strip()
                 if manual_token:
-                    ok, msg = oauth_mgr.save_direct_token(manual_token)
+                    ok, msg = oauth_mgr.save_codex_access_token(manual_token)
                     if not ok:
                         self.console.print(f"\n[bold red]✗ Validation failed:[/bold red] {msg}\n")
                         return
@@ -434,6 +448,7 @@ class MiaREPL:
             }
         )
         self.config_mgr.save_config(updated_cfg)
+        self._refresh_provider_catalog(provider_id)
         self._init_harness()
 
     def handle_logout(self, target_provider: str | None = None) -> None:
@@ -492,22 +507,29 @@ class MiaREPL:
             )
 
     def _provider_api_key(self, provider_id: str) -> str | None:
-        stored = self.cred_store.get_api_key(provider_id)
-        if stored:
-            return stored
-        env_names = ENV_API_KEY_MAP.get(provider_id, [f"{provider_id.upper()}_API_KEY"])
-        return next((os.environ[name] for name in env_names if os.environ.get(name)), None)
+        return self.cred_store.get_api_key(provider_id)
+
+    def _provider_is_connected(self, provider_id: str) -> bool:
+        if self._provider_api_key(provider_id):
+            return True
+        oauth = self.cred_store.get_oauth(provider_id)
+        return bool(oauth and (oauth.access or oauth.refresh))
 
     def _connected_providers(self) -> list[str]:
-        connected = self.cred_store.list_stored_providers()
+        known = {entry["id"] for entry in PROVIDER_CATALOG.values()}
+        connected = [
+            provider
+            for provider in self.cred_store.list_stored_providers()
+            if provider in known and self._provider_is_connected(provider)
+        ]
         for provider in (entry["id"] for entry in PROVIDER_CATALOG.values()):
-            if provider not in connected and self._provider_api_key(provider):
+            if provider not in connected and self._provider_is_connected(provider):
                 connected.append(provider)
         config = self.config_mgr.config
         if (
             config.default_provider == "custom"
-            and "custom" not in connected
             and config.base_urls.get("custom")
+            and "custom" not in connected
         ):
             connected.append("custom")
         return connected
@@ -528,41 +550,83 @@ class MiaREPL:
         provider, model = model_id.split("::", 1)
         return f"{provider}: {model}"
 
+    def _prune_disconnected_scope(self) -> None:
+        """Hide and persist providers that were disconnected after the last refresh."""
+        if not self._model_sources_refreshed:
+            return
+        connected = set(self._connected_providers())
+        sources = {
+            model_id: provider
+            for model_id, provider in self.available_model_sources.items()
+            if provider in connected
+        }
+        scope = [model_id for model_id in self.scoped_models if model_id in sources]
+        if sources != self.available_model_sources or scope != self.scoped_models:
+            self.available_model_sources = sources
+            self.scoped_models = scope
+            self._save_scoped_models()
+
+    def _refresh_provider_catalog(self, provider_id: str) -> list[str]:
+        """Fetch one connected provider's models and persist them under ~/.mia."""
+        config = self.config_mgr.config
+        oauth = self.cred_store.get_oauth(provider_id)
+        models = discover_provider_models(
+            provider_id,
+            api_key=self._provider_api_key(provider_id),
+            base_url=config.base_urls.get(provider_id),
+            oauth_access_token=oauth.access if oauth else None,
+            account_id=oauth.account_id if oauth else None,
+        )
+        catalog = {**config.model_catalog, provider_id: list(dict.fromkeys(models))}
+        self.config_mgr.save_config(config.model_copy(update={"model_catalog": catalog}))
+        return catalog[provider_id]
+
     def _discover_connected_models(self) -> dict[str, str]:
-        """Discover models from connected providers for the scoped-model list."""
+        """Load stored catalogs and reconcile them with connected providers."""
+        previous_scope = list(self.scoped_models)
         providers = self._connected_providers()
+        config = self.config_mgr.config
         if not providers:
+            self._model_sources_refreshed = True
             self.available_model_sources = {}
             self.scoped_models = []
+            if previous_scope:
+                self._save_scoped_models()
             return {}
 
         sources: dict[str, str] = {}
-        config = self.config_mgr.config
+        catalog = dict(config.model_catalog)
         for provider in providers:
-            models = discover_provider_models(
-                provider,
-                api_key=self._provider_api_key(provider),
-                base_url=config.base_urls.get(provider),
-            )
-            if (
-                provider == config.default_provider
-                and self.model_name
-                and self.model_name not in models
-            ):
-                models = [self.model_name, *models]
+            if provider not in catalog:
+                catalog[provider] = self._refresh_provider_catalog(provider)
+            models = list(catalog.get(provider, []))
+            catalog[provider] = list(dict.fromkeys(models))
             for model in models:
                 sources[f"{provider}::{model}"] = provider
 
+        if catalog != config.model_catalog:
+            self.config_mgr.save_config(config.model_copy(update={"model_catalog": catalog}))
+        self._model_sources_refreshed = True
         self.available_model_sources = sources
         self.scoped_models = [model_id for model_id in self.scoped_models if model_id in sources]
+        if self.scoped_models != previous_scope:
+            self._save_scoped_models()
         return sources
 
     def cycle_scoped_model(self) -> None:
         """Select the next scoped model, wrapping at the end."""
+        self._prune_disconnected_scope()
         if not self.scoped_models:
             self.console.print(
                 "[yellow]No scoped models. Run /scoped-models to discover connected models.[/yellow]\n"
             )
+            return
+        if not self.available_model_sources or any(
+            model_id not in self.available_model_sources for model_id in self.scoped_models
+        ):
+            self._discover_connected_models()
+        if not self.scoped_models:
+            self.console.print("[yellow]No connected scoped models remain.[/yellow]\n")
             return
         active_id = f"{self.config_mgr.config.default_provider}::{self.model_name}"
         current = self.scoped_models.index(active_id) if active_id in self.scoped_models else -1
@@ -577,6 +641,7 @@ class MiaREPL:
         """Select the active model from the discovered scoped-model list."""
         saved_draft = self.prompt_session.get_draft()
         try:
+            self._discover_connected_models()
             if not self.scoped_models:
                 self.console.print(
                     "[yellow]No scoped models. Run /scoped-models to discover connected models first.[/yellow]\n"
@@ -1110,7 +1175,7 @@ class MiaREPL:
                 )
                 return True
 
-            if args.lower() == "all" or not self.scoped_models:
+            if args.lower() == "all":
                 self.scoped_models = list(model_sources)
             elif args:
                 requested = [model.strip() for model in args.split(",") if model.strip()]
