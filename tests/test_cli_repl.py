@@ -79,6 +79,39 @@ def test_help_contract_describes_only_implemented_behavior(tmp_path: Path) -> No
     assert "architecture" not in init_output.lower()
 
 
+def test_adaptive_toolbar_labels_provider_usage_and_context() -> None:
+    full = format_status_toolbar(
+        workspace_name="mia",
+        model_name="gpt-5",
+        provider_name="openai-codex",
+        tokens=12500,
+        current_context_tokens=3200,
+        window_tokens=128000,
+        run_state="responding",
+        width=120,
+    )
+    assert "Provider" in full.value
+    assert "openai-codex" in full.value
+    assert "Lifetime usage" in full.value
+    assert "Current context" in full.value
+    assert "3.2k" in full.value
+    assert "[responding]" in full.value
+
+    narrow = format_status_toolbar(
+        workspace_name="mia",
+        model_name="gpt-5",
+        provider_name="openai-codex",
+        tokens=12500,
+        current_context_tokens=3200,
+        window_tokens=128000,
+        run_state="tool",
+        width=50,
+    )
+    assert "gpt-5" in narrow.value
+    assert "[tool]" in narrow.value
+    assert "Current context" not in narrow.value
+
+
 def test_format_status_toolbar() -> None:
     toolbar_html = format_status_toolbar(
         workspace_name="mia",
@@ -161,6 +194,28 @@ def test_double_escape_opens_tree_only_on_second_press() -> None:
 
     assert buffer.text == "/tree"
     buffer.validate_and_handle.assert_called_once_with()
+
+
+def test_searchable_agent_and_command_pickers_preserve_draft(tmp_path: Path) -> None:
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    manager.create_agent("researcher", display_name="Researcher", tools=[])
+    repl = MiaREPL(
+        agent="mia",
+        agent_manager=manager,
+        cwd=tmp_path,
+        custom_provider=MockProvider(),
+    )
+    repl.prompt_session.set_draft("keep this draft")
+
+    with patch("mia_cli.repl.interactive_select", return_value="researcher") as select:
+        repl.interactive_agent_picker()
+    assert select.call_args.args[0] == "🤖 Switch Agent"
+    assert repl.agent_id == "researcher"
+    assert repl.prompt_session.get_draft() == "keep this draft"
+
+    with patch("mia_cli.repl.interactive_select", return_value="/cost"):
+        repl.interactive_command_picker()
+    assert repl.prompt_session.get_draft() == "keep this draft"
 
 
 def test_repl_agent_command_selects_named_agent(tmp_path: Path) -> None:
