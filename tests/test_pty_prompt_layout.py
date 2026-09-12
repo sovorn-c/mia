@@ -232,6 +232,37 @@ async def test_approval_explicit_action_can_approve_and_errors_deny() -> None:
     assert repl.prompt_session.get_draft() == "keep this too"
 
 
+@pytest.mark.asyncio
+async def test_pipe_approval_uses_dedicated_async_focus(tmp_path) -> None:
+    from mia_ai.providers.mock import MockProvider
+    from mia_ai.types import ToolCall
+    from mia_cli.repl import MiaREPL
+
+    provider = MockProvider()
+    provider.queue_tool_call(
+        ToolCall(
+            id="approval-call",
+            name="write_file",
+            arguments={"path": "approved.txt", "content": "approved"},
+        )
+    )
+    provider.queue_text_response("done")
+
+    with create_pipe_input() as pipe:
+        repl = MiaREPL(
+            cwd=tmp_path,
+            custom_provider=provider,
+            prompt_input=pipe,
+            prompt_output=DummyOutput(),
+        )
+        task = asyncio.create_task(repl.execute_turn("write the file"))
+        await asyncio.sleep(0.1)
+        pipe.send_text("y\r")
+        await asyncio.wait_for(task, timeout=3.0)
+
+    assert (tmp_path / "approved.txt").read_text() == "approved"
+
+
 def test_narrow_terminal_toolbar_layout() -> None:
     """SC-e13s04-P1-01: Toolbar adapts to narrow terminal widths without clipping or wrapping."""
     tb = format_status_toolbar(
