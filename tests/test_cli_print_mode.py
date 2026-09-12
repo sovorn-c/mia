@@ -134,9 +134,10 @@ def test_rich_stream_renderer_output() -> None:
 
 
 def test_admitted_prompt_is_rendered_once_with_truthful_lifecycle() -> None:
+    from rich.console import Console
+
     from mia_agent.events import AssistantChunkEvent, TurnCompleteEvent, TurnStartEvent
     from mia_cli.renderers.rich_stream import RichStreamRenderer
-    from rich.console import Console
 
     console = Console(record=True, force_terminal=False, no_color=True, highlight=False)
     renderer = RichStreamRenderer(console=console, plain_mode=True)
