@@ -159,6 +159,62 @@ def test_approval_focus_is_distinct_and_restores_draft() -> None:
     assert repl.prompt_session.get_draft() == "in-progress user prompt"
 
 
+@pytest.mark.asyncio
+async def test_approval_is_async_distinct_from_draft_and_fail_closed() -> None:
+    import inspect
+    from unittest.mock import patch
+
+    from mia_ai.providers.mock import MockProvider
+    from mia_cli.repl import MiaREPL
+    from mia_middleware.access import ApprovalRequest
+
+    repl = MiaREPL(custom_provider=MockProvider())
+    repl.prompt_session.set_draft("draft includes y")
+    request = ApprovalRequest(
+        effect="side-effecting",
+        tool_name="write_file",
+        arguments={"path": "safe.txt", "content": "safe"},
+    )
+
+    async def approval_input() -> str:
+        assert repl.stream_renderer.phase == "approval"
+        await asyncio.sleep(0)
+        return ""
+
+    repl.prompt_session.read_approval_async = approval_input  # type: ignore[method-assign]
+    with patch("builtins.input", side_effect=AssertionError("blocking input used")):
+        decision = repl._request_tool_approval(request)
+        assert inspect.isawaitable(decision)
+        assert await decision is False
+
+    assert repl.prompt_session.get_draft() == "draft includes y"
+
+
+@pytest.mark.asyncio
+async def test_approval_explicit_action_can_approve_and_errors_deny() -> None:
+    from unittest.mock import AsyncMock
+
+    from mia_ai.providers.mock import MockProvider
+    from mia_cli.repl import MiaREPL
+    from mia_middleware.access import ApprovalRequest
+
+    repl = MiaREPL(custom_provider=MockProvider())
+    repl.prompt_session.set_draft("keep this draft")
+    request = ApprovalRequest(effect="side-effecting", tool_name="bash", arguments={})
+
+    repl.prompt_session.read_approval_async = AsyncMock(return_value="y")  # type: ignore[method-assign]
+    assert await repl._request_tool_approval(request) is True
+    assert repl.prompt_session.get_draft() == "keep this draft"
+
+    async def broken_approval() -> str:
+        raise RuntimeError("approval unavailable")
+
+    repl.prompt_session.set_draft("keep this too")
+    repl.prompt_session.read_approval_async = broken_approval  # type: ignore[method-assign]
+    assert await repl._request_tool_approval(request) is False
+    assert repl.prompt_session.get_draft() == "keep this too"
+
+
 def test_narrow_terminal_toolbar_layout() -> None:
     """SC-e13s04-P1-01: Toolbar adapts to narrow terminal widths without clipping or wrapping."""
     tb = format_status_toolbar(
