@@ -67,12 +67,55 @@ def test_command_discovery_has_one_truthful_canonical_list() -> None:
 
     canonical = [command for command, _ in COMMAND_HINTS]
 
-    assert len(canonical) == 18
+    assert len(canonical) == 19
     assert "/scoped-models" in canonical
+    assert "/tool" in canonical
     assert "/stop" not in canonical
     assert canonical == SLASH_COMMANDS
     assert canonical == list(COMMAND_DESCRIPTIONS)
     assert "/abort" not in COMMAND_ALIASES
+
+
+def test_tool_row_toggle_is_reachable_through_repl_command(tmp_path: Path) -> None:
+    from rich.console import Console
+
+    from mia_agent.events import ToolCallEvent, ToolResultEvent, TurnStartEvent
+
+    console = Console(record=True, force_terminal=False, no_color=True, highlight=False)
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = console
+    repl.stream_renderer.console = console
+    repl.stream_renderer.on_event(TurnStartEvent(turn_index=1, user_prompt="inspect files"))
+    repl.stream_renderer.on_event(
+        ToolCallEvent(call_id="call-1", tool_name="bash", arguments={"command": "printf safe"})
+    )
+    repl.stream_renderer.on_event(
+        ToolResultEvent(call_id="call-1", tool_name="bash", output="safe output")
+    )
+
+    assert repl.handle_slash_command("/tool call-1") is True
+    assert repl.stream_renderer.tool_rows["call-1"].expanded is True
+    output = console.export_text()
+    assert "[tool expanded] call-1" in output
+    assert "safe output" in output
+
+    assert repl.handle_slash_command("/tool call-1") is True
+    assert repl.stream_renderer.tool_rows["call-1"].expanded is False
+    collapsed_output = console.export_text()
+    assert "[tool collapsed] call-1" in collapsed_output
+    assert "No retained Tool row" not in collapsed_output
+
+
+def test_dynamic_display_text_replaces_terminal_controls() -> None:
+    from mia_cli.interactive_input import _safe_status_text
+    from mia_cli.renderers.rich_stream import _safe_display_text
+    from mia_cli.repl import _safe_cli_text
+
+    dirty = "line\nbell\a backspace\b vertical\v form\f end\r"
+    for sanitizer in (_safe_display_text, _safe_cli_text, _safe_status_text):
+        clean = sanitizer(dirty)
+        assert all(ord(char) >= 32 for char in clean)
+        assert "line bell" in clean
 
 
 def test_help_contract_describes_only_implemented_behavior(tmp_path: Path) -> None:
@@ -81,7 +124,7 @@ def test_help_contract_describes_only_implemented_behavior(tmp_path: Path) -> No
 
     repl.handle_slash_command("/help")
     help_output = repl.console.export_text()
-    assert "18 Canonical Slash Commands" in help_output
+    assert "19 Canonical Slash Commands" in help_output
     assert "shortcuts" not in help_output
     assert "/stop" not in help_output
 
@@ -1214,7 +1257,7 @@ def test_help_discovery_exposes_essential_keyboard_and_command_alternatives(
     output = repl.console.export_text()
 
     # Canonical command table is present
-    assert "18 Canonical Slash Commands" in output
+    assert "19 Canonical Slash Commands" in output
 
     # Essential keyboard actions and command equivalents are visible in text without color/icons
     assert "Essential Actions & Keyboard Equivalents" in output

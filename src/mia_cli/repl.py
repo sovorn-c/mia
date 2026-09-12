@@ -7,6 +7,7 @@ import contextlib
 import getpass
 import os
 import subprocess
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -51,8 +52,8 @@ _MAX_CLI_DISPLAY_CHARS = 4000
 
 
 def _safe_cli_text(value: object) -> str:
-    """Bound dynamic CLI text and remove terminal escape/control delimiters."""
-    text = str(value).replace("\x1b", "").replace("\r", "")
+    """Bound dynamic CLI text and replace terminal controls with spaces."""
+    text = "".join(" " if unicodedata.category(char) == "Cc" else char for char in str(value))
     if len(text) <= _MAX_CLI_DISPLAY_CHARS:
         return text
     return text[: _MAX_CLI_DISPLAY_CHARS - 1] + "…"
@@ -84,6 +85,7 @@ COMMAND_AVAILABILITY: dict[str, str] = {
     "/model": "Idle only",
     "/scoped-models": "Idle only",
     "/agent": "Idle only",
+    "/tool": "Always",
     "/queue": "Busy only",
     "/diff": "Always",
     "/cost": "Always",
@@ -1266,6 +1268,16 @@ class MiaREPL:
 
         elif cmd in ("/login", "/auth"):
             self.interactive_login(args)
+            return True
+
+        elif cmd == "/tool":
+            if not args:
+                self.console.print("[tool unavailable] Usage: /tool <call-id>\n")
+            elif self.stream_renderer.toggle_tool_row(args) is None:
+                self.console.print(
+                    f"[tool unavailable] No retained Tool row for {_safe_cli_text(args)}.\n",
+                    markup=False,
+                )
             return True
 
         elif cmd == "/queue":

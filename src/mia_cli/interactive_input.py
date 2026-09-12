@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import sys
 import time
+import unicodedata
 from collections.abc import Callable, Iterable
 from html import escape
 from pathlib import Path
@@ -35,6 +36,7 @@ COMMAND_HINTS: list[tuple[str, str]] = [
     ("/model", "Switch the active model (alias: /llm)"),
     ("/scoped-models", "Discover and set models used by Ctrl+P cycling"),
     ("/agent", "Show or switch the active Agent"),
+    ("/tool", "Expand or collapse a retained Tool row: /tool <call-id>"),
     ("/queue", "Queue one explicit follow-up during a Run (Ctrl+Q fallback)"),
     ("/diff", "Show the Git diff or report Git errors (alias: /changes)"),
     ("/cost", "Show session token and cost totals (alias: /stats, /tokens)"),
@@ -140,8 +142,8 @@ class SafeFileHistory(History):
 
 def _safe_status_text(value: str) -> str:
     """Keep user-controlled status values single-line and safe for prompt_toolkit HTML."""
-    clean = " ".join(str(value).replace("\r", " ").replace("\n", " ").split())
-    return escape(clean, quote=False)
+    clean = "".join(" " if unicodedata.category(char) == "Cc" else char for char in str(value))
+    return escape(" ".join(clean.split()), quote=False)
 
 
 def format_status_toolbar(

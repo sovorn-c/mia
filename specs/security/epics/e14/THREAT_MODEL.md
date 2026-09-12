@@ -28,7 +28,7 @@
 
 ## Verification evidence
 
-- `uv run --offline pytest` — 402 passed after the final renderer correction.
+- `uv run --offline pytest` — 404 passed after the final renderer correction and collapse-path fix.
 - `uv run --offline ruff check .` — passed.
 - `uv run --offline mypy src` — passed.
 - The focused approval, Tool-row, lifecycle, selector, footer, and queue tests

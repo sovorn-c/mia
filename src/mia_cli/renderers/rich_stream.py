@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import time
+import unicodedata
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -51,8 +52,8 @@ class ToolRow:
 
 
 def _safe_display_text(value: Any) -> str:
-    """Bound terminal display text and remove control characters without changing content semantics."""
-    text = str(value).replace("\x1b", "").replace("\r", "")
+    """Bound terminal display text and replace terminal controls with spaces."""
+    text = "".join(" " if unicodedata.category(char) == "Cc" else char for char in str(value))
     if len(text) <= _MAX_DISPLAY_CHARS:
         return text
     return text[: _MAX_DISPLAY_CHARS - 1] + "…"
@@ -231,11 +232,11 @@ class RichStreamRenderer:
                 return
         self.phase = "approval"
 
-    def toggle_tool_row(self, call_id: str) -> bool:
-        """Expand or collapse one retained Tool result and return its new state."""
+    def toggle_tool_row(self, call_id: str) -> bool | None:
+        """Expand or collapse one retained Tool result; None means no such row."""
         row = self.tool_rows.get(call_id)
         if row is None:
-            return False
+            return None
         row.expanded = not row.expanded
         state = "expanded" if row.expanded else "collapsed"
         self.console.print(f"[tool {state}] {row.call_id} {row.tool_name}", markup=False)
