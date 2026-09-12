@@ -363,22 +363,22 @@ class RichStreamRenderer:
         elif isinstance(event, ToolResultEvent):
             self._stop_status()
             self._end_streams()
-            row = self.tool_rows.get(event.call_id)
-            if row is None:
-                row = ToolRow(
+            result_row: ToolRow | None = self.tool_rows.get(event.call_id)
+            if result_row is None:
+                result_row = ToolRow(
                     call_id=event.call_id,
                     tool_name=_safe_display_text(event.tool_name),
                     summary=_safe_display_text(event.tool_name),
                 )
-                self.tool_rows[event.call_id] = row
-            row.state = "error" if event.is_error else "completed"
-            row.result = _safe_value_text(event.output)
-            self._print_tool_row(row, event.duration_ms)
+                self.tool_rows[event.call_id] = result_row
+            result_row.state = "error" if event.is_error else "completed"
+            result_row.result = _safe_value_text(event.output)
+            self._print_tool_row(result_row, event.duration_ms)
 
             if self.turn_audit_log:
-                self.turn_audit_log[-1]["status"] = row.state
+                self.turn_audit_log[-1]["status"] = result_row.state
                 self.turn_audit_log[-1]["duration_ms"] = event.duration_ms
-                self.turn_audit_log[-1]["output"] = row.result
+                self.turn_audit_log[-1]["output"] = result_row.result
 
             self.phase = "thinking"
             self._start_status("Thinking")
