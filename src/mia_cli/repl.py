@@ -1137,6 +1137,8 @@ class MiaREPL:
                 )
                 self.interactive_login()
                 if not self.harness:
+                    self.stream_renderer.phase = "cancelled"
+                    self._run_state = "cancelled"
                     self.console.print(
                         "[yellow]Turn cancelled. Please configure a model with /login to start coding.[/yellow]\n"
                     )
@@ -1205,10 +1207,13 @@ class MiaREPL:
             self._run_state = "failure"
             self._restore_queued_follow_up()
             self.stream_renderer._stop_status()
+            safe_error = str(exc).replace("\x1b", "").replace("\r", "")[:4000]
             if self.stream_renderer.plain_mode:
-                self.console.print(f"[error] Error during execution: {exc}", markup=False)
+                self.console.print(f"[error] Error during execution: {safe_error}", markup=False)
             else:
-                self.console.print(f"\n[bold red]Error during execution:[/bold red] {exc}\n")
+                self.console.print(
+                    Text(f"\nError during execution: {safe_error}\n", style="bold red")
+                )
         finally:
             self.prompt_session.is_busy = False
             self._run_state = "idle"

@@ -340,7 +340,7 @@ class RichStreamRenderer:
             self._stop_status()
             self._end_streams()
             row = ToolRow(
-                call_id=event.call_id,
+                call_id=_safe_display_text(event.call_id),
                 tool_name=_safe_display_text(event.tool_name),
                 summary=self._tool_summary(event),
                 arguments=_safe_value_text(event.arguments),
@@ -366,7 +366,7 @@ class RichStreamRenderer:
             result_row: ToolRow | None = self.tool_rows.get(event.call_id)
             if result_row is None:
                 result_row = ToolRow(
-                    call_id=event.call_id,
+                    call_id=_safe_display_text(event.call_id),
                     tool_name=_safe_display_text(event.tool_name),
                     summary=_safe_display_text(event.tool_name),
                 )
@@ -392,7 +392,9 @@ class RichStreamRenderer:
             self._stop_status()
             self._end_streams()
             if self.plain_mode:
-                self.console.print(f"[error] Agent error: {event.error}", markup=False)
+                self.console.print(
+                    f"[error] Agent error: {_safe_display_text(event.error)}", markup=False
+                )
             else:
                 self.console.print(
                     Text(f"✗ Agent error: {_safe_display_text(event.error)}", style="bold red")
@@ -406,7 +408,9 @@ class RichStreamRenderer:
             if event.cancelled:
                 if self.plain_mode:
                     self.console.print(
-                        f"[cancelled] Run cancelled ({event.stage}): {event.error}", markup=False
+                        f"[cancelled] Run cancelled ({_safe_display_text(event.stage)}): "
+                        f"{_safe_display_text(event.error)}",
+                        markup=False,
                     )
                 else:
                     self.console.print(
@@ -419,7 +423,9 @@ class RichStreamRenderer:
             else:
                 if self.plain_mode:
                     self.console.print(
-                        f"[error] Run error ({event.stage}): {event.error}", markup=False
+                        f"[error] Run error ({_safe_display_text(event.stage)}): "
+                        f"{_safe_display_text(event.error)}",
+                        markup=False,
                     )
                 else:
                     self.console.print(
@@ -450,7 +456,10 @@ class RichStreamRenderer:
                 style = "yellow"
                 label = "cancelled"
             else:
-                outcome = f"Turn failed ({event.stop_reason}) in {elapsed:.1f}s, [{step_word}]"
+                outcome = (
+                    f"Turn failed ({_safe_display_text(event.stop_reason)}) in "
+                    f"{elapsed:.1f}s, [{step_word}]"
+                )
                 style = "bold red"
                 label = "error"
             if self.plain_mode:
