@@ -64,7 +64,7 @@ def _safe_value_text(value: Any) -> str:
         safe_value = sanitize_arguments(value)
         if isinstance(safe_value, str):
             return _safe_display_text(safe_value)
-        return _safe_display_text(json.dumps(safe_value, ensure_ascii=False, default=str))
+        return _safe_display_text(json.dumps(safe_value, ensure_ascii=False))
     except Exception:
         return "[REDACTED]"
 
@@ -355,7 +355,7 @@ class RichStreamRenderer:
                 {
                     "call_id": event.call_id,
                     "tool_name": row.tool_name,
-                    "arguments": sanitize_arguments(event.arguments),
+                    "arguments": _safe_value_text(event.arguments),
                     "status": "pending",
                 }
             )
