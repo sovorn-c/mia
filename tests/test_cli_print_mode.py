@@ -188,9 +188,10 @@ def test_tool_rows_are_keyed_compact_and_expand_sanitized_results() -> None:
     assert "safe output" not in output
 
     assert renderer.toggle_tool_row("call-1") is True
-    assert "[tool expanded] call-1" in console.export_text()
-    assert "safe output" in console.export_text()
-    assert "sk-live-secret" not in console.export_text()
+    expanded_output = console.export_text(clear=False)
+    assert "[tool expanded] call-1" in expanded_output
+    assert "safe output" in expanded_output
+    assert "sk-live-secret" not in expanded_output
     assert renderer.toggle_tool_row("call-1") is False
     assert renderer.tool_rows["call-1"].expanded is False
 
@@ -226,8 +227,8 @@ def test_tool_rows_keep_error_and_cancelled_states_attributable() -> None:
     assert renderer.tool_rows["cancelled"].state == "cancelled"
     output = console.export_text()
     assert "[tool error] write_file" in output
-    assert "[tool cancelled] cancelled" in output
-    assert "[tool completed] cancelled" not in output
+    assert "[tool cancelled] bash" in output
+    assert "[tool completed] bash" not in output
 
 
 def test_cli_run_agent_loop_uses_run_request_and_closeable_stream() -> None:
