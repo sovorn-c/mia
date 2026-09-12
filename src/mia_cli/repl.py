@@ -30,6 +30,7 @@ from mia_agent.events import StepEndEvent, TurnCompleteEvent
 from mia_agent.harness import AgentHarness
 from mia_agent.runtime_events import PluginDiagnosticEvent, RunErrorEvent
 from mia_agent.runtime_models import AgentRuntime, RunRequest
+from mia_agent.session.compactor import estimate_chat_messages_tokens
 from mia_agent.session.entries import LeafEntry, MessageEntry, SessionInfoEntry
 from mia_agent.session.jsonl import JsonlSessionStore
 from mia_agent.session.tree import SessionTree
@@ -233,6 +234,9 @@ class MiaREPL:
         )
         if not provider_name and self.model_name:
             provider_name = self.config_mgr.infer_provider(self.model_name)
+        current_context_tokens = (
+            estimate_chat_messages_tokens(self.harness.messages) if self.harness else None
+        )
         return format_status_toolbar(
             workspace_name=self.cwd.name or str(self.cwd),
             model_name=self.model_name or "none",
@@ -242,6 +246,7 @@ class MiaREPL:
             thinking_enabled=self.show_thinking_trace,
             agent_id=self.agent_id,
             session_id=self.session_id,
+            current_context_tokens=current_context_tokens,
             run_state=self.stream_renderer.phase,
             width=self.console.width,
         )
