@@ -6,7 +6,7 @@ import json
 import os
 import sys
 import time
-from typing import Any
+from typing import Any, Literal
 
 import rich.spinner
 from rich.console import Console
@@ -27,6 +27,19 @@ from mia_agent.events import (
     TurnStartEvent,
 )
 from mia_agent.runtime_events import RunErrorEvent
+
+RunPhase = Literal[
+    "idle", "thinking", "responding", "tool", "approval", "success", "failure", "cancelled"
+]
+_MAX_DISPLAY_CHARS = 4000
+
+
+def _safe_display_text(value: Any) -> str:
+    """Bound terminal display text and remove control characters without changing content semantics."""
+    text = str(value).replace("\x1b", "").replace("\r", "")
+    if len(text) <= _MAX_DISPLAY_CHARS:
+        return text
+    return text[: _MAX_DISPLAY_CHARS - 1] + "…"
 
 
 def resolve_plain_mode(
@@ -135,11 +148,15 @@ class RichStreamRenderer:
         self.turn_audit_log: list[dict[str, Any]] = []
         self._active_status: Live | None = None
         self._status_widget: AnimatedWorkingStatus | None = None
+        self.phase: RunPhase = "idle"
+        self._user_prompt_rendered = False
 
     def start_turn(self) -> None:
         """Called immediately upon user submission (Enter) to start elapsed timing and animation."""
         self.turn_count += 1
         self.turn_start_time = time.time()
+        self.phase = "thinking"
+        self._user_prompt_rendered = False
         self.thinking_buffer.clear()
         self.turn_audit_log.clear()
         self._end_streams()
@@ -178,6 +195,10 @@ class RichStreamRenderer:
     def on_event(self, event: AgentEvent | RunErrorEvent) -> None:
         """Handle a single AgentEvent and print minimalist output."""
         if isinstance(event, TurnStartEvent):
+            self.phase = "thinking"
+            if not self._user_prompt_rendered:
+                self.console.print(f"[user] {_safe_display_text(event.user_prompt)}", markup=False)
+                self._user_prompt_rendered = True
             if self.turn_start_time <= 0:
                 self.turn_count += 1
                 self.turn_start_time = time.time()
@@ -191,6 +212,7 @@ class RichStreamRenderer:
 
         elif isinstance(event, AssistantChunkEvent):
             if event.thought_delta:
+                self.phase = "thinking"
                 self.thinking_buffer.append(event.thought_delta)
                 if self.show_thinking_trace:
                     self._stop_status()
@@ -215,6 +237,7 @@ class RichStreamRenderer:
                     self._start_status("Thinking")
 
             if event.delta_text:
+                self.phase = "responding"
                 self._stop_status()
                 if self._in_thought:
                     self.console.print("\n")
@@ -231,6 +254,7 @@ class RichStreamRenderer:
                     self.console.print(Text(event.delta_text), end="")
 
         elif isinstance(event, ToolCallEvent):
+            self.phase = "tool"
             self._stop_status()
             self._end_streams()
             args = event.arguments
@@ -312,6 +336,7 @@ class RichStreamRenderer:
             self._end_streams()
 
         elif isinstance(event, AgentErrorEvent):
+            self.phase = "failure"
             self._stop_status()
             self._end_streams()
             if self.plain_mode:
@@ -320,6 +345,7 @@ class RichStreamRenderer:
                 self.console.print(f"[bold red]✗ Agent error: {event.error}[/bold red]")
 
         elif isinstance(event, RunErrorEvent):
+            self.phase = "cancelled" if event.cancelled else "failure"
             self._stop_status()
             self._end_streams()
             if event.cancelled:
@@ -342,6 +368,7 @@ class RichStreamRenderer:
                     )
 
         elif isinstance(event, TurnCompleteEvent):
+            self.phase = "failure" if event.stop_reason == "error" else "success"
             self._stop_status()
             self._end_streams()
             cost_str = f" | ${event.total_cost_usd:.4f}" if event.total_cost_usd > 0 else ""

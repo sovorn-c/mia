@@ -1034,7 +1034,7 @@ class MiaREPL:
         assert self.harness is not None
         assert self.agent_runtime is not None
 
-        self._run_state = "running"
+        self._run_state = "thinking"
         self.prompt_session.is_busy = True
         try:
             self.stream_renderer.show_thinking_trace = self.show_thinking_trace
@@ -1056,10 +1056,12 @@ class MiaREPL:
                     event = envelope.event
                     if isinstance(event, RunErrorEvent):
                         self.stream_renderer.on_event(event)
+                        self._run_state = self.stream_renderer.phase
                         continue
                     if isinstance(event, PluginDiagnosticEvent):
                         continue
                     self.stream_renderer.on_event(event)
+                    self._run_state = self.stream_renderer.phase
                     if isinstance(event, StepEndEvent):
                         self.total_tokens += event.input_tokens + event.output_tokens
                     elif isinstance(event, TurnCompleteEvent):
