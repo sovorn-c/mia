@@ -388,12 +388,15 @@ class RichStreamRenderer:
 
         elif isinstance(event, AgentErrorEvent):
             self.phase = "failure"
+            self._cancel_pending_tool_rows("error")
             self._stop_status()
             self._end_streams()
             if self.plain_mode:
                 self.console.print(f"[error] Agent error: {event.error}", markup=False)
             else:
-                self.console.print(f"[bold red]✗ Agent error: {event.error}[/bold red]")
+                self.console.print(
+                    Text(f"✗ Agent error: {_safe_display_text(event.error)}", style="bold red")
+                )
 
         elif isinstance(event, RunErrorEvent):
             self.phase = "cancelled" if event.cancelled else "failure"
@@ -407,7 +410,11 @@ class RichStreamRenderer:
                     )
                 else:
                     self.console.print(
-                        f"[yellow]⚠️  Run cancelled ({event.stage}): {event.error}[/yellow]"
+                        Text(
+                            f"⚠️  Run cancelled ({_safe_display_text(event.stage)}): "
+                            f"{_safe_display_text(event.error)}",
+                            style="yellow",
+                        )
                     )
             else:
                 if self.plain_mode:
@@ -416,25 +423,40 @@ class RichStreamRenderer:
                     )
                 else:
                     self.console.print(
-                        f"[bold red]✗ Run error ({event.stage}): {event.error}[/bold red]"
+                        Text(
+                            f"✗ Run error ({_safe_display_text(event.stage)}): "
+                            f"{_safe_display_text(event.error)}",
+                            style="bold red",
+                        )
                     )
 
         elif isinstance(event, TurnCompleteEvent):
-            self.phase = "success" if event.stop_reason == "stop" else "failure"
+            was_cancelled = self.phase == "cancelled"
+            successful = (
+                event.stop_reason == "stop" and not was_cancelled and self.phase != "failure"
+            )
+            self.phase = "success" if successful else "cancelled" if was_cancelled else "failure"
             self._stop_status()
             self._end_streams()
             cost_str = f" | ${event.total_cost_usd:.4f}" if event.total_cost_usd > 0 else ""
             elapsed = time.time() - self.turn_start_time if self.turn_start_time > 0 else 0.0
             step_word = "1 step" if event.total_steps == 1 else f"{event.total_steps} steps"
-            if self.plain_mode:
-                self.console.print(
-                    f"\n[ok] Turn completed in {elapsed:.1f}s, [{step_word}]{cost_str}\n",
-                    markup=False,
-                )
+            if successful:
+                outcome = f"Turn completed in {elapsed:.1f}s, [{step_word}]{cost_str}"
+                style = "dim green"
+                label = "ok"
+            elif was_cancelled:
+                outcome = f"Turn cancelled in {elapsed:.1f}s, [{step_word}]"
+                style = "yellow"
+                label = "cancelled"
             else:
-                self.console.print(
-                    f"\n[dim green]✓ Turn completed in {elapsed:.1f}s, [{step_word}]{cost_str}[/dim green]\n"
-                )
+                outcome = f"Turn failed ({event.stop_reason}) in {elapsed:.1f}s, [{step_word}]"
+                style = "bold red"
+                label = "error"
+            if self.plain_mode:
+                self.console.print(f"\n[{label}] {outcome}\n", markup=False)
+            else:
+                self.console.print(Text(f"\n{outcome}\n", style=style))
 
     def render_audit_log(self) -> None:
         """Render detailed post-turn tool execution logs and diffs."""
@@ -451,13 +473,20 @@ class RichStreamRenderer:
             tool = item["tool_name"]
             status = item.get("status", "unknown")
             dur = item.get("duration_ms", 0.0)
-            status_style = "bold green" if status == "succeeded" else "bold red"
+            status_style = "bold green" if status in {"succeeded", "completed"} else "bold red"
 
-            self.console.print(
-                f"[bold cyan]Step #{i}:[/bold cyan] [{status_style}]{status.upper()}[/{status_style}] [bold white]{tool}[/bold white] [dim]({dur:.1f}ms)[/dim]"
+            audit_line = Text.assemble(
+                (f"Step #{i}: ", "bold cyan"),
+                (status.upper(), status_style),
+                (f" {tool} ", "bold white"),
+                (f"({dur:.1f}ms)", "dim"),
             )
+            self.console.print(audit_line)
             self.console.print(
-                f"  [dim]Arguments:[/dim] {json.dumps(item.get('arguments', {}), ensure_ascii=False)}"
+                Text(
+                    f"  Arguments: {json.dumps(item.get('arguments', {}), ensure_ascii=False)}",
+                    style="dim",
+                )
             )
 
             output = str(item.get("output", ""))

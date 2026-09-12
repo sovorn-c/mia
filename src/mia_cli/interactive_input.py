@@ -489,10 +489,7 @@ class LivePromptSession:
     async def read_approval_async(self, prompt_prefix: str = "Approve? [y/N] ") -> str:
         """Read approval in a separate prompt-toolkit focus, never from the draft buffer."""
         if not sys.stdin.isatty() and not getattr(self.approval_session, "_input", None):
-            try:
-                return await asyncio.to_thread(input, prompt_prefix)
-            except (EOFError, KeyboardInterrupt, OSError):
-                return ""
+            return ""
         try:
             return await self.approval_session.prompt_async(
                 [("class:prompt", prompt_prefix)],

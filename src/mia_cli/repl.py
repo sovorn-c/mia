@@ -7,7 +7,6 @@ import contextlib
 import getpass
 import os
 import subprocess
-from collections.abc import Awaitable
 from pathlib import Path
 from typing import Any
 
@@ -268,14 +267,6 @@ class MiaREPL:
         )
         self.harness = self.agent_runtime.harness
 
-    def _request_tool_approval(self, request: ApprovalRequest) -> bool | Awaitable[bool]:
-        """Return an async approval decision in the interactive loop, with a test-era sync fallback."""
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return self._request_tool_approval_sync_compat(request)
-        return self._request_tool_approval_async(request)
-
     def _print_approval_request(self, request: ApprovalRequest) -> None:
         """Render only the sanitized, attributable approval summary."""
         self.console.print(
@@ -284,21 +275,7 @@ class MiaREPL:
             markup=False,
         )
 
-    def _request_tool_approval_sync_compat(self, request: ApprovalRequest) -> bool:
-        """Keep direct synchronous callback callers fail-closed without affecting the async path."""
-        saved_draft = self.prompt_session.get_draft()
-        self.stream_renderer.set_tool_approval(request.tool_name)
-        self._run_state = "approval"
-        self._print_approval_request(request)
-        try:
-            return input("Approve? [y/N] ").strip().lower() in {"y", "yes"}
-        except (EOFError, KeyboardInterrupt, OSError):
-            return False
-        finally:
-            self.prompt_session.restore_draft(saved_draft)
-            self._run_state = "idle"
-
-    async def _request_tool_approval_async(self, request: ApprovalRequest) -> bool:
+    async def _request_tool_approval(self, request: ApprovalRequest) -> bool:
         """Read approval through a separate prompt-toolkit buffer and fail closed on every error."""
         saved_draft = self.prompt_session.get_draft()
         self.prompt_session.approval_active = True

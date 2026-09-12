@@ -371,7 +371,8 @@ def test_plain_mode_emits_semantic_status_labels_for_success_and_error() -> None
     assert "[running] bash" in output
     assert "[error] bash" in output
     assert "[error] Agent error: failed to complete step" in output
-    assert "[ok] Turn completed" in output
+    assert "[error] Turn failed (error)" in output
+    assert "[ok] Turn completed" not in output
 
     # Must contain no ANSI escape sequences
     assert "\x1b[" not in output

@@ -146,10 +146,11 @@ def test_draft_preserved_across_cancellation() -> None:
     mock_buffer.reset.assert_called_once()
 
 
-def test_approval_focus_is_distinct_and_restores_draft() -> None:
+@pytest.mark.asyncio
+async def test_approval_focus_is_distinct_and_restores_draft() -> None:
     """SC-e13s02-P0-03: Approval input is separate and preserves existing draft."""
     from pathlib import Path
-    from unittest.mock import patch
+    from unittest.mock import AsyncMock
 
     from rich.console import Console
 
@@ -167,10 +168,8 @@ def test_approval_focus_is_distinct_and_restores_draft() -> None:
         agent_id="mia",
     )
 
-    # User answers 'y' to approval
-    with patch("builtins.input", return_value="y"):
-        approved = repl._request_tool_approval(req)
-        assert approved is True
+    repl.prompt_session.read_approval_async = AsyncMock(return_value="y")  # type: ignore[method-assign]
+    assert await repl._request_tool_approval(req) is True
 
     # Draft remains intact and was not consumed as approval
     assert repl.prompt_session.get_draft() == "in-progress user prompt"

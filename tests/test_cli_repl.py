@@ -717,8 +717,8 @@ async def test_repl_execute_turn_with_tools(tmp_path: Path) -> None:
     repl = MiaREPL(cwd=tmp_path, custom_provider=mock)
 
     # Run turn with explicit approval for the side-effecting Tool.
-    with patch("builtins.input", return_value="y"):
-        await repl.execute_turn("Create hello.py")
+    repl.prompt_session.read_approval_async = AsyncMock(return_value="y")  # type: ignore[method-assign]
+    await repl.execute_turn("Create hello.py")
 
     assert (tmp_path / "hello.py").exists()
     assert (tmp_path / "hello.py").read_text() == "print('hello world')\n"
@@ -1397,12 +1397,12 @@ async def test_terminal_truth_preserves_error_and_cancellation_outcomes(
         arguments={"command": "rm -rf /"},
         agent_id="mia",
     )
-    with patch("builtins.input", return_value="n"):
-        rec_console_approval = Console(record=True, width=120)
-        repl_fail.console = rec_console_approval
-        await repl_fail._request_tool_approval(req)  # type: ignore[misc]
-        appr_output = rec_console_approval.export_text()
-        assert "[approval-required]" in appr_output
+    rec_console_approval = Console(record=True, width=120)
+    repl_fail.console = rec_console_approval
+    repl_fail.prompt_session.read_approval_async = AsyncMock(return_value="n")  # type: ignore[method-assign]
+    await repl_fail._request_tool_approval(req)
+    appr_output = rec_console_approval.export_text()
+    assert "[approval-required]" in appr_output
 
 
 def test_help_and_command_discovery_distinguishes_busy_availability(
