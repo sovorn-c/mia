@@ -108,4 +108,4 @@ references:
   - specs/tech-architecture/tech-stack.md
   - specs/adr/0002-canonical-run-request-stream.md
   - specs/IMPACT_LATEST.md
-  - specs/epics/e14-agent-workspace-interaction/epic.yaml
+  - specs/epics/archive/e14-agent-workspace-interaction/epic.yaml

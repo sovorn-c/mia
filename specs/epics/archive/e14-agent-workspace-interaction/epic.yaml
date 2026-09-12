@@ -1,7 +1,7 @@
 id: e14
 slug: agent-workspace-interaction
 title: Agent Workspace Interaction
-status: passing
+status: completed
 target_release: v0.7.0-agent-workspace
 total_bcps: 21
 risk: P0

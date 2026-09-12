@@ -155,7 +155,7 @@ out_of_scope:
     name: Agent Workspace Interaction beyond e13
     rationale: >-
       The next-release e14 blueprint is tracked separately so v0.6.0 remains stable; see
-      `specs/product/SCOPE_E14_LATEST.yaml` and `specs/epics/e14-agent-workspace-interaction/`.
+      `specs/product/SCOPE_E14_LATEST.yaml` and `specs/epics/archive/e14-agent-workspace-interaction/`.
 
 constraints:
   - Keep Agent as the single durable configured identity and preserve stable e01-e06 story IDs.

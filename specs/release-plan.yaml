@@ -295,9 +295,9 @@ epics:
   - id: e14
     slug: agent-workspace-interaction
     title: Agent Workspace Interaction
-    status: passing
+    status: completed
     target_release: v0.7.0-agent-workspace
-    capsule_dir: specs/epics/e14-agent-workspace-interaction
+    capsule_dir: specs/epics/archive/e14-agent-workspace-interaction
     scope: specs/product/SCOPE_E14_LATEST.yaml
     outcome: Users can observe and control one foreground Agent Run in a truthful inline workspace with visible transcript blocks, compact Tool activity, async approval, resilient focus, searchable controls, semantic styling, and explicit sequential follow-ups.
     boundaries:
