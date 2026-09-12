@@ -67,7 +67,7 @@ def test_command_discovery_has_one_truthful_canonical_list() -> None:
 
     canonical = [command for command, _ in COMMAND_HINTS]
 
-    assert len(canonical) == 17
+    assert len(canonical) == 18
     assert "/scoped-models" in canonical
     assert "/stop" not in canonical
     assert canonical == SLASH_COMMANDS
@@ -81,7 +81,7 @@ def test_help_contract_describes_only_implemented_behavior(tmp_path: Path) -> No
 
     repl.handle_slash_command("/help")
     help_output = repl.console.export_text()
-    assert "17 Canonical Slash Commands" in help_output
+    assert "18 Canonical Slash Commands" in help_output
     assert "shortcuts" not in help_output
     assert "/stop" not in help_output
 
@@ -1214,7 +1214,7 @@ def test_help_discovery_exposes_essential_keyboard_and_command_alternatives(
     output = repl.console.export_text()
 
     # Canonical command table is present
-    assert "17 Canonical Slash Commands" in output
+    assert "18 Canonical Slash Commands" in output
 
     # Essential keyboard actions and command equivalents are visible in text without color/icons
     assert "Essential Actions & Keyboard Equivalents" in output
@@ -1400,7 +1400,7 @@ async def test_terminal_truth_preserves_error_and_cancellation_outcomes(
     with patch("builtins.input", return_value="n"):
         rec_console_approval = Console(record=True, width=120)
         repl_fail.console = rec_console_approval
-        repl_fail._request_tool_approval(req)
+        await repl_fail._request_tool_approval(req)  # type: ignore[misc]
         appr_output = rec_console_approval.export_text()
         assert "[approval-required]" in appr_output
 
@@ -1549,7 +1549,7 @@ async def test_repl_loop_concurrent_draft_composition_and_explicit_later_submiss
 
         # Active turn is running and busy
         assert repl.prompt_session.is_busy is True
-        assert repl._run_state == "running"
+        assert repl._run_state == "thinking"
 
         # 2. While Turn 1 is running, compose draft prompt and press Enter
         pipe.send_text("draft prompt\r")
@@ -1689,9 +1689,9 @@ async def test_repl_loop_approval_remains_distinct_and_preserves_draft(
             agent_id="mia",
         )
 
-        with patch("builtins.input", return_value="y"):
-            approved = repl._request_tool_approval(req)
-            assert approved is True
+        repl.prompt_session.read_approval_async = AsyncMock(return_value="y")  # type: ignore[method-assign]
+        approved = await repl._request_tool_approval(req)  # type: ignore[misc]
+        assert approved is True
 
         # Draft text was NOT consumed as the approval answer
         assert repl.prompt_session.get_draft() == "composed user draft"
