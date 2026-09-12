@@ -133,6 +133,28 @@ def test_rich_stream_renderer_output() -> None:
     assert renderer.turn_count == 1
 
 
+def test_admitted_prompt_is_rendered_once_with_truthful_lifecycle() -> None:
+    from mia_agent.events import AssistantChunkEvent, TurnCompleteEvent, TurnStartEvent
+    from mia_cli.renderers.rich_stream import RichStreamRenderer
+    from rich.console import Console
+
+    console = Console(record=True, force_terminal=False, no_color=True, highlight=False)
+    renderer = RichStreamRenderer(console=console, plain_mode=True)
+
+    renderer.on_event(TurnStartEvent(turn_index=1, user_prompt="admitted prompt"))
+    assert renderer.phase == "thinking"
+    renderer.on_event(AssistantChunkEvent(thought_delta="working"))
+    assert renderer.phase == "thinking"
+    renderer.on_event(AssistantChunkEvent(delta_text="done"))
+    assert renderer.phase == "responding"
+    renderer.on_event(TurnCompleteEvent(total_steps=1, stop_reason="stop"))
+
+    output = console.export_text()
+    assert output.count("[user] admitted prompt") == 1
+    assert renderer.phase == "success"
+    assert "[ok] Turn completed" in output
+
+
 def test_cli_run_agent_loop_uses_run_request_and_closeable_stream() -> None:
     import asyncio
 
