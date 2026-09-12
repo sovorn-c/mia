@@ -226,15 +226,21 @@ class MiaREPL:
         window_tokens = None
         if self.agent_runtime and self.agent_runtime.effective_settings:
             window_tokens = self.agent_runtime.effective_settings.context_window
+        provider_name = (
+            "custom" if self.custom_provider else self.config_mgr.config.default_provider
+        )
+        if not provider_name and self.model_name:
+            provider_name = self.config_mgr.infer_provider(self.model_name)
         return format_status_toolbar(
             workspace_name=self.cwd.name or str(self.cwd),
             model_name=self.model_name or "none",
+            provider_name=provider_name or None,
             tokens=self.total_tokens,
             window_tokens=window_tokens,
             thinking_enabled=self.show_thinking_trace,
             agent_id=self.agent_id,
             session_id=self.session_id,
-            run_state=getattr(self, "_run_state", "idle"),
+            run_state=self.stream_renderer.phase,
             width=self.console.width,
         )
 
@@ -596,6 +602,23 @@ class MiaREPL:
             self.scoped_models = scope
             self._save_scoped_models()
 
+    def _load_persisted_model_sources(self) -> dict[str, str]:
+        """Load connected models from the local catalog without probing providers."""
+        previous_scope = list(self.scoped_models)
+        providers = self._connected_providers()
+        catalog = self.config_mgr.config.model_catalog
+        sources = {
+            f"{provider}::{model}": provider
+            for provider in providers
+            for model in catalog.get(provider, [])
+        }
+        self._model_sources_refreshed = True
+        self.available_model_sources = sources
+        self.scoped_models = [model_id for model_id in self.scoped_models if model_id in sources]
+        if self.scoped_models != previous_scope:
+            self._save_scoped_models()
+        return sources
+
     def _refresh_provider_catalog(self, provider_id: str) -> list[str]:
         """Fetch one connected provider's models and persist them under ~/.mia."""
         config = self.config_mgr.config
@@ -667,11 +690,48 @@ class MiaREPL:
         self._init_harness()
         self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
 
-    def interactive_model_picker(self) -> None:
-        """Select the active model from the discovered scoped-model list."""
+    def interactive_agent_picker(self) -> None:
+        """Select an Agent from the local searchable Agent list without network activity."""
         saved_draft = self.prompt_session.get_draft()
         try:
-            self._discover_connected_models()
+            agents = self.agent_mgr.list_agents()
+            options = [
+                (agent.agent_id, agent.display_name, f"Agent {agent.agent_id}") for agent in agents
+            ]
+            default_idx = next(
+                (index for index, option in enumerate(options) if option[0] == self.agent_id),
+                0,
+            )
+            selected = interactive_select("🤖 Switch Agent", options, default_idx=default_idx)
+            if not selected or selected == self.agent_id:
+                return
+            agent = self.agent_mgr.get_agent(selected)
+            self.agent_id = agent.agent_id
+            self._approval_callback = self._request_tool_approval
+            self._init_harness()
+            self.console.print(f"[bold green]✓ Switched Agent to {agent.agent_id}[/bold green]\n")
+        finally:
+            self.prompt_session.restore_draft(saved_draft)
+
+    def interactive_command_picker(self) -> None:
+        """Select a canonical slash command from a local searchable list."""
+        saved_draft = self.prompt_session.get_draft()
+        try:
+            options = [
+                (command, command, description)
+                for command, description in COMMAND_DESCRIPTIONS.items()
+            ]
+            selected = interactive_select("⌘ Command", options, default_idx=0)
+            if selected:
+                self.handle_slash_command(selected)
+        finally:
+            self.prompt_session.restore_draft(saved_draft)
+
+    def interactive_model_picker(self) -> None:
+        """Select the active model from the persisted scoped-model list."""
+        saved_draft = self.prompt_session.get_draft()
+        try:
+            self._load_persisted_model_sources()
             if not self.scoped_models:
                 self.console.print(
                     "[yellow]No scoped models. Run /scoped-models to discover connected models first.[/yellow]\n"
@@ -1145,7 +1205,10 @@ class MiaREPL:
             return True
 
         if cmd in ("/", "/?", "/help"):
-            self.print_command_menu()
+            if args.lower() in {"pick", "select", "search"}:
+                self.interactive_command_picker()
+            else:
+                self.print_command_menu()
             return True
 
         elif cmd in ("/login", "/auth"):
@@ -1166,7 +1229,9 @@ class MiaREPL:
             self.print_banner()
 
         elif cmd == "/agent":
-            if not args:
+            if args.lower() in {"pick", "select"}:
+                self.interactive_agent_picker()
+            elif not args:
                 active = self.agent_mgr.get_agent(self.agent_id)
                 available = ", ".join(agent.agent_id for agent in self.agent_mgr.list_agents())
                 self.console.print(
@@ -1397,16 +1462,34 @@ class MiaREPL:
 
                 try:
                     while not turn_task.done():
+                        if (
+                            self._active_prompt_task is None
+                            and not self.prompt_session.approval_active
+                        ):
+                            self._active_prompt_task = asyncio.create_task(
+                                self.prompt_session.read_prompt_async("› ")
+                            )
+                        wait_tasks: list[asyncio.Task[Any]] = [turn_task]
+                        if self._active_prompt_task is not None:
+                            wait_tasks.append(self._active_prompt_task)
                         done, _ = await asyncio.wait(
-                            [turn_task, self._active_prompt_task],
+                            wait_tasks,
                             return_when=asyncio.FIRST_COMPLETED,
                         )
                         if self._active_prompt_task in done and not turn_task.done():
-                            exc = self._active_prompt_task.exception()
-                            if exc is not None and isinstance(exc, (EOFError, KeyboardInterrupt)):
-                                turn_task.cancel()
-                                raise exc
-                            if self.prompt_session.is_busy:
+                            prompt_task = self._active_prompt_task
+                            self._active_prompt_task = None
+                            if not prompt_task.cancelled():
+                                exc = prompt_task.exception()
+                                if exc is not None and isinstance(
+                                    exc, (EOFError, KeyboardInterrupt)
+                                ):
+                                    turn_task.cancel()
+                                    raise exc
+                            if (
+                                self.prompt_session.is_busy
+                                and not self.prompt_session.approval_active
+                            ):
                                 self._active_prompt_task = asyncio.create_task(
                                     self.prompt_session.read_prompt_async("› ")
                                 )

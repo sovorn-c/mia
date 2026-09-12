@@ -151,7 +151,9 @@ def format_status_toolbar(
     thinking_enabled: bool = False,
     *,
     agent_id: str | None = None,
+    provider_name: str | None = None,
     session_id: str | None = None,
+    current_context_tokens: int | None = None,
     run_state: str = "idle",
     width: int | None = None,
 ) -> HTML:
@@ -159,6 +161,7 @@ def format_status_toolbar(
     workspace_name = _safe_status_text(workspace_name)
     model_name = _safe_status_text(model_name)
     agent_id = _safe_status_text(agent_id) if agent_id else None
+    provider_name = _safe_status_text(provider_name) if provider_name else None
     session_id = _safe_status_text(session_id) if session_id else None
     run_state = _safe_status_text(run_state)
     tokens_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(tokens)
@@ -166,14 +169,24 @@ def format_status_toolbar(
         pct = (tokens / max(1, window_tokens)) * 100
         pct_str = f"{pct:.1f}%" if tokens > 0 else "0%"
         window_str = f"{window_tokens // 1000}k" if window_tokens >= 1000 else str(window_tokens)
-        token_display = f"⚡ {tokens_str}/{window_str} ({pct_str})"
+        token_display = f"{tokens_str}/{window_str} ({pct_str})"
     else:
-        token_display = f"⚡ {tokens_str}"
+        token_display = tokens_str
+    lifetime_usage = f"Lifetime usage: {token_display}"
+    current_context = (
+        f"Current context: {current_context_tokens / 1000:.1f}k"
+        if current_context_tokens is not None and current_context_tokens >= 1000
+        else f"Current context: {current_context_tokens}"
+        if current_context_tokens is not None
+        else "Current context: unavailable"
+    )
 
     if width is not None and width < 60:
+        provider_part = f" │ {provider_name}" if provider_name else ""
         return HTML(
-            f"<style fg='#9CA3AF'>📁 <b>{workspace_name}</b> │ 🧠 <b>{model_name}</b> │ "
-            f"{token_display} │ <style fg='#FF7A00'>[{run_state}]</style></style>"
+            f"<style fg='#9CA3AF'>Workspace: <b>{workspace_name}</b> │ "
+            f"Model: <b>{model_name}</b>{provider_part} │ "
+            f"Phase: <style fg='#FF7A00'>[{run_state}]</style></style>"
         )
 
     thinking_badge = (
@@ -183,17 +196,18 @@ def format_status_toolbar(
     )
 
     agent_part = f"🤖 <b>{agent_id}</b> │ " if agent_id else ""
+    provider_part = f"Provider: <b>{provider_name}</b> │ " if provider_name else ""
     session_part = f"🆔 <b>{session_id}</b> │ " if session_id else ""
-    state_badge = f" <style fg='#FF7A00'>[{run_state}]</style> │" if run_state else ""
+    state_badge = f" Phase: <style fg='#FF7A00'>[{run_state}]</style> │" if run_state else ""
 
     return HTML(
-        f"<style fg='#9CA3AF'>  📁 <b>{workspace_name}</b> │ "
+        f"<style fg='#9CA3AF'>  Workspace: <b>{workspace_name}</b> │ "
         f"{agent_part}"
-        f"🧠 <b>{model_name}</b> │ "
+        f"Model: <b>{model_name}</b> │ "
+        f"{provider_part}"
         f"{session_part}"
-        f"{token_display}{thinking_badge} │"
-        f"{state_badge} "
-        f"<b>/help</b></style>"
+        f"{lifetime_usage} │ {current_context}{thinking_badge} │"
+        f"{state_badge} <b>/help</b></style>"
     )
 
 
