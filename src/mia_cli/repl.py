@@ -47,6 +47,16 @@ from mia_middleware.access import ApprovalRequest
 
 SLASH_COMMANDS = [command for command, _ in COMMAND_HINTS]
 COMMAND_DESCRIPTIONS: dict[str, str] = dict(COMMAND_HINTS)
+_MAX_CLI_DISPLAY_CHARS = 4000
+
+
+def _safe_cli_text(value: object) -> str:
+    """Bound dynamic CLI text and remove terminal escape/control delimiters."""
+    text = str(value).replace("\x1b", "").replace("\r", "")
+    if len(text) <= _MAX_CLI_DISPLAY_CHARS:
+        return text
+    return text[: _MAX_CLI_DISPLAY_CHARS - 1] + "…"
+
 
 COMMAND_ALIASES: dict[str, str] = {
     "/?": "/help",
@@ -274,9 +284,10 @@ class MiaREPL:
 
     def _print_approval_request(self, request: ApprovalRequest) -> None:
         """Render only the sanitized, attributable approval summary."""
+        tool_name = _safe_cli_text(request.tool_name)
+        agent_id = _safe_cli_text(request.agent_id or self.agent_id)
         self.console.print(
-            f"[approval-required] Approve {request.effect} Tool {request.tool_name} "
-            f"for Agent {request.agent_id or self.agent_id}?",
+            f"[approval-required] Approve {request.effect} Tool {tool_name} for Agent {agent_id}?",
             markup=False,
         )
 
@@ -1207,7 +1218,7 @@ class MiaREPL:
             self._run_state = "failure"
             self._restore_queued_follow_up()
             self.stream_renderer._stop_status()
-            safe_error = str(exc).replace("\x1b", "").replace("\r", "")[:4000]
+            safe_error = _safe_cli_text(exc)
             if self.stream_renderer.plain_mode:
                 self.console.print(f"[error] Error during execution: {safe_error}", markup=False)
             else:
