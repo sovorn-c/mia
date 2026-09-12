@@ -1175,7 +1175,7 @@ class MiaREPL:
                         self.total_tokens += event.input_tokens + event.output_tokens
                     elif isinstance(event, TurnCompleteEvent):
                         self.total_cost_usd += event.total_cost_usd
-                        successful_settlement = event.stop_reason == "stop"
+                        successful_settlement = self.stream_renderer.phase == "success"
             if successful_settlement:
                 follow_up = self._take_queued_follow_up()
                 if follow_up is not None:
