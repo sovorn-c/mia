@@ -54,7 +54,7 @@ handoff:
   open_decisions: []
 git:
   branch: feat/align-codex-model-selection
-  hash: d4ead39
+  hash: 3b88449
 environment:
   package_manager: uv 0.10.11
   python: 3.14.6
