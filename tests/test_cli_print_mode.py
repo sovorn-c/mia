@@ -156,6 +156,80 @@ def test_admitted_prompt_is_rendered_once_with_truthful_lifecycle() -> None:
     assert "[ok] Turn completed" in output
 
 
+def test_tool_rows_are_keyed_compact_and_expand_sanitized_results() -> None:
+    from rich.console import Console
+
+    from mia_cli.renderers.rich_stream import RichStreamRenderer
+
+    console = Console(record=True, force_terminal=False, no_color=True, highlight=False)
+    renderer = RichStreamRenderer(console=console, plain_mode=True)
+    renderer.on_event(TurnStartEvent(turn_index=1, user_prompt="inspect files"))
+    renderer.on_event(
+        ToolCallEvent(
+            call_id="call-1",
+            tool_name="bash",
+            arguments={"command": "printf token=sk-live-secret"},
+        )
+    )
+    renderer.on_event(
+        ToolResultEvent(
+            call_id="call-1",
+            tool_name="bash",
+            output={"value": "safe output", "api_key": "sk-live-secret"},
+            duration_ms=2.0,
+        )
+    )
+
+    assert renderer.tool_rows["call-1"].state == "completed"
+    output = console.export_text()
+    assert "[tool pending] bash" in output
+    assert "[tool completed] bash" in output
+    assert "sk-live-secret" not in output
+    assert "safe output" not in output
+
+    assert renderer.toggle_tool_row("call-1") is True
+    assert "[tool expanded] call-1" in console.export_text()
+    assert "safe output" in console.export_text()
+    assert "sk-live-secret" not in console.export_text()
+    assert renderer.toggle_tool_row("call-1") is False
+    assert renderer.tool_rows["call-1"].expanded is False
+
+
+def test_tool_rows_keep_error_and_cancelled_states_attributable() -> None:
+    from rich.console import Console
+
+    from mia_agent.runtime_events import RunErrorEvent
+    from mia_cli.renderers.rich_stream import RichStreamRenderer
+
+    console = Console(record=True, force_terminal=False, no_color=True, highlight=False)
+    renderer = RichStreamRenderer(console=console, plain_mode=True)
+    renderer.on_event(TurnStartEvent(turn_index=1, user_prompt="run tools"))
+    renderer.on_event(
+        ToolCallEvent(call_id="failed", tool_name="write_file", arguments={"path": "a.txt"})
+    )
+    renderer.on_event(
+        ToolResultEvent(
+            call_id="failed",
+            tool_name="write_file",
+            output="permission denied",
+            is_error=True,
+        )
+    )
+    renderer.on_event(
+        ToolCallEvent(call_id="cancelled", tool_name="bash", arguments={"command": "sleep 10"})
+    )
+    renderer.on_event(
+        RunErrorEvent(stage="execution", error="user stopped", cancelled=True, code="cancelled")
+    )
+
+    assert renderer.tool_rows["failed"].state == "error"
+    assert renderer.tool_rows["cancelled"].state == "cancelled"
+    output = console.export_text()
+    assert "[tool error] write_file" in output
+    assert "[tool cancelled] cancelled" in output
+    assert "[tool completed] cancelled" not in output
+
+
 def test_cli_run_agent_loop_uses_run_request_and_closeable_stream() -> None:
     import asyncio
 
