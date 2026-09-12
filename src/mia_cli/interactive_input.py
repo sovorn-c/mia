@@ -35,6 +35,7 @@ COMMAND_HINTS: list[tuple[str, str]] = [
     ("/model", "Switch the active model (alias: /llm)"),
     ("/scoped-models", "Discover and set models used by Ctrl+P cycling"),
     ("/agent", "Show or switch the active Agent"),
+    ("/queue", "Queue one explicit follow-up during a Run (Ctrl+Q fallback)"),
     ("/diff", "Show the Git diff or report Git errors (alias: /changes)"),
     ("/cost", "Show session token and cost totals (alias: /stats, /tokens)"),
     ("/compact", "Compact active context when history is available (alias: /compress)"),
@@ -233,6 +234,7 @@ class LivePromptSession:
         self.approval_active: bool = False
         self.draft_text: str = ""
         self.on_cancel_callback: Callable[[], None] | None = None
+        self.on_queue_callback: Callable[[], bool] | None = None
         self.bindings = self._create_keybindings()
         self.session: PromptSession[str] = PromptSession(
             history=self.history,
@@ -332,6 +334,8 @@ class LivePromptSession:
             if self.is_busy:
                 if event.current_buffer.text:
                     self.draft_text = event.current_buffer.text
+                if event.current_buffer.text.strip().lower().startswith("/queue"):
+                    event.current_buffer.validate_and_handle()
                 return
             event.current_buffer.validate_and_handle()
 
@@ -353,6 +357,16 @@ class LivePromptSession:
                 buffer.start_completion(select_first=True)
 
         # Ctrl+C: Clear active input buffer when idle; signal cancel while busy without dropping draft
+        @kb.add("c-q")
+        def _queue_follow_up(event: KeyPressEvent) -> None:
+            if not self.is_busy or self.approval_active:
+                return
+            if event.current_buffer.text:
+                self.draft_text = event.current_buffer.text
+            if self.on_queue_callback and self.on_queue_callback():
+                event.current_buffer.reset()
+                self.draft_text = ""
+
         @kb.add("c-c")
         def _clear_buffer(event: KeyPressEvent) -> None:
             if self.is_busy:
@@ -475,7 +489,10 @@ class LivePromptSession:
     async def read_approval_async(self, prompt_prefix: str = "Approve? [y/N] ") -> str:
         """Read approval in a separate prompt-toolkit focus, never from the draft buffer."""
         if not sys.stdin.isatty() and not getattr(self.approval_session, "_input", None):
-            return ""
+            try:
+                return await asyncio.to_thread(input, prompt_prefix)
+            except (EOFError, KeyboardInterrupt, OSError):
+                return ""
         try:
             return await self.approval_session.prompt_async(
                 [("class:prompt", prompt_prefix)],

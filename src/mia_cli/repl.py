@@ -74,6 +74,7 @@ COMMAND_AVAILABILITY: dict[str, str] = {
     "/model": "Idle only",
     "/scoped-models": "Idle only",
     "/agent": "Idle only",
+    "/queue": "Busy only",
     "/diff": "Always",
     "/cost": "Always",
     "/compact": "Idle only",
@@ -206,6 +207,7 @@ class MiaREPL:
         self._approval_callback = self._request_tool_approval
         self._active_prompt_task: asyncio.Task[str] | None = None
         self._active_turn_task: asyncio.Task[None] | None = None
+        self.queued_follow_up: str | None = None
 
         self.stream_renderer = RichStreamRenderer(
             console=self.console, show_thinking_trace=self.show_thinking_trace
@@ -219,6 +221,7 @@ class MiaREPL:
             input=prompt_input,
             output=prompt_output,
         )
+        self.prompt_session.on_queue_callback = self.queue_follow_up
         self._init_harness()
 
     def _get_status_toolbar(self) -> Any:
@@ -1076,6 +1079,7 @@ class MiaREPL:
             actions_table.add_row("Switch Agent", "/agent <id>", "Idle only")
             actions_table.add_row("Switch model", "Ctrl+L or /model", "Idle only")
             actions_table.add_row("Cycle scoped models", "Ctrl+P or /model next", "Idle only")
+            actions_table.add_row("Queue one follow-up", "Ctrl+Q or /queue <text>", "Busy only")
             actions_table.add_row("Inspect audit details", "Ctrl+O or /inspect", "Always")
             actions_table.add_row("Session tree navigator", "Esc Esc or /tree", "Idle only")
             actions_table.add_row("Quit / Exit", "/quit or /exit", "Always")
@@ -1100,6 +1104,43 @@ class MiaREPL:
         self.console.print(
             "[dim]Tip: Type any partial command or press [bold white]Tab[/bold white] to autocomplete.[/dim]\n"
         )
+
+    def queue_follow_up(self, prompt: str | None = None) -> bool:
+        """Move one explicit follow-up into the single busy-run queue slot."""
+        if not self.prompt_session.is_busy:
+            self.console.print("[queue unavailable] A follow-up can only be queued during a Run.\n")
+            return False
+        if self.queued_follow_up is not None:
+            self.console.print(
+                "[queue occupied] A follow-up is already queued; cancel the Run to restore it.\n"
+            )
+            return False
+        candidate = prompt if prompt is not None else self.prompt_session.get_draft()
+        if prompt is None and candidate.strip().lower().startswith("/queue"):
+            candidate = ""
+        if not candidate or not candidate.strip():
+            self.console.print("[queue empty] Add a follow-up draft before queueing.\n")
+            return False
+        self.queued_follow_up = candidate
+        self.prompt_session.set_draft("")
+        self.console.print("[queued] One follow-up will run after a successful settlement.\n")
+        return True
+
+    def _restore_queued_follow_up(self) -> None:
+        """Restore an unsuccessful Run's queued follow-up exactly once."""
+        if self.queued_follow_up is None:
+            return
+        queued = self.queued_follow_up
+        self.queued_follow_up = None
+        self.prompt_session.restore_draft(queued)
+        self.console.print(
+            "[queue restored] Follow-up returned to the draft after Run failure/cancel.\n"
+        )
+
+    def _take_queued_follow_up(self) -> str | None:
+        queued = self.queued_follow_up
+        self.queued_follow_up = None
+        return queued
 
     async def execute_turn(self, prompt: str) -> None:
         """Run single prompt turn with minimalist stream rendering."""
@@ -1126,6 +1167,7 @@ class MiaREPL:
 
         self._run_state = "thinking"
         self.prompt_session.is_busy = True
+        successful_settlement = False
         try:
             self.stream_renderer.show_thinking_trace = self.show_thinking_trace
             request = RunRequest(
@@ -1156,17 +1198,30 @@ class MiaREPL:
                         self.total_tokens += event.input_tokens + event.output_tokens
                     elif isinstance(event, TurnCompleteEvent):
                         self.total_cost_usd += event.total_cost_usd
+                        successful_settlement = event.stop_reason == "stop"
+            if successful_settlement:
+                follow_up = self._take_queued_follow_up()
+                if follow_up is not None:
+                    await self.execute_turn(follow_up)
+            else:
+                self._restore_queued_follow_up()
             if self.agent_runner.last_runtime is not None:
                 self.agent_runtime = self.agent_runner.last_runtime
                 self.harness = self.agent_runtime.harness
 
         except asyncio.CancelledError:
+            self.stream_renderer.phase = "cancelled"
+            self._run_state = "cancelled"
+            self._restore_queued_follow_up()
             self.stream_renderer._stop_status()
             if self.stream_renderer.plain_mode:
                 self.console.print("[cancelled] Turn halted by user (Ctrl+C).", markup=False)
             else:
                 self.console.print("\n[yellow]⚠️  Turn halted by user (Ctrl+C).[/yellow]\n")
         except Exception as exc:
+            self.stream_renderer.phase = "failure"
+            self._run_state = "failure"
+            self._restore_queued_follow_up()
             self.stream_renderer._stop_status()
             if self.stream_renderer.plain_mode:
                 self.console.print(f"[error] Error during execution: {exc}", markup=False)
@@ -1213,6 +1268,10 @@ class MiaREPL:
 
         elif cmd in ("/login", "/auth"):
             self.interactive_login(args)
+            return True
+
+        elif cmd == "/queue":
+            self.queue_follow_up(args or None)
             return True
 
         elif cmd in ("/logout", "/signout", "/disconnect"):
@@ -1486,6 +1545,9 @@ class MiaREPL:
                                 ):
                                     turn_task.cancel()
                                     raise exc
+                                prompt_result = prompt_task.result()
+                                if prompt_result.startswith("/queue"):
+                                    self.handle_slash_command(prompt_result)
                             if (
                                 self.prompt_session.is_busy
                                 and not self.prompt_session.approval_active

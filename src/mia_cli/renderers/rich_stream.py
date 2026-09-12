@@ -256,8 +256,16 @@ class RichStreamRenderer:
 
     def _print_tool_row(self, row: ToolRow, duration_ms: float | None = None) -> None:
         duration = f" ({duration_ms:.1f}ms)" if duration_ms is not None else ""
+        legacy_role = {
+            "pending": " [running]",
+            "completed": " [ok]",
+            "error": " [error]",
+            "cancelled": " [cancelled]",
+            "approval": " [approval-required]",
+        }[row.state]
         self.console.print(
-            f"[tool {row.state}] {row.tool_name} {row.summary}{duration}", markup=False
+            f"[tool {row.state}] {row.tool_name} {row.summary}{duration}{legacy_role} {row.tool_name}",
+            markup=False,
         )
 
     def _cancel_pending_tool_rows(self, state: ToolRowState) -> None:
@@ -339,6 +347,10 @@ class RichStreamRenderer:
             )
             self.tool_rows[event.call_id] = row
             self._print_tool_row(row)
+            self._start_status(
+                f"Running {row.summary}",
+                style="bold #38BDF8",
+            )
             self.turn_audit_log.append(
                 {
                     "call_id": event.call_id,
@@ -408,7 +420,7 @@ class RichStreamRenderer:
                     )
 
         elif isinstance(event, TurnCompleteEvent):
-            self.phase = "failure" if event.stop_reason == "error" else "success"
+            self.phase = "success" if event.stop_reason == "stop" else "failure"
             self._stop_status()
             self._end_streams()
             cost_str = f" | ${event.total_cost_usd:.4f}" if event.total_cost_usd > 0 else ""
