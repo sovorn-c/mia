@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.6.0
-updated_at: '2026-09-08T08:04:44Z'
+updated_at: '2026-09-12T02:53:50Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-09-03T08:22:40Z'
@@ -326,3 +326,53 @@ epics:
         tasks_total: 3
         tasks_passing: 3
         tasks_failing: 0
+  e14:
+    title: Agent Workspace Interaction
+    status: passing
+    bcps: 21
+    stories:
+      e14s01:
+        title: Visible Transcript and Truthful Run Lifecycle
+        status: done
+        bcps: 5
+        risk: P0
+        tasks_total: 4
+        tasks_passing: 4
+        tasks_failing: 0
+        completed_at: '2026-09-12T02:53:50Z'
+      e14s02:
+        title: Compact Expandable Tool Rows and Safe Tool Output
+        status: done
+        bcps: 5
+        risk: P0
+        tasks_total: 4
+        tasks_passing: 4
+        tasks_failing: 0
+        completed_at: '2026-09-12T02:53:50Z'
+      e14s03:
+        title: Asynchronous Approval with Distinct Focus
+        status: done
+        bcps: 4
+        risk: P0
+        tasks_total: 4
+        tasks_passing: 4
+        tasks_failing: 0
+        completed_at: '2026-09-12T02:53:50Z'
+      e14s04:
+        title: Searchable Workspace Controls and Adaptive Footer
+        status: done
+        bcps: 3
+        risk: P1
+        tasks_total: 4
+        tasks_passing: 4
+        tasks_failing: 0
+        completed_at: '2026-09-12T02:53:50Z'
+      e14s05:
+        title: Explicit Follow-up Queue and Resilient Workspace Fallbacks
+        status: done
+        bcps: 4
+        risk: P0
+        tasks_total: 4
+        tasks_passing: 4
+        tasks_failing: 0
+        completed_at: '2026-09-12T02:53:50Z'

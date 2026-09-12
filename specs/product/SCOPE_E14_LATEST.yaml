@@ -1,0 +1,111 @@
+# Incremental feature scope for the next release; v0.6.0 SCOPE_LATEST.yaml remains authoritative for v0.6.0.
+initiative_id: release-v0.7.0-agent-workspace
+initiative_name: Mia Agent Workspace Interaction
+status: approved-blueprint
+target_release: v0.7.0-agent-workspace
+
+core_value: >-
+  Users can observe and control one foreground Agent Run without losing conversation context, drafts,
+  safety decisions, focus, or truthful outcome state.
+
+summary: >-
+  Extend Mia's inline REPL into a coherent Agent workspace on top of the existing prompt-toolkit and Rich
+  foundation. The workspace makes submitted user prompts, Agent responses, Tool activity, approvals,
+  lifecycle state, model context, and drafts visible without turning Mia into a full-screen frontend or a
+  second execution system.
+
+  The feature adds an explicit follow-up queue. A queued prompt waits for the current Run to settle; it does
+  not steer an in-flight provider step, create concurrent Runs, or introduce a background scheduler. Ctrl+Q
+  and `/queue` are explicit queue actions; `/queue` remains the portable fallback when terminal flow control
+  consumes Ctrl+Q. Cancellation restores queued text to the draft.
+
+  Pi is read-only prior art. Mia adopts its useful state, focus, and lifecycle principles while preserving
+  Mia's AgentRunner path, append-only Sessions, mandatory Tool middleware, normal scrollback, and plain output.
+
+in_scope:
+  - id: e14-visible-transcript
+    maps_to: e14
+    name: Visible user and Agent transcript blocks
+    outcome: Each submitted user prompt and completed or streaming Agent response is visible exactly once in the live workspace.
+  - id: e14-run-state
+    maps_to: e14
+    name: Truthful lifecycle status
+    outcome: Users can distinguish thinking, responding, Tool execution, approval, success, failure, and cancellation.
+  - id: e14-tool-summary
+    maps_to: e14
+    name: Compact expandable Tool rows
+    outcome: Tool name, safe summary, state, and retained result are inspectable without overwhelming the transcript.
+  - id: e14-approval
+    maps_to: e14
+    name: Asynchronous inline approval
+    outcome: Side-effecting Tool approval has a distinct focus context and cannot consume ordinary draft input.
+  - id: e14-composer
+    maps_to: e14
+    name: Draft, focus, and follow-up queue control
+    outcome: Drafts survive Run, approval, selector, and cancellation transitions; explicit queued follow-ups run sequentially after successful completion.
+  - id: e14-discovery
+    maps_to: e14
+    name: Searchable commands and selectors
+    outcome: Users can discover commands and select Agents, models, and Sessions without losing drafts or mutating an active Run.
+  - id: e14-status
+    maps_to: e14
+    name: Adaptive truthful footer
+    outcome: The footer presents model, provider, Run state, Session/workspace context, and usage without clipping or confusing lifetime usage with current context.
+  - id: e14-theme
+    maps_to: e14
+    name: Semantic message styling
+    outcome: User, Agent, thinking, Tool, approval, warning, error, and diff roles remain coherent across terminal widths and color fallbacks.
+  - id: e14-safety
+    maps_to: e14
+    name: Safe and resilient terminal output
+    outcome: User-controlled text, Tool arguments, and Tool results are bounded and sanitized; plain/non-interactive output remains supported.
+
+out_of_scope:
+  - id: e14-oos-steering
+    name: In-flight Agent steering
+    rationale: The first queue contract is follow-up-only; steering requires a new Core/provider capability and lifecycle contract.
+  - id: e14-oos-concurrency
+    name: Concurrent Runs, background scheduling, or a general queue manager
+    rationale: One foreground Run per Agent-owned Session preserves deterministic history and existing Core invariants.
+  - id: e14-oos-strong-renderer
+    name: Persistent coordinated renderer capabilities
+    rationale: Live expandable cards, partial output, overlays, focus stacks, flicker-free rebuilding, and full Session navigation need a stronger UI layer and are recorded in the architecture backlog.
+  - id: e14-oos-core-events
+    name: New Mia Core event families
+    rationale: Tool progress, compaction/retry, richer message phases, model-selection, and attachment events need separate evidence and interface decisions.
+  - id: e14-oos-frontend
+    name: Full-screen Textual, web, desktop, or alternative frontend
+    rationale: The supported product remains the inline CLI/REPL; no frontend rewrite is justified.
+  - id: e14-oos-extensibility
+    name: Custom Tool renderer contracts, Plugin widgets, image protocol support, or user theme files
+    rationale: These are later extensibility work, not prerequisites for a coherent built-in workspace.
+
+constraints:
+  - Preserve Agent as the single durable identity and AgentRunner → AgentRuntimeFactory → AgentHarness as the only prompt execution path.
+  - Keep AgentHarness headless and keep mia_agent independent from Rich, prompt-toolkit, Typer, and terminal output.
+  - Keep prompt-toolkit as the interactive input/rendering owner and retain Rich for content/static/plain-mode formatting; do not run competing interactive renderers.
+  - Preserve normal terminal scrollback, append-only Sessions, mandatory access/security/audit middleware, and Core-owned Run finalization truth.
+  - Keep the provider, Tool, Agent-loop, and approval boundaries asynchronous.
+  - Add no runtime dependency without separate evidence.
+  - Do not read or print credentials, authorization headers, or secret-bearing Tool data.
+  - Ctrl+Q is best-effort because terminal flow control may consume it; `/queue` must always remain available.
+
+success_criteria:
+  - Every submitted prompt appears exactly once in the interactive transcript.
+  - A Run's displayed terminal state matches the Core terminal outcome; intermediate events never announce success or cancellation prematurely.
+  - Every visible Tool row is attributable, bounded, policy-mediated, and never displays secrets.
+  - Approval remains asynchronous, fail-closed, focus-distinct, and restores the exact draft after completion or cancellation.
+  - Follow-up queue entries never start concurrently, execute only after successful settlement, and restore to the draft after cancellation or failure.
+  - Selectors and command discovery preserve drafts, protect active Runs, support narrow terminals, and do not perform network discovery merely because a picker opens.
+  - Footer usage and context values are labeled truthfully and degrade cleanly at narrow widths.
+  - Plain/non-interactive rendering and existing CLI/provider behavior remain compatible.
+  - Focused MockProvider, prompt/PTY, accessibility, cancellation, approval, and queue tests pass with the complete offline quality gate.
+
+references:
+  - specs/product/SCOPE_LATEST.yaml
+  - specs/tech-architecture/e13-REPL-DESIGN.md
+  - specs/tech-architecture/REPL-UI-FUTURE-DIRECTIONS.md
+  - specs/tech-architecture/tech-stack.md
+  - specs/adr/0002-canonical-run-request-stream.md
+  - specs/IMPACT_LATEST.md
+  - specs/epics/e14-agent-workspace-interaction/epic.yaml

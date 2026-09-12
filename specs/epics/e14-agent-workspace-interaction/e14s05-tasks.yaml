@@ -1,0 +1,42 @@
+story_id: e14s05
+title: Explicit Follow-up Queue and Resilient Workspace Fallbacks
+status: done
+bcps: 4
+spec: e14s05-explicit-follow-up-queue-and-resilient-workspace-fallbacks.md
+tasks:
+  - id: 1
+    description: Add failing tests for Ctrl+Q and /queue enqueue, success-only auto-run, cancel/failure restore, occupied-slot reject, no concurrent Runs, and Enter-while-busy still not queueing
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_pty_prompt_layout.py tests/test_agent_runtime.py -q
+    risk: P0
+    security: medium
+    status: passing
+    allure:
+      severity: critical
+      categories: [e14, cli-repl, Security Review]
+  - id: 2
+    description: Implement the single-slot follow-up queue in MiaREPL/LivePromptSession using existing AgentRunner admission after successful settlement
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_pty_prompt_layout.py tests/test_agent_runtime.py -q
+    risk: P0
+    security: medium
+    status: passing
+    allure:
+      severity: critical
+      categories: [e14, cli-repl, integration, Security Review]
+  - id: 3
+    description: Document /queue and Ctrl+Q in help; keep /queue available when Ctrl+Q is absent; restore queued text after cancel/failure; no new security findings in affected paths
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_pty_prompt_layout.py -q && echo "no new security findings in affected paths"
+    risk: P0
+    security: medium
+    status: passing
+    allure:
+      severity: critical
+      categories: [e14, cli-repl, integration, Security Review]
+  - id: 4
+    description: Harden plain/narrow/reduced-motion fallbacks for queue status and semantic roles, then run spec consistency and focused lint
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py tests/test_pty_prompt_layout.py -q && uv run --offline python scripts/check-spec-consistency.py && uv run --offline ruff check src/mia_cli tests/test_cli_repl.py tests/test_cli_print_mode.py tests/test_pty_prompt_layout.py
+    risk: P1
+    security: low
+    status: passing
+    allure:
+      severity: high
+      categories: [e14, cli-repl, integration]
