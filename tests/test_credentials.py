@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -79,21 +77,14 @@ def test_config_manager_resolution_hierarchy(tmp_path: Path) -> None:
     assert key == "sk-deepseek-from-store"
     assert url == "https://api.deepseek.com/v1"
 
-    # 3. Environment variable override
-    with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-from-env"}):
-        prov, mod, key, url = manager.resolve_credentials(model="claude-3-5-sonnet")
-        assert prov == "anthropic"
-        assert key == "sk-ant-from-env"
-
-    # 4. Explicit parameter overrides environment & store
-    with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-ant-from-env"}):
-        prov, mod, key, url = manager.resolve_credentials(
-            model="claude-3-5-sonnet",
-            api_key="sk-ant-explicit",
-            base_url="https://custom.anthropic.com",
-        )
-        assert key == "sk-ant-explicit"
-        assert url == "https://custom.anthropic.com"
+    # 3. Explicit parameters override local defaults
+    prov, mod, key, url = manager.resolve_credentials(
+        model="claude-3-5-sonnet",
+        api_key="sk-ant-explicit",
+        base_url="https://custom.anthropic.com",
+    )
+    assert key == "sk-ant-explicit"
+    assert url == "https://custom.anthropic.com"
 
 
 def test_credentials_resolution_sanitizes_errors_without_exposing_keys(tmp_path: Path) -> None:

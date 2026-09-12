@@ -1,0 +1,42 @@
+story_id: e14s04
+title: Searchable Workspace Controls and Adaptive Footer
+status: done
+bcps: 3
+spec: e14s04-searchable-workspace-controls-and-adaptive-footer.md
+tasks:
+  - id: 1
+    description: Add failing tests for searchable command and Agent selectors, draft-preserving busy protection, no network on picker open, and footer provider/usage/context labeling including narrow degrade
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_pty_prompt_layout.py -q
+    risk: P1
+    security: low
+    status: passing
+    allure:
+      severity: high
+      categories: [e14, cli-repl, unit]
+  - id: 2
+    description: Implement searchable Agent and command selectors on the existing interactive_select path without adding a second command system
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_pty_prompt_layout.py -q
+    risk: P1
+    security: low
+    status: passing
+    allure:
+      severity: high
+      categories: [e14, cli-repl, integration]
+  - id: 3
+    description: Implement adaptive truthful footer labels from the workspace projection, including provider and lifetime vs current context, with narrow-width degradation
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_pty_prompt_layout.py tests/test_cli_print_mode.py -q
+    risk: P1
+    security: low
+    status: passing
+    allure:
+      severity: high
+      categories: [e14, cli-repl, integration]
+  - id: 4
+    description: Verify specification consistency and focused lint
+    verify: uv run --offline python scripts/check-spec-consistency.py && uv run --offline ruff check src/mia_cli tests/test_cli_repl.py tests/test_pty_prompt_layout.py
+    risk: P2
+    security: none
+    status: passing
+    allure:
+      severity: normal
+      categories: [e14, cli-repl, integration]

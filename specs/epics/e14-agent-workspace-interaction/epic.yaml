@@ -1,0 +1,127 @@
+id: e14
+slug: agent-workspace-interaction
+title: Agent Workspace Interaction
+status: passing
+target_release: v0.7.0-agent-workspace
+total_bcps: 21
+risk: P0
+wsjf:
+  business_value: 9
+  time_criticality: 6
+  risk_reduction: 8
+  job_size: 8
+  score: 2.875
+placement: next-release
+scope: specs/product/SCOPE_E14_LATEST.yaml
+outcome: >-
+  Users can observe and control one foreground Agent Run in a truthful inline workspace with visible
+  transcript blocks, compact Tool activity, async approval, resilient focus, searchable controls, semantic
+  styling, and explicit sequential follow-ups without concurrent Runs or a second execution system.
+boundaries:
+  includes:
+    - Visible user and Agent transcript blocks with exactly-once presentation.
+    - Derived Run lifecycle status and truthful adaptive footer information.
+    - Compact expandable Tool summaries with bounded safe content.
+    - Inline asynchronous approval with draft and focus restoration.
+    - Searchable command, Agent, model, and Session selectors.
+    - Explicit follow-up queue through Ctrl+Q and /queue; follow-up only, with cancellation restoration.
+    - Semantic built-in message roles and accessible/plain fallbacks.
+  excludes:
+    - In-flight steering, concurrent Runs, background scheduling, or a general queue manager.
+    - Full-screen Textual, web, desktop, or alternative frontend work.
+    - New Mia Core event families unless a later interface decision justifies them.
+    - Partial Tool progress, attachments/images, custom Tool renderer contracts, Plugin widgets, and user theme files.
+    - Live expandable Tool cards, overlay focus stacks, flicker-free rebuilding, and queue display/edit/dequeue.
+depends_on: [e13, e07, e10, e12]
+planning_decisions:
+  - id: e14-queue-cardinality
+    decision: Single-slot follow-up queue
+    rejected:
+      - Multi-item FIFO without display/edit/dequeue
+      - Silent replacement of an occupied slot
+    rationale: >-
+      Deferred architecture already treats queue display/edit/dequeue as later work because draft-only
+      visibility cannot represent multiple items. Occupied-slot enqueue is rejected with an actionable
+      message so user text is not silently discarded.
+  - id: e14-transcript-source
+    decision: Render the live user block once from admitted TurnStartEvent.user_prompt
+    rejected:
+      - Echo the local submit buffer and also render TurnStartEvent
+      - Print a user block before Run admission
+    rationale: >-
+      TurnStartEvent already carries user_prompt. Rendering from the admitted turn avoids duplicate
+      blocks and avoids a transcript line for a Run that never starts.
+  - id: e14-approval-phase
+    decision: Derive the approval phase in the CLI Adapter from the existing ApprovalRequest callback
+    rejected:
+      - New Core approval event family in this epic
+    rationale: Approval is already a typed middleware callback; a new event family is out of scope.
+  - id: e14-workspace-projection
+    decision: Add one CLI-local workspace projection over existing envelopes
+    reason_for_depth: >-
+      Transcript, Tool rows, and footer must share one derived lifecycle so they cannot invent
+      conflicting Run facts. The projection lives in mia_cli, consumes existing events, and does not
+      enter mia_agent.
+stories:
+  - id: e14s01
+    title: Visible Transcript and Truthful Run Lifecycle
+    status: done
+    bcps: 5
+    risk: P0
+    delta: ADDED
+    depends_on: []
+    spec_file: e14s01-visible-transcript-and-truthful-run-lifecycle.md
+    tasks_file: e14s01-tasks.yaml
+    maps_to: [e14-visible-transcript, e14-run-state]
+  - id: e14s02
+    title: Compact Expandable Tool Rows and Safe Tool Output
+    status: done
+    bcps: 5
+    risk: P0
+    delta: MODIFIED
+    depends_on: [e14s01]
+    spec_file: e14s02-compact-expandable-tool-rows-and-safe-tool-output.md
+    tasks_file: e14s02-tasks.yaml
+    maps_to: [e14-tool-summary, e14-safety, e14-theme]
+  - id: e14s03
+    title: Asynchronous Approval with Distinct Focus
+    status: done
+    bcps: 4
+    risk: P0
+    delta: MODIFIED
+    depends_on: [e14s01, e14s02]
+    spec_file: e14s03-asynchronous-approval-with-distinct-focus.md
+    tasks_file: e14s03-tasks.yaml
+    maps_to: [e14-approval, e14-composer]
+  - id: e14s04
+    title: Searchable Workspace Controls and Adaptive Footer
+    status: done
+    bcps: 3
+    risk: P1
+    delta: MODIFIED
+    depends_on: [e14s01, e14s03]
+    spec_file: e14s04-searchable-workspace-controls-and-adaptive-footer.md
+    tasks_file: e14s04-tasks.yaml
+    maps_to: [e14-discovery, e14-status]
+  - id: e14s05
+    title: Explicit Follow-up Queue and Resilient Workspace Fallbacks
+    status: done
+    bcps: 4
+    risk: P0
+    delta: MODIFIED
+    depends_on: [e14s01, e14s03, e14s04]
+    spec_file: e14s05-explicit-follow-up-queue-and-resilient-workspace-fallbacks.md
+    tasks_file: e14s05-tasks.yaml
+    maps_to: [e14-composer, e14-safety, e14-theme]
+notes:
+  - Completed e13 artifacts remain historical and are not reopened; e14 owns the queue, transcript, and workspace deltas.
+  - Pi is read-only prior art, not a Mia dependency or compatibility promise.
+  - No new runtime dependency is proposed; prompt-toolkit and Rich remain [OK].
+  - plan-consistency-check.sh is not in this repository; capsule validation uses scripts/check-spec-consistency.py.
+references:
+  scope: specs/product/SCOPE_E14_LATEST.yaml
+  design: specs/tech-architecture/REPL-UI-FUTURE-DIRECTIONS.md
+  test_plan: specs/tech-architecture/e14-TEST_PLAN_LATEST.md
+  impact: specs/IMPACT_LATEST.md
+  audit: specs/PLAN-AUDIT_LATEST.md
+  adr: specs/adr/0002-canonical-run-request-stream.md

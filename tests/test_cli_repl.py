@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import io
-import os
-import select
 import subprocess
 import sys
 from pathlib import Path
@@ -13,6 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from prompt_toolkit.document import Document
+from prompt_toolkit.input import create_pipe_input
+from prompt_toolkit.output import DummyOutput
 from rich.console import Console
 
 from mia_agent.agents import AgentManager
@@ -50,17 +49,73 @@ def test_slash_completer_and_menu() -> None:
     assert len(completions_empty) == 0
 
 
+def test_follow_up_queue_is_explicit_single_slot_and_preserves_text(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120, force_terminal=False, no_color=True)
+    repl.prompt_session.is_busy = True
+    repl.prompt_session.set_draft("follow-up exactly")
+
+    assert repl.queue_follow_up() is True
+    assert repl.queued_follow_up == "follow-up exactly"
+    assert repl.prompt_session.get_draft() == ""
+    assert repl.queue_follow_up("replacement") is False
+    assert repl.queued_follow_up == "follow-up exactly"
+
+
 def test_command_discovery_has_one_truthful_canonical_list() -> None:
     from mia_cli.repl import COMMAND_ALIASES, COMMAND_DESCRIPTIONS, SLASH_COMMANDS
 
     canonical = [command for command, _ in COMMAND_HINTS]
 
-    assert len(canonical) == 17
+    assert len(canonical) == 19
     assert "/scoped-models" in canonical
+    assert "/tool" in canonical
     assert "/stop" not in canonical
     assert canonical == SLASH_COMMANDS
     assert canonical == list(COMMAND_DESCRIPTIONS)
     assert "/abort" not in COMMAND_ALIASES
+
+
+def test_tool_row_toggle_is_reachable_through_repl_command(tmp_path: Path) -> None:
+    from rich.console import Console
+
+    from mia_agent.events import ToolCallEvent, ToolResultEvent, TurnStartEvent
+
+    console = Console(record=True, force_terminal=False, no_color=True, highlight=False)
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = console
+    repl.stream_renderer.console = console
+    repl.stream_renderer.on_event(TurnStartEvent(turn_index=1, user_prompt="inspect files"))
+    repl.stream_renderer.on_event(
+        ToolCallEvent(call_id="call-1", tool_name="bash", arguments={"command": "printf safe"})
+    )
+    repl.stream_renderer.on_event(
+        ToolResultEvent(call_id="call-1", tool_name="bash", output="safe output")
+    )
+
+    assert repl.handle_slash_command("/tool call-1") is True
+    assert repl.stream_renderer.tool_rows["call-1"].expanded is True
+    output = console.export_text()
+    assert "[tool expanded] call-1" in output
+    assert "safe output" in output
+
+    assert repl.handle_slash_command("/tool call-1") is True
+    assert repl.stream_renderer.tool_rows["call-1"].expanded is False
+    collapsed_output = console.export_text()
+    assert "[tool collapsed] call-1" in collapsed_output
+    assert "No retained Tool row" not in collapsed_output
+
+
+def test_dynamic_display_text_replaces_terminal_controls() -> None:
+    from mia_cli.interactive_input import _safe_status_text
+    from mia_cli.renderers.rich_stream import _safe_display_text
+    from mia_cli.repl import _safe_cli_text
+
+    dirty = "line\nbell\a backspace\b vertical\v form\f end\r"
+    for sanitizer in (_safe_display_text, _safe_cli_text, _safe_status_text):
+        clean = sanitizer(dirty)
+        assert all(ord(char) >= 32 for char in clean)
+        assert "line bell" in clean
 
 
 def test_help_contract_describes_only_implemented_behavior(tmp_path: Path) -> None:
@@ -69,7 +124,7 @@ def test_help_contract_describes_only_implemented_behavior(tmp_path: Path) -> No
 
     repl.handle_slash_command("/help")
     help_output = repl.console.export_text()
-    assert "17 Canonical Slash Commands" in help_output
+    assert "19 Canonical Slash Commands" in help_output
     assert "shortcuts" not in help_output
     assert "/stop" not in help_output
 
@@ -78,6 +133,103 @@ def test_help_contract_describes_only_implemented_behavior(tmp_path: Path) -> No
     init_output = repl.console.export_text()
     assert "Basic Repository Context" in init_output
     assert "architecture" not in init_output.lower()
+
+
+def test_adaptive_toolbar_labels_provider_usage_and_context() -> None:
+    full = format_status_toolbar(
+        workspace_name="mia",
+        model_name="gpt-5",
+        provider_name="openai-codex",
+        tokens=12500,
+        current_context_tokens=3200,
+        window_tokens=128000,
+        run_state="responding",
+        width=120,
+    )
+    assert "Provider" in full.value
+    assert "openai-codex" in full.value
+    assert "Lifetime usage" in full.value
+    assert "Current context" in full.value
+    assert "3.2k" in full.value
+    assert "[responding]" in full.value
+
+    narrow = format_status_toolbar(
+        workspace_name="mia",
+        model_name="gpt-5",
+        provider_name="openai-codex",
+        tokens=12500,
+        current_context_tokens=3200,
+        window_tokens=128000,
+        run_state="tool",
+        width=50,
+    )
+    assert "gpt-5" in narrow.value
+    assert "[tool]" in narrow.value
+    assert "Current context" not in narrow.value
+
+
+@pytest.mark.asyncio
+async def test_follow_up_auto_runs_only_after_success_and_restores_on_failure(
+    tmp_path: Path,
+) -> None:
+    from mia_agent.events import TurnCompleteEvent, TurnStartEvent
+    from mia_agent.runtime_events import AgentEventEnvelope, RunErrorEvent
+
+    successful_requests: list[str] = []
+    active_runs = 0
+    max_active_runs = 0
+
+    async def successful_run(request: object, **kwargs: object):
+        nonlocal active_runs, max_active_runs
+        successful_requests.append(request.prompt_text)  # type: ignore[attr-defined]
+        active_runs += 1
+        max_active_runs = max(max_active_runs, active_runs)
+        try:
+            yield AgentEventEnvelope(
+                run_id="run",
+                task_id="root",
+                agent_id="mia",
+                session_id="session",
+                event=TurnStartEvent(user_prompt=request.prompt_text),  # type: ignore[attr-defined]
+            )
+            yield AgentEventEnvelope(
+                run_id="run",
+                task_id="root",
+                agent_id="mia",
+                session_id="session",
+                event=TurnCompleteEvent(total_steps=1, stop_reason="stop"),
+            )
+        finally:
+            active_runs -= 1
+
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.agent_runner.run = successful_run  # type: ignore[method-assign]
+    repl.prompt_session.is_busy = True
+    repl.prompt_session.set_draft("follow-up")
+    assert repl.queue_follow_up() is True
+    await repl.execute_turn("first")
+
+    assert successful_requests == ["first", "follow-up"]
+    assert max_active_runs == 1
+    assert repl.queued_follow_up is None
+
+    async def failed_run(*args: object, **kwargs: object):
+        yield AgentEventEnvelope(
+            run_id="run",
+            task_id="root",
+            agent_id="mia",
+            session_id="session",
+            event=RunErrorEvent(stage="agent", error="failed", code="agent_error"),
+        )
+
+    repl.agent_runner.run = failed_run  # type: ignore[method-assign]
+    repl.prompt_session.is_busy = True
+    repl.prompt_session.set_draft("restore me")
+    assert repl.queue_follow_up() is True
+    await repl.execute_turn("second")
+
+    assert repl.queued_follow_up is None
+    assert repl.prompt_session.get_draft() == "restore me"
 
 
 def test_format_status_toolbar() -> None:
@@ -92,6 +244,10 @@ def test_format_status_toolbar() -> None:
     assert "mimo-v2.5" in toolbar_html.value
     assert "12.5k/128k" in toolbar_html.value
     assert "💭 on" in toolbar_html.value
+
+    escaped = format_status_toolbar(workspace_name="<mia>", model_name="model&name")
+    assert "&lt;mia&gt;" in escaped.value
+    assert "model&amp;name" in escaped.value
 
 
 def test_carrot_bounce_spinner() -> None:
@@ -158,6 +314,28 @@ def test_double_escape_opens_tree_only_on_second_press() -> None:
 
     assert buffer.text == "/tree"
     buffer.validate_and_handle.assert_called_once_with()
+
+
+def test_searchable_agent_and_command_pickers_preserve_draft(tmp_path: Path) -> None:
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    manager.create_agent("researcher", display_name="Researcher", tools=[])
+    repl = MiaREPL(
+        agent="mia",
+        agent_manager=manager,
+        cwd=tmp_path,
+        custom_provider=MockProvider(),
+    )
+    repl.prompt_session.set_draft("keep this draft")
+
+    with patch("mia_cli.repl.interactive_select", return_value="researcher") as select:
+        repl.interactive_agent_picker()
+    assert select.call_args.args[0] == "🤖 Switch Agent"
+    assert repl.agent_id == "researcher"
+    assert repl.prompt_session.get_draft() == "keep this draft"
+
+    with patch("mia_cli.repl.interactive_select", return_value="/cost"):
+        repl.interactive_command_picker()
+    assert repl.prompt_session.get_draft() == "keep this draft"
 
 
 def test_repl_agent_command_selects_named_agent(tmp_path: Path) -> None:
@@ -270,66 +448,102 @@ def test_repl_pi_style_auth_and_model_scoper(tmp_path: Path) -> None:
     assert repl.model_name == "mimo-v2.5"
 
 
-def test_connected_provider_models_are_all_discovered_without_unconnected(tmp_path: Path) -> None:
+def test_model_picker_loads_persisted_scope_sources_on_startup(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.cred_store.path = tmp_path / "credentials.json"
+    repl.config_mgr.config_path = tmp_path / "config.json"
+    repl.cred_store.set_api_key("openai", "sk-test-openai")
+    repl.config_mgr.save_config(
+        repl.config_mgr.config.model_copy(
+            update={
+                "default_provider": "openai",
+                "default_model": "stored-model",
+                "model_catalog": {"openai": ["stored-model"]},
+                "scoped_models": ["openai::stored-model"],
+            }
+        )
+    )
+    repl.scoped_models = ["openai::stored-model"]
+    repl.model_name = "stored-model"
+
+    with (
+        patch("mia_cli.repl.discover_provider_models") as discover,
+        patch("mia_cli.repl.interactive_select", return_value="openai::stored-model") as select,
+    ):
+        repl.interactive_model_picker()
+
+    discover.assert_not_called()
+    assert select.call_args.args[1] == [
+        ("openai::stored-model", "openai: stored-model (Active)", "")
+    ]
+    assert repl.model_name == "stored-model"
+
+
+def test_connected_provider_models_use_stored_catalog_without_environment(
+    tmp_path: Path,
+) -> None:
     repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
     repl.cred_store.path = tmp_path / "credentials.json"
     repl.config_mgr.config_path = tmp_path / "config.json"
     repl.cred_store.set_api_key("openai", "sk-test-openai")
     repl.cred_store.set_api_key("deepseek", "sk-test-deepseek")
-    repl.console = Console(record=True, width=120)
+    repl.config_mgr.save_config(
+        repl.config_mgr.config.model_copy(
+            update={
+                "model_catalog": {
+                    "openai": ["openai-model"],
+                    "deepseek": ["deepseek-model"],
+                    "gemini": ["gemini-model"],
+                }
+            }
+        )
+    )
 
-    discovered: list[str] = []
-
-    def models_for(provider: str, **_: object) -> list[str]:
-        discovered.append(provider)
-        return [f"{provider}-model"]
-
-    with (
-        patch.dict("os.environ", {"GOOGLE_API_KEY": "google-key"}, clear=True),
-        patch("mia_cli.repl.discover_provider_models", side_effect=models_for),
-        patch(
-            "mia_cli.repl.interactive_multi_select",
-            return_value=[
-                "deepseek::deepseek-model",
-                "openai::openai-model",
-                "gemini::gemini-model",
-            ],
-        ),
+    with patch(
+        "mia_cli.repl.interactive_multi_select",
+        return_value=["deepseek::deepseek-model", "openai::openai-model"],
     ):
         repl.handle_slash_command("/scoped-models")
 
-    output = repl.console.export_text()
-    assert "Fetching live models" not in output
-    assert "Saved 3 scoped models." in output
-    assert discovered == ["deepseek", "openai", "gemini"]
     assert repl.scoped_models == [
         "deepseek::deepseek-model",
         "openai::openai-model",
-        "gemini::gemini-model",
     ]
-
-    with patch(
-        "mia_cli.repl.interactive_select",
-        return_value="openai::openai-model",
-    ) as select:
-        repl.interactive_model_picker()
-
-    select.assert_called_once()
-    assert select.call_args.args[0] == "🤖 Switch Active Model"
-    assert select.call_args.args[1][1][1] == "openai: openai-model"
-    assert select.call_args.args[1][1][2] == ""
-    assert repl.model_name == "openai-model"
-    assert repl.config_mgr.config.default_provider == "openai"
+    assert set(repl.available_model_sources.values()) == {"deepseek", "openai"}
+    assert "gemini" not in repl.available_model_sources.values()
 
     repl.cred_store.delete("openai")
+    repl.handle_slash_command("/scoped-models")
+    assert repl.available_model_sources == {"deepseek::deepseek-model": "deepseek"}
+
+
+def test_scoped_models_prunes_logged_out_provider_from_saved_scope(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.cred_store.path = tmp_path / "credentials.json"
+    repl.config_mgr.config_path = tmp_path / "config.json"
+    repl.cred_store.set_api_key("openai", "sk-test-openai")
+    repl.cred_store.set_api_key("deepseek", "sk-test-deepseek")
+    repl.scoped_models = ["openai::gpt-4o", "deepseek::deepseek-chat"]
+    repl._save_scoped_models()
+    repl.cred_store.delete("openai")
+
     with (
         patch.dict("os.environ", {}, clear=True),
-        patch("mia_cli.repl.discover_provider_models", side_effect=models_for),
+        patch("mia_cli.repl.discover_provider_models", return_value=["deepseek-chat"]),
+        patch("mia_cli.repl.interactive_multi_select", return_value=["deepseek::deepseek-chat"]),
     ):
         repl.handle_slash_command("/scoped-models")
 
-    assert repl.available_model_sources == {"deepseek::deepseek-model": "deepseek"}
-    assert repl.scoped_models == ["deepseek::deepseek-model"]
+    assert repl.available_model_sources == {"deepseek::deepseek-chat": "deepseek"}
+    assert repl.scoped_models == ["deepseek::deepseek-chat"]
+    assert repl.config_mgr.config.scoped_models == ["deepseek::deepseek-chat"]
+
+    repl.cred_store.delete("deepseek")
+    with patch("mia_cli.repl.interactive_select") as select:
+        repl.interactive_model_picker()
+    select.assert_not_called()
+    assert repl.scoped_models == []
+    assert repl.config_mgr.config.scoped_models == []
 
 
 def test_custom_connected_model_is_in_model_picker(tmp_path: Path) -> None:
@@ -349,7 +563,10 @@ def test_custom_connected_model_is_in_model_picker(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", {}, clear=True),
-        patch("mia_cli.repl.discover_provider_models", return_value=["other-local-model"]),
+        patch(
+            "mia_cli.repl.discover_provider_models",
+            return_value=["local-model", "other-local-model"],
+        ),
         patch(
             "mia_cli.repl.interactive_multi_select",
             return_value=["custom::local-model"],
@@ -386,6 +603,7 @@ def test_scoped_models_opens_selector_and_saves_selected_scope(tmp_path: Path) -
         assert repl.handle_slash_command("/scoped-models") is True
 
     selector.assert_called_once()
+    assert selector.call_args.kwargs["selected_ids"] == []
     assert repl.scoped_models == ["openai::gpt-4o"]
     assert repl.config_mgr.config.scoped_models == ["openai::gpt-4o"]
 
@@ -465,13 +683,16 @@ def test_repl_scoped_model_picker(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", {}, clear=True),
-        patch("mia_cli.repl.interactive_multi_select", return_value=["deepseek::deepseek-chat"]),
+        patch(
+            "mia_cli.repl.interactive_multi_select",
+            return_value=["deepseek::deepseek-v4-pro"],
+        ),
     ):
         repl.handle_slash_command("/scoped-models")
     with patch("builtins.input", return_value="1"):
         repl.interactive_model_picker()
 
-    assert repl.model_name == "deepseek-chat"
+    assert repl.model_name == "deepseek-v4-pro"
 
 
 @pytest.mark.asyncio
@@ -539,8 +760,8 @@ async def test_repl_execute_turn_with_tools(tmp_path: Path) -> None:
     repl = MiaREPL(cwd=tmp_path, custom_provider=mock)
 
     # Run turn with explicit approval for the side-effecting Tool.
-    with patch("builtins.input", return_value="y"):
-        await repl.execute_turn("Create hello.py")
+    repl.prompt_session.read_approval_async = AsyncMock(return_value="y")  # type: ignore[method-assign]
+    await repl.execute_turn("Create hello.py")
 
     assert (tmp_path / "hello.py").exists()
     assert (tmp_path / "hello.py").read_text() == "print('hello world')\n"
@@ -595,37 +816,81 @@ def test_interactive_multi_select_non_tty() -> None:
         assert interactive_multi_select("Select models", options) is None
 
 
-def test_interactive_multi_select_tty_navigation_and_scroll(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_interactive_multi_select_tty_navigation_and_scroll() -> None:
     options = [(f"model-{index}", f"model-{index}", "") for index in range(30)]
-    input_bytes = bytearray(b"\x1b[B" * 22 + b"\r")
-    output = io.StringIO()
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_bytes(b"\x1b[B" * 22 + b"\r")
+        assert (
+            interactive_multi_select(
+                "Select models",
+                options,
+                _input=pipe_input,
+                _output=DummyOutput(),
+            )
+            == []
+        )
 
-    class FakeStdin:
-        def isatty(self) -> bool:
-            return True
 
-        def fileno(self) -> int:
-            return 123
+def test_interactive_select_search_and_cancel() -> None:
+    options = [
+        ("opt_1", "Option One", "First item"),
+        ("opt_2", "Option Two", "Second item"),
+    ]
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_text("scond\r")
+        assert (
+            interactive_select(
+                "Test Title",
+                options,
+                _input=pipe_input,
+                _output=DummyOutput(),
+            )
+            == "opt_2"
+        )
 
-    def fake_read(_fd: int, _size: int) -> bytes:
-        if not input_bytes:
-            return b""
-        value = bytes((input_bytes[0],))
-        del input_bytes[0]
-        return value
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_bytes(b"\x1b")
+        assert (
+            interactive_select(
+                "Test Title",
+                options,
+                _input=pipe_input,
+                _output=DummyOutput(),
+            )
+            is None
+        )
 
-    monkeypatch.setattr(sys, "stdin", FakeStdin())
-    monkeypatch.setattr(sys, "stdout", output)
-    monkeypatch.setattr(os, "read", fake_read)
-    monkeypatch.setattr(select, "select", lambda *_: ([123], [], []))
-    monkeypatch.setattr("termios.tcgetattr", lambda _fd: [])
-    monkeypatch.setattr("termios.tcsetattr", lambda *_: None)
-    monkeypatch.setattr("tty.setcbreak", lambda _fd: None)
 
-    assert interactive_multi_select("Select models", options) == []
-    assert "🥕 \x1b[1;38;2;255;122;0m[ ] model-22" in output.getvalue()
+def test_interactive_select_delete_requires_list_focus() -> None:
+    deleted: list[str] = []
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_bytes(b"\td\r\x1b")
+        assert (
+            interactive_select(
+                "Test Title",
+                [("opt_1", "Option One", ""), ("opt_2", "Option Two", "")],
+                on_delete=deleted.append,
+                _input=pipe_input,
+                _output=DummyOutput(),
+            )
+            is None
+        )
+    assert deleted == ["opt_1"]
+
+
+@pytest.mark.asyncio
+async def test_interactive_select_works_inside_async_loop() -> None:
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_text("two\r")
+        assert (
+            interactive_select(
+                "Test Title",
+                [("one", "One", ""), ("two", "Two", "")],
+                _input=pipe_input,
+                _output=DummyOutput(),
+            )
+            == "two"
+        )
 
 
 def test_interactive_select_non_tty() -> None:
@@ -705,6 +970,34 @@ def test_openai_oauth_save_direct_token(tmp_path: Path) -> None:
         ok, msg = mgr.save_direct_token("oauth-test-token-123")
         assert ok is True
         assert cred_store.get_api_key("openai") == "oauth-test-token-123"
+
+
+def test_discover_gemini_models_uses_native_api_contract() -> None:
+    from mia_agent.auth.config import discover_provider_models
+
+    response = MagicMock(
+        status_code=200,
+        json=lambda: {
+            "models": [
+                {"name": "models/gemini-live", "supportedGenerationMethods": ["generateContent"]},
+                {"name": "models/gemini-embed", "supportedGenerationMethods": ["embedContent"]},
+            ]
+        },
+    )
+    with patch("httpx.get", return_value=response) as get:
+        models = discover_provider_models("gemini", api_key="gemini-key")
+
+    assert models == ["gemini-live"]
+    args = get.call_args
+    assert args.args[0] == "https://generativelanguage.googleapis.com/v1beta/models"
+    assert args.kwargs["params"]["key"] == "gemini-key"
+
+
+def test_discover_rejected_credentials_do_not_show_static_models() -> None:
+    from mia_agent.auth.config import discover_provider_models
+
+    with patch("httpx.get", return_value=MagicMock(status_code=401)):
+        assert discover_provider_models("openai", api_key="revoked-key") == []
 
 
 def test_discover_provider_models_live_and_fallback() -> None:
@@ -943,6 +1236,17 @@ def test_essential_repl_commands_and_quit_contract(tmp_path: Path) -> None:
         mock_render.assert_called_once()
 
 
+def test_queue_help_documents_portable_fallback(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+
+    repl.handle_slash_command("/help")
+    output = repl.console.export_text()
+    assert "/queue" in output
+    assert "Ctrl+Q" in output
+    assert "Enter" in output
+
+
 def test_help_discovery_exposes_essential_keyboard_and_command_alternatives(
     tmp_path: Path,
 ) -> None:
@@ -953,7 +1257,7 @@ def test_help_discovery_exposes_essential_keyboard_and_command_alternatives(
     output = repl.console.export_text()
 
     # Canonical command table is present
-    assert "17 Canonical Slash Commands" in output
+    assert "19 Canonical Slash Commands" in output
 
     # Essential keyboard actions and command equivalents are visible in text without color/icons
     assert "Essential Actions & Keyboard Equivalents" in output
@@ -1136,12 +1440,12 @@ async def test_terminal_truth_preserves_error_and_cancellation_outcomes(
         arguments={"command": "rm -rf /"},
         agent_id="mia",
     )
-    with patch("builtins.input", return_value="n"):
-        rec_console_approval = Console(record=True, width=120)
-        repl_fail.console = rec_console_approval
-        repl_fail._request_tool_approval(req)
-        appr_output = rec_console_approval.export_text()
-        assert "[approval-required]" in appr_output
+    rec_console_approval = Console(record=True, width=120)
+    repl_fail.console = rec_console_approval
+    repl_fail.prompt_session.read_approval_async = AsyncMock(return_value="n")  # type: ignore[method-assign]
+    await repl_fail._request_tool_approval(req)
+    appr_output = rec_console_approval.export_text()
+    assert "[approval-required]" in appr_output
 
 
 def test_help_and_command_discovery_distinguishes_busy_availability(
@@ -1288,7 +1592,7 @@ async def test_repl_loop_concurrent_draft_composition_and_explicit_later_submiss
 
         # Active turn is running and busy
         assert repl.prompt_session.is_busy is True
-        assert repl._run_state == "running"
+        assert repl._run_state == "thinking"
 
         # 2. While Turn 1 is running, compose draft prompt and press Enter
         pipe.send_text("draft prompt\r")
@@ -1428,9 +1732,9 @@ async def test_repl_loop_approval_remains_distinct_and_preserves_draft(
             agent_id="mia",
         )
 
-        with patch("builtins.input", return_value="y"):
-            approved = repl._request_tool_approval(req)
-            assert approved is True
+        repl.prompt_session.read_approval_async = AsyncMock(return_value="y")  # type: ignore[method-assign]
+        approved = await repl._request_tool_approval(req)  # type: ignore[misc]
+        assert approved is True
 
         # Draft text was NOT consumed as the approval answer
         assert repl.prompt_session.get_draft() == "composed user draft"

@@ -41,3 +41,17 @@ No new unsafe shell interpolation, deserialization, SQL/HTTP sink, authenticatio
 - **Review:** The canonical Agent execution path (`AgentRunner` → `AgentRuntimeFactory` → `AgentHarness` → Providers/Tools/Middleware/Session) is strictly preserved. Prompt drafting during active runs is strictly decoupled from Tool approval inputs and cannot bypass approval gates or trigger unauthorized tool calls. No new execution paths, network sinks, deserialization points, or runtime dependencies were introduced.
 - **Verification:** `bash scripts/check-release-gate.sh` (374 passed, strict mypy, 88% overall / 96% business boundary coverage, clean public surface), `uv build --offline`, wheel surface and artifact integrity verification, clean-install smoke test, and dry-run candidate verification passed cleanly.
 
+## e14 follow-up — Agent Workspace Interaction (2026-09-12)
+
+- **Scope:** Workspace transcript/lifecycle projection, Tool-row display and expansion, async approval focus, searchable controls/footer, follow-up queue, and changed CLI/REPL tests.
+- **Verdict:** PASS — no high-confidence security finding identified.
+- **Review:** The review covered the exact branch contents plus the final correction diff. The canonical `AgentRunner` → `AgentRuntimeFactory` → `AgentHarness` path, Tool middleware, fail-closed approval, bounded/sanitized display, and single-slot success-only queue remain intact. `/tool` expansion/collapse is reachable through the interactive command path; terminal C0/Cc controls are sanitized.
+- **Verification:** Review pass 3 ran every story verification command, full `pytest` (404 passed), Ruff format/check, mypy, offline build, coverage, public/wheel/clean-install checks, specification consistency, and `git diff --check`. `specs/security/epics/e14/THREAT_MODEL.md` contains the affected-path threat model. Browser OAuth remains outside this CLI review and is not claimed verified.
+
+## e14 follow-up — Agent Workspace Interaction (2026-09-12)
+
+- **Scope:** Workspace transcript/lifecycle projection, Tool-row display and expansion, async approval focus, searchable controls/footer, follow-up queue, and changed CLI/REPL tests.
+- **Verdict:** PASS — no high-confidence security finding identified.
+- **Review:** The review covered the exact branch contents plus the final correction diff. The canonical `AgentRunner` → `AgentRuntimeFactory` → `AgentHarness` path, Tool middleware, fail-closed approval, bounded/sanitized display, and single-slot success-only queue remain intact. `/tool` expansion/collapse is reachable through the interactive command path; terminal C0/Cc controls are sanitized.
+- **Verification:** Review pass 3 ran every story verification command, full `pytest` (404 passed), Ruff format/check, mypy, offline build, coverage, public/wheel/clean-install checks, specification consistency, and `git diff --check`. `specs/security/epics/e14/THREAT_MODEL.md` contains the affected-path threat model. Browser OAuth remains outside this CLI review and is not claimed verified.
+

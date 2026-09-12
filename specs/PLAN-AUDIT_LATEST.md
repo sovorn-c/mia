@@ -1,3 +1,107 @@
+# Plan Audit — e14 Agent Workspace Interaction (implementation plan)
+**Date:** 2026-09-12 · **Verdict:** READY
+**Plan revision:** 7ba51e19f3172273
+**Mode:** implementation (story + task + test plan)
+
+This is the story+task implementation-plan audit required before `/bp-build`. Earlier scope-only / epic-blueprint READY verdicts below do **not** satisfy this gate. Git HEAD at audit time: `3f6256d` on `feat/align-codex-model-selection`. `specs/state.yaml` records `plan_approval.status: approved` for this exact revision.
+
+## Principles Alignment
+
+| Check | Status | Note |
+| --- | --- | --- |
+| Vertical slices | ✅ | Five user-visible slices: transcript+lifecycle (s01), compact Tool rows (s02), async approval (s03), selectors+footer (s04), follow-up queue+fallbacks (s05). Not layer cakes. |
+| Scope bounded | ✅ | `SCOPE_E14_LATEST.yaml` in/out plus epic `boundaries`. v0.6.0 `SCOPE_LATEST.yaml` oos-11 keeps e14 off the current production release. Steering, concurrent Runs, new Core event families, live cards, and frontend rewrites stay out. |
+| Happy-path and failure AC | ✅ | Every unfinished story has both. s01 success/error/cancel + intermediate-not-terminal; s02 expand + sanitization/error rows; s03 approve + deny/fail-closed; s04 search + busy/no-network; s05 enqueue/success-run + restore/occupied/no-concurrency. |
+| Scenario IDs | ✅ | 25 IDs match `SC-e14sYY-P0/P1/P2/P3-NN`, appear in each story §17, and match `e14-TEST_PLAN_LATEST.md` 1:1 (no extras on either side). |
+| Runnable task ledgers | ✅ | Five `*-tasks.yaml` files, 20 tasks, every `verify:` non-empty, every `status: failing`. Verify commands are real `uv run --offline pytest` / spec / ruff gates. |
+| Dependency order | ✅ | s01 → s02 → s03; s04 depends on s01+s03; s05 depends on s01+s03+s04. Acyclic; matches `epic.yaml`. |
+| Architecture constraints | ✅ | AgentRunner path only; projection in `mia_cli` not `mia_agent`; no new Core event families; no concurrent Runs; no in-flight steering; prompt-toolkit owns interactive input; Sessions append-only; Tool middleware mandatory; ADR 0002 consume/cancel/close preserved. |
+| Requirement deltas | ✅ | ADDED/MODIFIED with before/after on every behavior change (idle/running, Tool lines, blocking `input()`, selectors/footer, compose-without-queue). |
+| BCP sum | ✅ | 5+5+4+3+4 = 21; matches epic, release-plan, and execution-status. WSJF (9+6+8)/8 = 2.875. |
+| Hard gates | ✅ | Transcript exactly-once (s01 P0-01); Core terminal truth (s01 P0-02/P0-03); approval fail-closed (s03 P0-03/P1-01); queue success-only auto-run (s05 P0-02); secret-free Tool display (s02 P0-03). |
+| Expand gesture named | ⚠️ | s02 requires expand/collapse of retained results but does not name the key/command. Behavioral contract + renderer tests are enough for TDD; do not promote live cards. |
+| Fail-to-admit SC | ⚠️ | s01 requirements/risks mention a Run that never admits; no dedicated SC. Covered by `e14-transcript-source` (render only from admitted `TurnStartEvent.user_prompt`). |
+| Security echo suffix | ⚠️ | s02/s03/s05 task 3 append `echo "no new security findings..."`. Pytest still fails closed; echo is a reminder, not a scan. |
+
+## Conventions Completeness
+
+| Check | Status | Note |
+| --- | --- | --- |
+| `CLAUDE.md` / `AGENTS.md` | ✅ | Present; canonical AgentRunner path and offline quality gate. |
+| `CONVENTIONS.md` | ✅ | Present; Conventional Commits, solo-git, MockProvider, required checks. |
+| `specs/` cockpit | ✅ | Product, epics, tech-architecture, ADR, impact, release, execution, state. |
+| Commit / git workflow | ✅ | Conventional Commits; `specs/state.yaml` `workflow_mode: solo-git`. |
+| No new runtime dependency | ✅ | prompt-toolkit [OK], Rich [OK]; none proposed. |
+| Spec consistency helper | ✅ | `scripts/check-spec-consistency.py` is the inventory helper (`specification consistency: clean`). `scripts/lib/plan-consistency-check.sh` **is** present despite the e14 epic note; it reports `CRITICAL=0 HIGH=0 MED=0` / `PASS` for this capsule. Absence of a generic helper is not a blocker. |
+
+## Outcome coverage vs stories
+
+| Scope outcome | Story | Status |
+| --- | --- | --- |
+| e14-visible-transcript | e14s01 | ✅ SC-e14s01-P0-01, P1-01 |
+| e14-run-state | e14s01 | ✅ SC-e14s01-P0-02, P0-03 |
+| e14-tool-summary | e14s02 | ✅ SC-e14s02-P0-01, P0-02, P1-01 |
+| e14-safety | e14s02, e14s05 | ✅ SC-e14s02-P0-03; s05 bounded/plain fallbacks |
+| e14-theme | e14s02, e14s05 | ✅ SC-e14s02-P2-01, SC-e14s05-P1-02 |
+| e14-approval | e14s03 | ✅ SC-e14s03-P0-01..P1-01 |
+| e14-composer | e14s03, e14s05 (selector drafts in s04) | ✅ approval restore; queue restore; SC-e14s04-P1-02 |
+| e14-discovery | e14s04 | ✅ SC-e14s04-P1-01..P1-03 |
+| e14-status | e14s04 | ✅ SC-e14s04-P1-04 |
+
+No in-scope e14 outcome is unmapped. Out-of-scope items (steering, concurrency, live cards, new Core events, Textual/web) remain excluded in stories, test plan, and `REPL-UI-FUTURE-DIRECTIONS.md`.
+
+## Pre-flight Answers
+
+| Command or decision | Value |
+| --- | --- |
+| test | `uv run --offline pytest` |
+| build | `uv build --offline` |
+| lint | `uv run --offline ruff check .` |
+| format | `uv run --offline ruff format .` |
+| typecheck | `uv run --offline mypy src` |
+| CI | Existing GitHub Actions `.github/workflows/ci.yml` (PR/push `main`, Python 3.12–3.14, `scripts/check-release-gate.sh`) plus local offline gates. This audit did not run CI or the full quality gate. |
+| workflow | solo-git |
+| language | Python 3.12+, prompt-toolkit, Rich, Pydantic, AnyIO |
+| codebase | existing, not greenfield |
+
+## Validation evidence
+
+```text
+uv run --offline python scripts/check-spec-consistency.py
+→ specification consistency: clean
+
+test -f specs/tech-architecture/e14-TEST_PLAN_LATEST.md
+→ TEST_PLAN_OK
+
+find specs/epics/e14-agent-workspace-interaction -name '*-tasks.yaml' | wc -l
+→ 5
+
+20 tasks: every verify: non-empty, every status: failing
+
+bash scripts/lib/plan-consistency-check.sh specs/epics/e14-agent-workspace-interaction
+→ CRITICAL=0 HIGH=0 MED=0 PASS
+```
+
+## Open Gaps
+
+None that fail slice-tasks, plan-tests, or plan-work.
+
+Non-blocking `/bp-build` notes (not a return to planning):
+
+- [ ] Pin the s02 expand/collapse control in the first failing test (do not invent live cards).
+- [ ] If local submit can still echo before admission, assert fail-to-admit under s01 task 1.
+- [ ] Do not treat the security `echo` suffix as a scan.
+
+## Verdict
+
+**READY** — implementation plan revision `7ba51e19f3172273` is detailed enough for `/bp-build`, and `specs/state.yaml` records explicit user approval of this exact revision. Starting cursor remains `e14s01`.
+
+This audit ends at the planning approval checkpoint. The approval checkpoint is satisfied; next step is `/bp-build` for the complete e14 epic.
+
+---
+
+## Preserved previous audits
+
 # Plan Audit — e13 Inline REPL Feature Blueprint
 
 **Date:** 2026-09-08 · **Verdict:** READY (epic blueprint only)
@@ -158,3 +262,63 @@ The required quality gate was rerun after the selective replan: Ruff formatting 
 **READY** — the selective replan is coherent, bounded, dependency-ordered, security-conscious, and detailed enough for story slicing. An independent architecture review initially returned NOT READY; its blockers are now resolved by separating inspectable catalog contributions from Run activation, defining exactly-once Core finalization for consumption, cancellation, and awaited closure while excluding bare abandonment, distinguishing pre- from post-finalization cancellation/closure and fixing the linearization order as finalize → observe → cleanup decision → delivery, requiring cooperative cleanup decisions without claiming progress against event-loop-blocking code, narrowing constitutional claims to the supported host API, making e10 depend on e09, and aligning delivered-epic status vocabulary. A final independent pass found no remaining blocker or concern and returned READY. The public Plugin surface remains materially smaller than either Pi's full-authority extension model or DSH's replaceable-service model while still enabling installed developers to extend Agents without changing Core.
 
 **Next skill:** `/bp-plan`
+
+---
+
+# Plan Audit — Mia Agent Workspace Interaction
+
+**Date:** 2026-09-08 · **Verdict:** READY
+**Placement:** New queued e14 blueprint for `v0.7.0-agent-workspace`; completed e13 and the v0.6.0 scope remain historical.
+
+## Principles Alignment
+
+| Check | Status | Note |
+| --- | --- | --- |
+| Vertical slices | ✅ | e14 is bounded around one user outcome: observe and control one foreground Agent Run. Story slicing is intentionally deferred to `bp-plan`. |
+| Scope bounded | ✅ | `specs/product/SCOPE_E14_LATEST.yaml` defines immediate inclusions, explicit exclusions, constraints, and promotion boundaries. |
+| Success criteria | ✅ | Criteria cover exactly-once transcript presentation, Core-truthful outcomes, Tool safety, approval, queue behavior, focus, accessibility, and plain output. |
+| Hard gates | ✅ | Core Run truth, Tool middleware, approval safety, no concurrent Runs, terminal ownership, and no credential disclosure are explicit gates. |
+| Domain language | ✅ | Agent, Run, Tool, Session, Core, Adapter, approval, draft, and follow-up queue use existing Mia terminology. |
+| Prior-art boundary | ✅ | Pi is a read-only reference; no Pi dependency, compatibility promise, or surface clone is introduced. |
+
+## Conventions Completeness
+
+| Check | Status | Note |
+| --- | --- | --- |
+| Project guidance | ✅ | `CLAUDE.md`, `AGENTS.md`, and `CONVENTIONS.md` exist and define the canonical runtime and solo-git workflow. |
+| Specs layout | ✅ | Product, architecture, epic, state, release, and verification directories exist. |
+| Commit policy | ✅ | Conventional Commits and protected-main rules are documented. |
+| Existing codebase | ✅ | Python 3.12+, prompt-toolkit + Rich, existing REPL and typed runtime events. |
+| New dependency | ✅ | None proposed. |
+
+## Pre-flight Answers
+
+| Command or decision | Value |
+| --- | --- |
+| Test | `uv run --offline pytest` |
+| Build | `uv build --offline` |
+| Lint | `uv run --offline ruff check .` |
+| Format | `uv run --offline ruff format .` |
+| Typecheck | `uv run --offline mypy src` |
+| CI platform | No new CI platform required; use the repository's local/offline gates. |
+| Workflow | `solo-git`; direct commits to `main` are protected, so work uses a local feature branch. |
+| Language/framework | Python 3.12+, prompt-toolkit, Rich, Pydantic, AnyIO. |
+| Release placement | Queued e14 for `v0.7.0-agent-workspace`. |
+
+## Open Gaps
+
+- [ ] Story specifications and task ledgers — intentionally deferred to `bp-plan` after e14 is selected.
+- [x] Queue behavior after provider/tool failure — restore queued text to the draft; auto-run only after successful settlement.
+- [x] Cross-terminal delivery of `Ctrl+Q` — `/queue` is the required portable fallback; terminal flow control must not be changed silently.
+
+The unchecked item is an intentional planning boundary, not a blocker for the epic-level blueprint. No build skill should start until e14 is selected and `bp-plan` resolves the story-level behavior.
+
+## Verdict
+
+**READY** — The e14 feature has a bounded next-release scope, explicit exclusions, compatible architecture constraints, observable success criteria, an impact assessment, and an epic capsule. Keep it queued; run `bp-plan` before implementation.
+
+## Verification
+
+```bash
+test -f specs/PLAN-AUDIT_LATEST.md && grep -q 'Verdict: READY' specs/PLAN-AUDIT_LATEST.md
+```

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
@@ -48,6 +50,33 @@ async def test_prompt_execution_with_pipe_input() -> None:
 
 
 @pytest.mark.asyncio
+async def test_slash_completion_anchors_at_slash_and_navigates_like_terminal() -> None:
+    """Slash completion stays over the command and supports arrow selection."""
+    with create_pipe_input() as pipe:
+        session = LivePromptSession(input=pipe, output=DummyOutput())
+        prompt_task = asyncio.create_task(session.read_prompt_async("› "))
+        pipe.send_text("/")
+        await asyncio.sleep(0.05)
+
+        buffer = session.session.default_buffer
+        assert buffer.complete_state is not None
+        assert session._completion_menu_position() == 0
+
+        pipe.send_bytes(b"\x1b[B")
+        await asyncio.sleep(0.05)
+        assert buffer.text == "/help"
+        pipe.send_bytes(b"\x1b[B")
+        await asyncio.sleep(0.05)
+        assert buffer.text == "/login"
+        pipe.send_bytes(b"\x1b[A")
+        await asyncio.sleep(0.05)
+        assert buffer.text == "/help"
+
+        pipe.send_bytes(b"\r")
+        assert await prompt_task == "/help"
+
+
+@pytest.mark.asyncio
 async def test_compose_during_busy_run_blocks_enter_and_does_not_queue() -> None:
     """SC-e13s02-P0-01: User can edit draft during a run; Enter does not submit while busy."""
     import asyncio
@@ -75,6 +104,23 @@ async def test_compose_during_busy_run_blocks_enter_and_does_not_queue() -> None
         assert await prompt_task == "draft during run"
 
 
+def test_ctrl_q_queues_busy_draft_through_explicit_callback() -> None:
+    from unittest.mock import MagicMock
+
+    session = LivePromptSession()
+    session.is_busy = True
+    session.on_queue_callback = MagicMock(return_value=True)
+    binding = session.bindings.get_bindings_for_keys(("c-q",))[-1]
+    buffer = MagicMock()
+    buffer.text = "queued draft"
+
+    binding.handler(MagicMock(current_buffer=buffer))
+
+    assert session.draft_text == ""
+    session.on_queue_callback.assert_called_once_with()
+    buffer.reset.assert_called_once_with()
+
+
 def test_draft_preserved_across_cancellation() -> None:
     """SC-e13s02-P0-02: Cancelling an active run retains the draft."""
     from unittest.mock import MagicMock
@@ -100,10 +146,11 @@ def test_draft_preserved_across_cancellation() -> None:
     mock_buffer.reset.assert_called_once()
 
 
-def test_approval_focus_is_distinct_and_restores_draft() -> None:
+@pytest.mark.asyncio
+async def test_approval_focus_is_distinct_and_restores_draft() -> None:
     """SC-e13s02-P0-03: Approval input is separate and preserves existing draft."""
     from pathlib import Path
-    from unittest.mock import patch
+    from unittest.mock import AsyncMock
 
     from rich.console import Console
 
@@ -121,13 +168,98 @@ def test_approval_focus_is_distinct_and_restores_draft() -> None:
         agent_id="mia",
     )
 
-    # User answers 'y' to approval
-    with patch("builtins.input", return_value="y"):
-        approved = repl._request_tool_approval(req)
-        assert approved is True
+    repl.prompt_session.read_approval_async = AsyncMock(return_value="y")  # type: ignore[method-assign]
+    assert await repl._request_tool_approval(req) is True
 
     # Draft remains intact and was not consumed as approval
     assert repl.prompt_session.get_draft() == "in-progress user prompt"
+
+
+@pytest.mark.asyncio
+async def test_approval_is_async_distinct_from_draft_and_fail_closed() -> None:
+    import inspect
+    from unittest.mock import patch
+
+    from mia_ai.providers.mock import MockProvider
+    from mia_cli.repl import MiaREPL
+    from mia_middleware.access import ApprovalRequest
+
+    repl = MiaREPL(custom_provider=MockProvider())
+    repl.prompt_session.set_draft("draft includes y")
+    request = ApprovalRequest(
+        effect="side-effecting",
+        tool_name="write_file",
+        arguments={"path": "safe.txt", "content": "safe"},
+    )
+
+    async def approval_input() -> str:
+        assert repl.stream_renderer.phase == "approval"
+        await asyncio.sleep(0)
+        return ""
+
+    repl.prompt_session.read_approval_async = approval_input  # type: ignore[method-assign]
+    with patch("builtins.input", side_effect=AssertionError("blocking input used")):
+        decision = repl._request_tool_approval(request)
+        assert inspect.isawaitable(decision)
+        assert await decision is False
+
+    assert repl.prompt_session.get_draft() == "draft includes y"
+
+
+@pytest.mark.asyncio
+async def test_approval_explicit_action_can_approve_and_errors_deny() -> None:
+    from unittest.mock import AsyncMock
+
+    from mia_ai.providers.mock import MockProvider
+    from mia_cli.repl import MiaREPL
+    from mia_middleware.access import ApprovalRequest
+
+    repl = MiaREPL(custom_provider=MockProvider())
+    repl.prompt_session.set_draft("keep this draft")
+    request = ApprovalRequest(effect="side-effecting", tool_name="bash", arguments={})
+
+    repl.prompt_session.read_approval_async = AsyncMock(return_value="y")  # type: ignore[method-assign]
+    assert await repl._request_tool_approval(request) is True
+    assert repl.prompt_session.get_draft() == "keep this draft"
+
+    async def broken_approval() -> str:
+        raise RuntimeError("approval unavailable")
+
+    repl.prompt_session.set_draft("keep this too")
+    repl.prompt_session.read_approval_async = broken_approval  # type: ignore[method-assign]
+    assert await repl._request_tool_approval(request) is False
+    assert repl.prompt_session.get_draft() == "keep this too"
+
+
+@pytest.mark.asyncio
+async def test_pipe_approval_uses_dedicated_async_focus(tmp_path) -> None:
+    from mia_ai.providers.mock import MockProvider
+    from mia_ai.types import ToolCall
+    from mia_cli.repl import MiaREPL
+
+    provider = MockProvider()
+    provider.queue_tool_call(
+        ToolCall(
+            id="approval-call",
+            name="write_file",
+            arguments={"path": "approved.txt", "content": "approved"},
+        )
+    )
+    provider.queue_text_response("done")
+
+    with create_pipe_input() as pipe:
+        repl = MiaREPL(
+            cwd=tmp_path,
+            custom_provider=provider,
+            prompt_input=pipe,
+            prompt_output=DummyOutput(),
+        )
+        task = asyncio.create_task(repl.execute_turn("write the file"))
+        await asyncio.sleep(0.1)
+        pipe.send_text("y\r")
+        await asyncio.wait_for(task, timeout=3.0)
+
+    assert (tmp_path / "approved.txt").read_text() == "approved"
 
 
 def test_narrow_terminal_toolbar_layout() -> None:

@@ -151,6 +151,11 @@ out_of_scope:
   - id: oos-10
     name: Story specifications and implementation task plans
     rationale: Blueprinting stops at epic outcomes; `/bp-plan` owns story slicing and detailed planning.
+  - id: oos-11
+    name: Agent Workspace Interaction beyond e13
+    rationale: >-
+      The next-release e14 blueprint is tracked separately so v0.6.0 remains stable; see
+      `specs/product/SCOPE_E14_LATEST.yaml` and `specs/epics/e14-agent-workspace-interaction/`.
 
 constraints:
   - Keep Agent as the single durable configured identity and preserve stable e01-e06 story IDs.
@@ -204,6 +209,8 @@ references:
   - specs/security/EXCEPTIONS.md
   - specs/bugs/registry.yaml
   - specs/release-plan.yaml
+  - specs/product/SCOPE_E14_LATEST.yaml
+  - specs/tech-architecture/REPL-UI-FUTURE-DIRECTIONS.md
 
 prior_art: |
   ## Prior Art

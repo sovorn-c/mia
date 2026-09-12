@@ -21,6 +21,8 @@ VT Code's runtime discipline, Crush's explicit state/focus handling, and Froggit
 
 Reuse Rich and prompt-toolkit and the canonical AgentRunner → AgentRuntimeFactory → AgentHarness path. Keep UI state and input coordination in mia_cli; no terminal framework enters mia_agent. Draft editing is local UI activity, not a second Run, persisted Session entry, scheduler, or public runtime API.
 
+Selector implementation follows Pi's reusable interaction patterns without copying its terminal renderer: prompt-toolkit owns input parsing, focus, resize, and cleanup; a focused filter field fronts a bounded, width-safe list; Tab/BackTab moves focus, arrows/page keys navigate, and Enter/Escape confirm or cancel. Selectors run in a worker thread when invoked from Mia's async loop, avoiding nested event loops. Status-toolbar values are escaped before HTML rendering. Raw ANSI/termios selector loops and secret-bearing status text are out of scope.
+
 Current LivePromptSession keybindings can reset or replace the buffer to invoke commands. The new busy/approval/focus contract must prevent that behavior from losing a draft. Streaming rendering is also used by print mode, so interactive changes must preserve non-interactive/plain behavior.
 
 Preserve consume/cancel/awaited-close semantics and exactly-once finalization from ADR 0002. Preserve mandatory Tool middleware and approval policy. Never route approval through an unvalidated draft or expose secrets through additional status/inspection output.

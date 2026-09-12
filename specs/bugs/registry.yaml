@@ -15,3 +15,31 @@ bugs:
     approach: Vertical checkbox selector with config-backed ordered scope and cancel-safe persistence
     risk_level: medium
     commit_message: "fix(cli): add saved scoped model selector"
+  - bug_id: BUG-2026-09-08T090648Z
+    date: 2026-09-08
+    status: open
+    severity: medium
+    priority: P1
+    scope: auth
+    summary: OpenAI browser authentication uses an unsupported OAuth client contract and does not create a usable Mia login
+    file: specs/bugs/BUG-2026-09-08T090648Z-openai-oauth.md
+    approach: Implement supported ChatGPT/Codex OAuth as a separate typed credential/provider path with state validation and truthful failure handling
+    files_changed:
+      - src/mia_agent/auth/openai_auth.py
+      - src/mia_agent/auth/config.py
+      - src/mia_ai/providers/openai_codex.py
+      - src/mia_agent/runtime_factory.py
+      - src/mia_cli/repl.py
+      - tests/test_openai_codex_oauth.py
+      - tests/test_openai_codex_provider.py
+    risk_level: medium
+  - bug_id: BUG-2026-09-08T-model-scope-discovery
+    date: 2026-09-08
+    status: open
+    severity: medium
+    priority: P1
+    scope: cli/providers
+    summary: Scoped model selection includes stale providers and relies on incomplete provider discovery contracts
+    file: specs/bugs/BUG-2026-09-08T-model-scope-discovery.md
+    approach: Reconcile saved scope against connected providers and use provider-native live discovery at the explicit scope-refresh boundary
+    risk_level: medium

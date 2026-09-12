@@ -6,17 +6,28 @@ import asyncio
 import contextlib
 import sys
 import time
+import unicodedata
 from collections.abc import Callable, Iterable
+from html import escape
 from pathlib import Path
 from typing import Any
 
+from prompt_toolkit.application import Application
+from prompt_toolkit.application.current import get_app
 from prompt_toolkit.completion import CompleteEvent, Completer, Completion
 from prompt_toolkit.document import Document
-from prompt_toolkit.formatted_text import HTML, AnyFormattedText
+from prompt_toolkit.filters import Condition
+from prompt_toolkit.formatted_text import HTML, AnyFormattedText, StyleAndTextTuples
 from prompt_toolkit.history import FileHistory, History, InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
+from prompt_toolkit.keys import Keys
+from prompt_toolkit.layout import HSplit, Layout, Window
+from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
+from prompt_toolkit.layout.dimension import Dimension
 from prompt_toolkit.shortcuts import PromptSession
 from prompt_toolkit.styles import Style
+from prompt_toolkit.utils import get_cwidth
+from prompt_toolkit.widgets import Frame, Label, TextArea
 
 COMMAND_HINTS: list[tuple[str, str]] = [
     ("/help", "Show the command menu and aliases (alias: /?)"),
@@ -25,6 +36,8 @@ COMMAND_HINTS: list[tuple[str, str]] = [
     ("/model", "Switch the active model (alias: /llm)"),
     ("/scoped-models", "Discover and set models used by Ctrl+P cycling"),
     ("/agent", "Show or switch the active Agent"),
+    ("/tool", "Expand or collapse a retained Tool row: /tool <call-id>"),
+    ("/queue", "Queue one explicit follow-up during a Run (Ctrl+Q fallback)"),
     ("/diff", "Show the Git diff or report Git errors (alias: /changes)"),
     ("/cost", "Show session token and cost totals (alias: /stats, /tokens)"),
     ("/compact", "Compact active context when history is available (alias: /compress)"),
@@ -55,6 +68,14 @@ MIA_STYLE = Style.from_dict(
         "bottom-toolbar.text": "noreverse bg:default #9CA3AF",
         "bottom-toolbar.accent": "bold bg:default #FF7A00",
         "bottom-toolbar.dim": "bg:default #6B7280",
+        "selector-frame": "#2D3342",
+        "selector-title": "bold #FF7A00",
+        "selector-hint": "#6B7280",
+        "selector-search": "#E5E7EB",
+        "selector-item": "#E5E7EB",
+        "selector-selected": "bold #FF7A00",
+        "selector-muted": "#9CA3AF",
+        "selector-error": "#F87171",
     }
 )
 
@@ -119,6 +140,12 @@ class SafeFileHistory(History):
             self._delegate.store_string(string)
 
 
+def _safe_status_text(value: str) -> str:
+    """Keep user-controlled status values single-line and safe for prompt_toolkit HTML."""
+    clean = "".join(" " if unicodedata.category(char) == "Cc" else char for char in str(value))
+    return escape(" ".join(clean.split()), quote=False)
+
+
 def format_status_toolbar(
     workspace_name: str = "mia",
     model_name: str = "mimo-v2.5",
@@ -127,24 +154,42 @@ def format_status_toolbar(
     thinking_enabled: bool = False,
     *,
     agent_id: str | None = None,
+    provider_name: str | None = None,
     session_id: str | None = None,
+    current_context_tokens: int | None = None,
     run_state: str = "idle",
     width: int | None = None,
 ) -> HTML:
     """Render clean status info line below the prompt, adjusted with zero background."""
+    workspace_name = _safe_status_text(workspace_name)
+    model_name = _safe_status_text(model_name)
+    agent_id = _safe_status_text(agent_id) if agent_id else None
+    provider_name = _safe_status_text(provider_name) if provider_name else None
+    session_id = _safe_status_text(session_id) if session_id else None
+    run_state = _safe_status_text(run_state)
     tokens_str = f"{tokens / 1000:.1f}k" if tokens >= 1000 else str(tokens)
     if window_tokens is not None and window_tokens > 0:
         pct = (tokens / max(1, window_tokens)) * 100
         pct_str = f"{pct:.1f}%" if tokens > 0 else "0%"
         window_str = f"{window_tokens // 1000}k" if window_tokens >= 1000 else str(window_tokens)
-        token_display = f"⚡ {tokens_str}/{window_str} ({pct_str})"
+        token_display = f"{tokens_str}/{window_str} ({pct_str})"
     else:
-        token_display = f"⚡ {tokens_str}"
+        token_display = tokens_str
+    lifetime_usage = f"Lifetime usage: {token_display}"
+    current_context = (
+        f"Current context: {current_context_tokens / 1000:.1f}k"
+        if current_context_tokens is not None and current_context_tokens >= 1000
+        else f"Current context: {current_context_tokens}"
+        if current_context_tokens is not None
+        else "Current context: unavailable"
+    )
 
     if width is not None and width < 60:
+        provider_part = f" │ {provider_name}" if provider_name else ""
         return HTML(
-            f"<style fg='#9CA3AF'>📁 <b>{workspace_name}</b> │ 🧠 <b>{model_name}</b> │ "
-            f"{token_display} │ <style fg='#FF7A00'>[{run_state}]</style></style>"
+            f"<style fg='#9CA3AF'>Workspace: <b>{workspace_name}</b> │ "
+            f"Model: <b>{model_name}</b>{provider_part} │ "
+            f"Phase: <style fg='#FF7A00'>[{run_state}]</style></style>"
         )
 
     thinking_badge = (
@@ -154,17 +199,18 @@ def format_status_toolbar(
     )
 
     agent_part = f"🤖 <b>{agent_id}</b> │ " if agent_id else ""
+    provider_part = f"Provider: <b>{provider_name}</b> │ " if provider_name else ""
     session_part = f"🆔 <b>{session_id}</b> │ " if session_id else ""
-    state_badge = f" <style fg='#FF7A00'>[{run_state}]</style> │" if run_state else ""
+    state_badge = f" Phase: <style fg='#FF7A00'>[{run_state}]</style> │" if run_state else ""
 
     return HTML(
-        f"<style fg='#9CA3AF'>  📁 <b>{workspace_name}</b> │ "
+        f"<style fg='#9CA3AF'>  Workspace: <b>{workspace_name}</b> │ "
         f"{agent_part}"
-        f"🧠 <b>{model_name}</b> │ "
+        f"Model: <b>{model_name}</b> │ "
+        f"{provider_part}"
         f"{session_part}"
-        f"{token_display}{thinking_badge} │"
-        f"{state_badge} "
-        f"<b>/help</b></style>"
+        f"{lifetime_usage} │ {current_context}{thinking_badge} │"
+        f"{state_badge} <b>/help</b></style>"
     )
 
 
@@ -187,8 +233,10 @@ class LivePromptSession:
         self.completer = SlashCompleter()
         self._last_escape_time = 0.0
         self.is_busy: bool = False
+        self.approval_active: bool = False
         self.draft_text: str = ""
         self.on_cancel_callback: Callable[[], None] | None = None
+        self.on_queue_callback: Callable[[], bool] | None = None
         self.bindings = self._create_keybindings()
         self.session: PromptSession[str] = PromptSession(
             history=self.history,
@@ -200,6 +248,33 @@ class LivePromptSession:
             output=output,
             reserve_space_for_menu=8,
         )
+        self.approval_session: PromptSession[str] = PromptSession(
+            style=MIA_STYLE,
+            input=input,
+            output=output,
+        )
+        self._install_completion_menu_anchor()
+
+    def _install_completion_menu_anchor(self) -> None:
+        """Anchor the completion popup at the slash, not the query cursor."""
+        for control in self.session.layout.find_all_controls():
+            if isinstance(control, BufferControl) and control.buffer is self.session.default_buffer:
+                control.menu_position = self._completion_menu_position
+
+    def _completion_menu_position(self) -> int | None:
+        """Return the buffer offset of the active slash command."""
+        state = self.session.default_buffer.complete_state
+        if state is None:
+            return None
+
+        before_cursor = state.original_document.text_before_cursor
+        line = before_cursor.rsplit("\n", 1)[-1]
+        stripped_line = line.lstrip()
+        if not stripped_line.startswith("/"):
+            return None
+
+        line_start = state.original_document.cursor_position - len(line)
+        return line_start + len(line) - len(stripped_line)
 
     def get_draft(self) -> str:
         """Return the current draft text from the active buffer or stored draft."""
@@ -261,10 +336,39 @@ class LivePromptSession:
             if self.is_busy:
                 if event.current_buffer.text:
                     self.draft_text = event.current_buffer.text
+                if event.current_buffer.text.strip().lower().startswith("/queue"):
+                    event.current_buffer.validate_and_handle()
                 return
             event.current_buffer.validate_and_handle()
 
+        # Completion navigation must win over history navigation while the menu is open.
+        @kb.add("up")
+        def _completion_up(event: KeyPressEvent) -> None:
+            event.current_buffer.auto_up()
+
+        @kb.add("down")
+        def _completion_down(event: KeyPressEvent) -> None:
+            event.current_buffer.auto_down()
+
+        @kb.add("tab")
+        def _completion_next(event: KeyPressEvent) -> None:
+            buffer = event.current_buffer
+            if buffer.complete_state:
+                buffer.complete_next()
+            else:
+                buffer.start_completion(select_first=True)
+
         # Ctrl+C: Clear active input buffer when idle; signal cancel while busy without dropping draft
+        @kb.add("c-q")
+        def _queue_follow_up(event: KeyPressEvent) -> None:
+            if not self.is_busy or self.approval_active:
+                return
+            if event.current_buffer.text:
+                self.draft_text = event.current_buffer.text
+            if self.on_queue_callback and self.on_queue_callback():
+                event.current_buffer.reset()
+                self.draft_text = ""
+
         @kb.add("c-c")
         def _clear_buffer(event: KeyPressEvent) -> None:
             if self.is_busy:
@@ -384,6 +488,18 @@ class LivePromptSession:
         except EOFError:
             raise
 
+    async def read_approval_async(self, prompt_prefix: str = "Approve? [y/N] ") -> str:
+        """Read approval in a separate prompt-toolkit focus, never from the draft buffer."""
+        if not sys.stdin.isatty() and not getattr(self.approval_session, "_input", None):
+            return ""
+        try:
+            return await self.approval_session.prompt_async(
+                [("class:prompt", prompt_prefix)],
+                default="",
+            )
+        except (asyncio.CancelledError, EOFError, KeyboardInterrupt, OSError):
+            return ""
+
     def read_prompt(
         self,
         prompt_prefix: str = "› ",
@@ -435,18 +551,68 @@ class LiveInteractivePrompt:
         return self._session.read_prompt(prompt_prefix)
 
 
+def _single_line(text: str) -> str:
+    return " ".join(str(text).replace("\r", " ").replace("\n", " ").split())
+
+
+def _truncate_selector_text(text: str, width: int) -> str:
+    if width <= 0:
+        return ""
+    if get_cwidth(text) <= width:
+        return text
+    if width == 1:
+        return "…"
+    result: list[str] = []
+    used = 0
+    for char in text:
+        char_width = get_cwidth(char)
+        if used + char_width > width - 1:
+            break
+        result.append(char)
+        used += char_width
+    return "".join(result) + "…"
+
+
+def _selector_matches(query: str, option: tuple[str, str, str]) -> bool:
+    haystack = " ".join(option).lower()
+    return all(
+        token in haystack or _is_subsequence(token, haystack) for token in query.lower().split()
+    )
+
+
+def _is_subsequence(needle: str, haystack: str) -> bool:
+    cursor = iter(haystack)
+    return all(char in cursor for char in needle)
+
+
+def _selector_width() -> int:
+    try:
+        return max(20, get_app().output.get_size().columns)
+    except Exception:
+        return 80
+
+
+def _run_selector_application[T](application: Application[T]) -> T:
+    """Run a modal selector from sync code or while Mia's async loop is active."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return application.run()
+    return application.run(in_thread=True, handle_sigint=False)
+
+
 def interactive_multi_select(
     title: str,
     options: list[tuple[str, str, str]],
     selected_ids: Iterable[str] = (),
+    *,
+    _input: Any = None,
+    _output: Any = None,
 ) -> list[str] | None:
-    """Select multiple vertical options; Enter saves and Escape cancels."""
+    """Select multiple options with Pi-style search, scrolling, and safe terminal cleanup."""
     if not options:
         return []
-
-    option_ids = [option[0] for option in options]
-    selected = set(selected_ids).intersection(option_ids)
-    if not sys.stdin.isatty():
+    if _input is None and _output is None and not (sys.stdin.isatty() and sys.stdout.isatty()):
         try:
             raw = input(f"{title} (comma-separated numbers, Enter saves, Esc cancels): ").strip()
             if not raw:
@@ -458,93 +624,182 @@ def interactive_multi_select(
         except (ValueError, KeyboardInterrupt, EOFError, OSError):
             return None
 
-    import os
-    import select
-    import shutil
-    import termios
-    import tty
-
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
+    items = list(options)
+    option_ids = [option[0] for option in items]
+    selected = set(selected_ids).intersection(option_ids)
     current_idx = 0
-    terminal_lines = shutil.get_terminal_size((80, 24)).lines
-    viewport_size = max(1, min(len(options), terminal_lines - 4))
-    window_start = 0
-
-    sys.stdout.write(
-        f"\n\x1b[1;38;2;255;122;0m🥕 {title}\x1b[0m "
-        "\x1b[2;37m(Space toggle, ↑/↓ move, Enter save, Esc cancel)\x1b[0m\n"
+    max_visible = 8
+    search = TextArea(
+        height=1,
+        prompt="Filter: ",
+        multiline=False,
+        wrap_lines=False,
+        style="class:selector-search",
     )
-    sys.stdout.write("\x1b[38;2;45;51;66m" + "─" * 68 + "\x1b[0m\n")
 
-    def keep_current_visible() -> None:
-        nonlocal window_start
-        if current_idx < window_start:
-            window_start = current_idx
-        elif current_idx >= window_start + viewport_size:
-            window_start = current_idx - viewport_size + 1
+    def filtered() -> list[tuple[int, tuple[str, str, str]]]:
+        query = _single_line(search.text)
+        return [
+            (index, option)
+            for index, option in enumerate(items)
+            if _selector_matches(query, option)
+        ]
 
-    def render() -> None:
-        end = min(window_start + viewport_size, len(options))
-        for index in range(window_start, end):
-            option_id, label, desc = options[index]
-            marker = "[x]" if option_id in selected else "[ ]"
-            cursor = "🥕 " if index == current_idx else "   "
-            color = "1;38;2;255;122;0m" if index == current_idx else "38;2;156;163;175m"
-            suffix = f" \x1b[2m│\x1b[0m {desc}" if desc else ""
-            sys.stdout.write(f"\r\x1b[K{cursor}\x1b[{color}{marker} {label}\x1b[0m{suffix}\n")
-        sys.stdout.flush()
+    def current_item() -> tuple[int, tuple[str, str, str]] | None:
+        visible = filtered()
+        if not visible:
+            return None
+        return visible[min(current_idx, len(visible) - 1)]
 
-    def read_key() -> bytes:
-        key = os.read(fd, 1)
-        if key != b"\x1b":
-            return key
-        readable, _, _ = select.select([fd], [], [], 0.05)
-        if not readable:
-            return key
-        prefix = os.read(fd, 1)
-        if prefix not in (b"[", b"O"):
-            return key
-        readable, _, _ = select.select([fd], [], [], 0.05)
-        if not readable:
-            return key
-        return key + prefix + os.read(fd, 1)
+    def render_list() -> StyleAndTextTuples:
+        visible = filtered()
+        if not visible:
+            return [("class:selector-muted", "  No matching options")]
 
-    try:
-        tty.setcbreak(fd)
-        render()
-        while True:
-            raw_bytes = read_key()
-            if not raw_bytes:
-                continue
-            if raw_bytes == b"\x1b":
-                sys.stdout.write("\n\x1b[2;37m(Selection cancelled)\x1b[0m\n\n")
-                return None
-            if raw_bytes == b"\x03":
-                raise KeyboardInterrupt
-            if raw_bytes in (b"\x1b[A", b"\x1bOA"):
-                current_idx = (current_idx - 1) % len(options)
-            elif raw_bytes in (b"\x1b[B", b"\x1bOB"):
-                current_idx = (current_idx + 1) % len(options)
-            elif raw_bytes == b" ":
-                option_id = options[current_idx][0]
-                if option_id in selected:
-                    selected.remove(option_id)
-                else:
-                    selected.add(option_id)
-            elif raw_bytes == b"\x01":
-                selected = set(option_ids)
-            elif raw_bytes == b"\x18":
-                selected.clear()
-            elif raw_bytes in (b"\r", b"\n"):
-                return [option_id for option_id in option_ids if option_id in selected]
+        selected_position = min(current_idx, len(visible) - 1)
+        start = max(0, min(selected_position - max_visible // 2, len(visible) - max_visible))
+        end = min(start + max_visible, len(visible))
+        width = _selector_width() - 4
+        fragments: StyleAndTextTuples = []
+        for position in range(start, end):
+            _, (_, label, description) = visible[position]
+            prefix = "▸ " if position == selected_position else "  "
+            marker = "◉" if visible[position][1][0] in selected else "○"
+            text = f"{prefix}{marker} {_single_line(label)}"
+            if description:
+                text += f"  │ {_single_line(description)}"
+            style = (
+                "class:selector-selected"
+                if position == selected_position
+                else "class:selector-item"
+            )
+            fragments.append((style, _truncate_selector_text(text, width)))
+            if position < end - 1:
+                fragments.append(("", "\n"))
+
+        if start > 0 or end < len(visible):
+            fragments.extend(
+                [
+                    ("", "\n"),
+                    (
+                        "class:selector-muted",
+                        f"  ({selected_position + 1}/{len(visible)})",
+                    ),
+                ]
+            )
+        return fragments
+
+    def render_footer() -> StyleAndTextTuples:
+        visible_count = len(filtered())
+        text = f"Space toggle · Ctrl+A all · Ctrl+X clear · Enter save · Esc cancel · {len(selected)}/{visible_count} visible"
+        return [("class:selector-hint", _truncate_selector_text(text, _selector_width() - 4))]
+
+    def invalidate(_event: Any = None) -> None:
+        nonlocal current_idx
+        current_idx = min(current_idx, max(0, len(filtered()) - 1))
+        with contextlib.suppress(Exception):
+            get_app().invalidate()
+
+    search.buffer.on_text_changed += invalidate
+    list_control = FormattedTextControl(render_list, focusable=True, show_cursor=False)
+    footer_control = FormattedTextControl(render_footer)
+    root = Frame(
+        HSplit(
+            [
+                Label(title, style="class:selector-title"),
+                Label("Type to filter · ↑↓ navigate", style="class:selector-hint"),
+                search,
+                Window(
+                    content=list_control,
+                    height=Dimension(min=1, max=max_visible + 1),
+                    wrap_lines=False,
+                    dont_extend_height=True,
+                ),
+                Window(content=footer_control, height=1, dont_extend_height=True),
+            ]
+        ),
+        style="class:selector-frame",
+    )
+    bindings = KeyBindings()
+
+    def move(delta: int) -> None:
+        nonlocal current_idx
+        visible = filtered()
+        if visible:
+            current_idx = (current_idx + delta) % len(visible)
+            invalidate()
+
+    @bindings.add("tab")
+    def _focus_next(event: KeyPressEvent) -> None:
+        event.app.layout.focus_next()
+
+    @bindings.add(Keys.BackTab)
+    def _focus_previous(event: KeyPressEvent) -> None:
+        event.app.layout.focus_previous()
+
+    @bindings.add("up")
+    def _up(event: KeyPressEvent) -> None:
+        move(-1)
+
+    @bindings.add("down")
+    def _down(event: KeyPressEvent) -> None:
+        move(1)
+
+    @bindings.add("pageup")
+    def _page_up(event: KeyPressEvent) -> None:
+        move(-max_visible)
+
+    @bindings.add("pagedown")
+    def _page_down(event: KeyPressEvent) -> None:
+        move(max_visible)
+
+    @bindings.add(
+        "space",
+        filter=Condition(lambda: not search.text or get_app().layout.has_focus(list_control)),
+    )
+    def _toggle(event: KeyPressEvent) -> None:
+        item = current_item()
+        if item:
+            option_id = item[1][0]
+            if option_id in selected:
+                selected.remove(option_id)
             else:
-                continue
-            keep_current_visible()
-            sys.stdout.write(f"\x1b[{viewport_size}A")
-            render()
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                selected.add(option_id)
+            invalidate()
+
+    @bindings.add("c-a")
+    def _select_all(event: KeyPressEvent) -> None:
+        selected.update(option_ids)
+        invalidate()
+
+    @bindings.add("c-x")
+    def _clear_all(event: KeyPressEvent) -> None:
+        selected.clear()
+        invalidate()
+
+    @bindings.add("enter")
+    def _submit(event: KeyPressEvent) -> None:
+        event.app.exit(result=[option_id for option_id in option_ids if option_id in selected])
+
+    @bindings.add("escape")
+    @bindings.add("c-c")
+    def _cancel(event: KeyPressEvent) -> None:
+        event.app.exit(result=None)
+
+    app: Application[list[str] | None] = Application(
+        layout=Layout(root, focused_element=search),
+        key_bindings=bindings,
+        style=MIA_STYLE,
+        full_screen=False,
+        erase_when_done=True,
+        enable_page_navigation_bindings=False,
+        input=_input,
+        output=_output,
+    )
+    try:
+        return _run_selector_application(app)
+    except (EOFError, KeyboardInterrupt):
+        return None
 
 
 def interactive_select(
@@ -552,148 +807,229 @@ def interactive_select(
     options: list[tuple[str, str, str]],  # (id, label, description)
     default_idx: int = 0,
     on_delete: Callable[[str], None] | None = None,
+    *,
+    _input: Any = None,
+    _output: Any = None,
 ) -> str | None:
-    """Select an option, optionally supporting confirmed Ctrl+D/d deletion."""
+    """Select one option with Pi-style search, scrolling, and safe terminal cleanup."""
     if not options:
         return None
 
-    num_options = len(options)
-    default_idx = max(0, min(default_idx, num_options - 1))
-
-    if not sys.stdin.isatty():
+    items = list(options)
+    default_idx = max(0, min(default_idx, len(items) - 1))
+    if _input is None and _output is None and not (sys.stdin.isatty() and sys.stdout.isatty()):
         try:
-            prompt_str = f"{title} [1-{num_options}] (default: {default_idx + 1}): "
+            prompt_str = f"{title} [1-{len(items)}] (default: {default_idx + 1}): "
             raw = input(prompt_str).strip()
             if not raw:
-                return options[default_idx][0]
+                return items[default_idx][0]
             if raw.lower() in ("0", "q", "quit", "cancel", "esc"):
                 return None
-            if raw.isdigit() and 1 <= int(raw) <= num_options:
-                return options[int(raw) - 1][0]
-            for opt in options:
-                if raw.lower() == opt[0].lower() or raw.lower() == opt[1].lower():
-                    return opt[0]
-            return options[default_idx][0]
+            if raw.isdigit() and 1 <= int(raw) <= len(items):
+                return items[int(raw) - 1][0]
+            for option in items:
+                if raw.lower() in (option[0].lower(), option[1].lower()):
+                    return option[0]
+            return items[default_idx][0]
         except (KeyboardInterrupt, EOFError, OSError):
             return None
 
-    import os
-    import termios
-    import tty
-
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-
     current_idx = default_idx
-
-    # Print Title Header
-    delete_hint = ", Ctrl+D/d delete" if on_delete else ""
-    sys.stdout.write(
-        f"\n\x1b[1;38;2;255;122;0m🥕 {title}\x1b[0m \x1b[2;37m(Press 1-{num_options}, or use ↑/↓ + Enter{delete_hint}, Esc to cancel)\x1b[0m\n"
+    max_visible = 8
+    confirming_delete = False
+    status_message = ""
+    search = TextArea(
+        height=1,
+        prompt="Filter: ",
+        multiline=False,
+        wrap_lines=False,
+        style="class:selector-search",
     )
-    sys.stdout.write("\x1b[38;2;45;51;66m" + "─" * 68 + "\x1b[0m\n")
 
-    def render_all(selected_idx: int) -> None:
-        for i, (_id, label, desc) in enumerate(options):
-            num_prefix = f" {i + 1}. "
-            separator = f" \x1b[2m│\x1b[0m {desc}" if desc else ""
-            if i == selected_idx:
-                cursor = "🥕 "
-                line_str = f"\x1b[1;38;2;255;122;0m{num_prefix}{label:<18}\x1b[0m{separator}"
-            else:
-                cursor = "   "
-                line_str = f"\x1b[38;2;156;163;175m{num_prefix}{label:<18}\x1b[0m{separator}"
-            sys.stdout.write(f"\r\x1b[K{cursor}{line_str}\n")
-        sys.stdout.flush()
+    def filtered() -> list[tuple[int, tuple[str, str, str]]]:
+        query = _single_line(search.text)
+        return [
+            (index, option)
+            for index, option in enumerate(items)
+            if _selector_matches(query, option)
+        ]
 
-    def redraw_menu(option_count: int, extra_lines: int = 0) -> None:
-        """Clear the previous menu and render it at the same terminal position."""
-        sys.stdout.write(f"\x1b[{option_count}A")
-        line_count = option_count + extra_lines
-        for _ in range(line_count):
-            sys.stdout.write("\r\x1b[K\n")
-        sys.stdout.write(f"\x1b[{line_count}A")
-        render_all(current_idx)
+    def current_item() -> tuple[int, tuple[str, str, str]] | None:
+        visible = filtered()
+        if not visible:
+            return None
+        return visible[min(current_idx, len(visible) - 1)]
 
+    def render_list() -> StyleAndTextTuples:
+        visible = filtered()
+        if not visible:
+            return [("class:selector-muted", "  No matching options")]
+
+        selected_position = min(current_idx, len(visible) - 1)
+        start = max(0, min(selected_position - max_visible // 2, len(visible) - max_visible))
+        end = min(start + max_visible, len(visible))
+        width = _selector_width() - 4
+        fragments: StyleAndTextTuples = []
+        for position in range(start, end):
+            _, (_, label, description) = visible[position]
+            prefix = "▸ " if position == selected_position else "  "
+            text = f"{prefix}{_single_line(label)}"
+            if description:
+                text += f"  │ {_single_line(description)}"
+            style = (
+                "class:selector-selected"
+                if position == selected_position
+                else "class:selector-item"
+            )
+            fragments.append((style, _truncate_selector_text(text, width)))
+            if position < end - 1:
+                fragments.append(("", "\n"))
+
+        if start > 0 or end < len(visible):
+            fragments.extend(
+                [
+                    ("", "\n"),
+                    (
+                        "class:selector-muted",
+                        f"  ({selected_position + 1}/{len(visible)})",
+                    ),
+                ]
+            )
+        return fragments
+
+    def render_footer() -> StyleAndTextTuples:
+        visible_count = len(filtered())
+        if status_message:
+            text = status_message
+            style = "class:selector-error"
+        else:
+            delete_hint = " · Ctrl+D delete" if on_delete else ""
+            text = f"Enter select · Esc cancel · ↑↓ navigate · {visible_count} options{delete_hint}"
+            style = "class:selector-hint"
+        return [(style, _truncate_selector_text(text, _selector_width() - 4))]
+
+    def invalidate(_event: Any = None) -> None:
+        nonlocal current_idx
+        current_idx = min(current_idx, max(0, len(filtered()) - 1))
+        with contextlib.suppress(Exception):
+            get_app().invalidate()
+
+    search.buffer.on_text_changed += invalidate
+    list_control = FormattedTextControl(render_list, focusable=True, show_cursor=False)
+    footer_control = FormattedTextControl(render_footer)
+    root = Frame(
+        HSplit(
+            [
+                Label(title, style="class:selector-title"),
+                Label("Type to filter · ↑↓ navigate", style="class:selector-hint"),
+                search,
+                Window(
+                    content=list_control,
+                    height=Dimension(min=1, max=max_visible + 1),
+                    wrap_lines=False,
+                    dont_extend_height=True,
+                ),
+                Window(content=footer_control, height=1, dont_extend_height=True),
+            ]
+        ),
+        style="class:selector-frame",
+    )
+    bindings = KeyBindings()
+
+    def move(delta: int) -> None:
+        nonlocal current_idx
+        visible = filtered()
+        if visible:
+            current_idx = (current_idx + delta) % len(visible)
+            invalidate()
+
+    @bindings.add("tab")
+    def _focus_next(event: KeyPressEvent) -> None:
+        event.app.layout.focus_next()
+
+    @bindings.add(Keys.BackTab)
+    def _focus_previous(event: KeyPressEvent) -> None:
+        event.app.layout.focus_previous()
+
+    @bindings.add("up")
+    def _up(event: KeyPressEvent) -> None:
+        move(-1)
+
+    @bindings.add("down")
+    def _down(event: KeyPressEvent) -> None:
+        move(1)
+
+    @bindings.add("pageup")
+    def _page_up(event: KeyPressEvent) -> None:
+        move(-max_visible)
+
+    @bindings.add("pagedown")
+    def _page_down(event: KeyPressEvent) -> None:
+        move(max_visible)
+
+    @bindings.add(
+        "d",
+        filter=Condition(
+            lambda: on_delete is not None and get_app().layout.has_focus(list_control)
+        ),
+    )
+    @bindings.add("c-d")
+    def _request_delete(event: KeyPressEvent) -> None:
+        nonlocal confirming_delete, status_message
+        if current_item() is not None:
+            confirming_delete = True
+            status_message = "Delete selected item? Enter confirms · Esc cancels"
+            invalidate()
+
+    @bindings.add("enter")
+    def _submit(event: KeyPressEvent) -> None:
+        nonlocal confirming_delete, status_message
+        item = current_item()
+        if item is None:
+            return
+        if confirming_delete and on_delete is not None:
+            try:
+                on_delete(item[1][0])
+            except Exception as exc:
+                confirming_delete = False
+                status_message = f"Delete failed: {type(exc).__name__}"
+                invalidate()
+                return
+            items.pop(item[0])
+            if not items:
+                event.app.exit(result=None)
+                return
+            confirming_delete = False
+            status_message = ""
+            invalidate()
+            return
+        event.app.exit(result=item[1][0])
+
+    @bindings.add("escape")
+    def _escape(event: KeyPressEvent) -> None:
+        nonlocal confirming_delete, status_message
+        if confirming_delete:
+            confirming_delete = False
+            status_message = ""
+            invalidate()
+            return
+        event.app.exit(result=None)
+
+    @bindings.add("c-c")
+    def _cancel(event: KeyPressEvent) -> None:
+        event.app.exit(result=None)
+
+    app: Application[str | None] = Application(
+        layout=Layout(root, focused_element=search),
+        key_bindings=bindings,
+        style=MIA_STYLE,
+        full_screen=False,
+        erase_when_done=True,
+        enable_page_navigation_bindings=False,
+        input=_input,
+        output=_output,
+    )
     try:
-        tty.setcbreak(fd)
-        render_all(current_idx)
-
-        while True:
-            # Read atomic raw bytes directly from fd to avoid Python TextIOWrapper buffer desync
-            raw_bytes = os.read(fd, 32)
-            if not raw_bytes:
-                continue
-
-            # Ctrl+D/d: request deletion when this selector explicitly allows it.
-            if on_delete and raw_bytes in (b"\x04", b"d", b"D"):
-                selected_id, selected_label, _ = options[current_idx]
-                sys.stdout.write(
-                    f"\r\x1b[KDelete '{selected_label}'? Press Enter to delete, Esc to cancel"
-                )
-                sys.stdout.flush()
-                confirmation = os.read(fd, 32)
-                if confirmation in (b"\r", b"\n"):
-                    try:
-                        on_delete(selected_id)
-                    except Exception as exc:
-                        sys.stdout.write(f"\r\x1b[KDelete failed: {exc}\n")
-                        sys.stdout.flush()
-                        return None
-                    old_count = num_options
-                    options.pop(current_idx)
-                    num_options -= 1
-                    if not options:
-                        sys.stdout.write(f"\r\x1b[KDeleted: {selected_label}\n\n")
-                        sys.stdout.flush()
-                        return None
-                    current_idx = min(current_idx, num_options - 1)
-                    redraw_menu(old_count, extra_lines=1)
-                else:
-                    redraw_menu(num_options, extra_lines=1)
-                continue
-
-            # Ctrl+C (\x03)
-            if raw_bytes == b"\x03":
-                sys.stdout.write("\n")
-                raise KeyboardInterrupt
-
-            # Standalone Escape key (Esc) -> cancel selection cleanly
-            if raw_bytes == b"\x1b":
-                sys.stdout.write("\n\x1b[2;37m(Selection cancelled)\x1b[0m\n\n")
-                sys.stdout.flush()
-                return None
-
-            # Up Arrow (\x1b[A or \x1bOA)
-            if raw_bytes in (b"\x1b[A", b"\x1bOA"):
-                current_idx = (current_idx - 1) % num_options
-                sys.stdout.write(f"\x1b[{num_options}A")
-                render_all(current_idx)
-                continue
-
-            # Down Arrow (\x1b[B or \x1bOB)
-            if raw_bytes in (b"\x1b[B", b"\x1bOB"):
-                current_idx = (current_idx + 1) % num_options
-                sys.stdout.write(f"\x1b[{num_options}A")
-                render_all(current_idx)
-                continue
-
-            # Enter (\r or \n)
-            if raw_bytes in (b"\r", b"\n"):
-                sys.stdout.write(f"\n\x1b[1;32m✓ Selected: {options[current_idx][1]}\x1b[0m\n\n")
-                sys.stdout.flush()
-                return options[current_idx][0]
-
-            # Direct single-number key entry (1..9)
-            if raw_bytes.isdigit():
-                num = int(raw_bytes.decode(errors="ignore"))
-                if 1 <= num <= num_options:
-                    current_idx = num - 1
-                    sys.stdout.write(
-                        f"\n\x1b[1;32m✓ Selected: {options[current_idx][1]}\x1b[0m\n\n"
-                    )
-                    sys.stdout.flush()
-                    return options[current_idx][0]
-
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        return _run_selector_application(app)
+    except (EOFError, KeyboardInterrupt):
+        return None

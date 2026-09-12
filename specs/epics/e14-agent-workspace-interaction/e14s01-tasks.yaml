@@ -1,0 +1,42 @@
+story_id: e14s01
+title: Visible Transcript and Truthful Run Lifecycle
+status: done
+bcps: 5
+spec: e14s01-visible-transcript-and-truthful-run-lifecycle.md
+tasks:
+  - id: 1
+    description: Add failing tests for exactly-once admitted user transcript blocks, restore non-duplication, and truthful thinking/responding/success/failure/cancellation
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py -q
+    risk: P0
+    security: low
+    status: passing
+    allure:
+      severity: critical
+      categories: [e14, cli-repl, unit]
+  - id: 2
+    description: Implement a CLI-local workspace projection and render user/Agent blocks plus derived phase from existing envelopes without new Core event families
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py -q
+    risk: P0
+    security: low
+    status: passing
+    allure:
+      severity: critical
+      categories: [e14, cli-repl, integration]
+  - id: 3
+    description: Keep print/plain mode compatible and prove intermediate events cannot display success or cancellation
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py tests/test_agent_runtime.py -q
+    risk: P0
+    security: low
+    status: passing
+    allure:
+      severity: critical
+      categories: [e14, cli-repl, integration]
+  - id: 4
+    description: Verify specification consistency and focused lint after the presentation change
+    verify: uv run --offline python scripts/check-spec-consistency.py && uv run --offline ruff check src/mia_cli tests/test_cli_repl.py tests/test_cli_print_mode.py
+    risk: P1
+    security: none
+    status: passing
+    allure:
+      severity: high
+      categories: [e14, cli-repl, integration]

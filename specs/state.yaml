@@ -1,20 +1,60 @@
 workflow_mode: solo-git
 session:
-  active_flow: plan
-  active_epic_id: null
+  active_flow: review
+  active_epic_id: e14
   active_story_id: null
-  target_version: 0.6.0
+  target_version: 0.7.0
 handoff:
-  next_skill: survey-context
-  summary: >-
-    Epic e13 Inline REPL Visual and Interaction Experience was merged into local
-    main and its reviewed capsule was archived. Release gates passed: 374 tests, Ruff,
-    mypy, offline build, coverage, public-surface, artifact-integrity, clean-install,
-    and publication checks. All 4 stories (e13s01, e13s02, e13s03, e13s04) and 12 tasks
-    are marked done and epic e13 is complete.
+  next_skill: bp-review
+  last_step_completed: e14 build verification passed for all five stories
+  summary: e14 Agent Workspace Interaction is implemented and mechanically verified for the local
+    v0.7.0-agent-workspace candidate. All five stories and twenty tasks are passing; the next gate
+    is a fresh whole-epic review. No release, publish, push, or production claim has been made.
+  required_reading:
+  - specs/product/SCOPE_E14_LATEST.yaml
+  - specs/epics/e14-agent-workspace-interaction/epic.yaml
+  - specs/tech-architecture/e14-TEST_PLAN_LATEST.md
+  - specs/tech-architecture/REPL-UI-FUTURE-DIRECTIONS.md
+  - specs/adr/0002-canonical-run-request-stream.md
+  plan_revision: 7ba51e19f3172273
+  plan_artifacts:
+  - specs/epics/e14-agent-workspace-interaction/epic.yaml
+  - specs/epics/e14-agent-workspace-interaction/e14s01-visible-transcript-and-truthful-run-lifecycle.md
+  - specs/epics/e14-agent-workspace-interaction/e14s01-tasks.yaml
+  - specs/epics/e14-agent-workspace-interaction/e14s02-compact-expandable-tool-rows-and-safe-tool-output.md
+  - specs/epics/e14-agent-workspace-interaction/e14s02-tasks.yaml
+  - specs/epics/e14-agent-workspace-interaction/e14s03-asynchronous-approval-with-distinct-focus.md
+  - specs/epics/e14-agent-workspace-interaction/e14s03-tasks.yaml
+  - specs/epics/e14-agent-workspace-interaction/e14s04-searchable-workspace-controls-and-adaptive-footer.md
+  - specs/epics/e14-agent-workspace-interaction/e14s04-tasks.yaml
+  - specs/epics/e14-agent-workspace-interaction/e14s05-explicit-follow-up-queue-and-resilient-workspace-fallbacks.md
+  - specs/epics/e14-agent-workspace-interaction/e14s05-tasks.yaml
+  - specs/tech-architecture/e14-TEST_PLAN_LATEST.md
+  plan_approval:
+    status: approved
+    epic: e14
+    revision: 7ba51e19f3172273
+    git_head: 3f6256d
+    approved_at: '2026-09-12T02:08:21Z'
+    approved_by: user
+    artifacts:
+    - specs/epics/e14-agent-workspace-interaction/epic.yaml
+    - specs/epics/e14-agent-workspace-interaction/e14s01-visible-transcript-and-truthful-run-lifecycle.md
+    - specs/epics/e14-agent-workspace-interaction/e14s01-tasks.yaml
+    - specs/epics/e14-agent-workspace-interaction/e14s02-compact-expandable-tool-rows-and-safe-tool-output.md
+    - specs/epics/e14-agent-workspace-interaction/e14s02-tasks.yaml
+    - specs/epics/e14-agent-workspace-interaction/e14s03-asynchronous-approval-with-distinct-focus.md
+    - specs/epics/e14-agent-workspace-interaction/e14s03-tasks.yaml
+    - specs/epics/e14-agent-workspace-interaction/e14s04-searchable-workspace-controls-and-adaptive-footer.md
+    - specs/epics/e14-agent-workspace-interaction/e14s04-tasks.yaml
+    - specs/epics/e14-agent-workspace-interaction/e14s05-explicit-follow-up-queue-and-resilient-workspace-fallbacks.md
+    - specs/epics/e14-agent-workspace-interaction/e14s05-tasks.yaml
+    - specs/tech-architecture/e14-TEST_PLAN_LATEST.md
+    - specs/product/SCOPE_E14_LATEST.yaml
   open_decisions: []
 git:
-  branch: main
+  branch: feat/align-codex-model-selection
+  hash: 3b88449
 environment:
   package_manager: uv 0.10.11
   python: 3.14.6
@@ -28,14 +68,14 @@ metrics:
   story_start: '2026-09-01T08:57:36Z'
   skill_timings:
     plan-work:
-      calls: 9
-      total_seconds: 14316.0
-      avg_seconds: 1590.6666666666667
+      calls: 10
+      total_seconds: 14347.0
+      avg_seconds: 1434.7
     develop-tdd:
       calls: 5
       total_seconds: 10063.0
       avg_seconds: 2012.6
-      _start: '2026-09-08T07:13:00Z'
+      _start: '2026-09-12T02:23:39Z'
     verify-work:
       calls: 3
       total_seconds: 1103.0
@@ -61,10 +101,10 @@ metrics:
       total_seconds: 309.0
       avg_seconds: 309.0
     slice-tasks:
-      calls: 1
-      total_seconds: 412.0
-      avg_seconds: 412.0
+      calls: 2
+      total_seconds: 631.0
+      avg_seconds: 315.5
     plan-tests:
-      calls: 1
+      calls: 2
       total_seconds: 412.0
-      avg_seconds: 412.0
+      avg_seconds: 206.0

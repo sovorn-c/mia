@@ -133,6 +133,104 @@ def test_rich_stream_renderer_output() -> None:
     assert renderer.turn_count == 1
 
 
+def test_admitted_prompt_is_rendered_once_with_truthful_lifecycle() -> None:
+    from rich.console import Console
+
+    from mia_agent.events import AssistantChunkEvent, TurnCompleteEvent, TurnStartEvent
+    from mia_cli.renderers.rich_stream import RichStreamRenderer
+
+    console = Console(record=True, force_terminal=False, no_color=True, highlight=False)
+    renderer = RichStreamRenderer(console=console, plain_mode=True)
+
+    renderer.on_event(TurnStartEvent(turn_index=1, user_prompt="admitted prompt"))
+    assert renderer.phase == "thinking"
+    renderer.on_event(AssistantChunkEvent(thought_delta="working"))
+    assert renderer.phase == "thinking"
+    renderer.on_event(AssistantChunkEvent(delta_text="done"))
+    assert renderer.phase == "responding"
+    renderer.on_event(TurnCompleteEvent(total_steps=1, stop_reason="stop"))
+
+    output = console.export_text()
+    assert output.count("[user] admitted prompt") == 1
+    assert renderer.phase == "success"
+    assert "[ok] Turn completed" in output
+
+
+def test_tool_rows_are_keyed_compact_and_expand_sanitized_results() -> None:
+    from rich.console import Console
+
+    from mia_cli.renderers.rich_stream import RichStreamRenderer
+
+    console = Console(record=True, force_terminal=False, no_color=True, highlight=False)
+    renderer = RichStreamRenderer(console=console, plain_mode=True)
+    renderer.on_event(TurnStartEvent(turn_index=1, user_prompt="inspect files"))
+    renderer.on_event(
+        ToolCallEvent(
+            call_id="call-1",
+            tool_name="bash",
+            arguments={"command": "printf token=sk-live-secret"},
+        )
+    )
+    renderer.on_event(
+        ToolResultEvent(
+            call_id="call-1",
+            tool_name="bash",
+            output={"value": "safe output", "api_key": "sk-live-secret"},
+            duration_ms=2.0,
+        )
+    )
+
+    assert renderer.tool_rows["call-1"].state == "completed"
+    output = console.export_text()
+    assert "[tool pending] bash" in output
+    assert "[tool completed] bash" in output
+    assert "sk-live-secret" not in output
+    assert "safe output" not in output
+
+    assert renderer.toggle_tool_row("call-1") is True
+    expanded_output = console.export_text(clear=False)
+    assert "[tool expanded] call-1" in expanded_output
+    assert "safe output" in expanded_output
+    assert "sk-live-secret" not in expanded_output
+    assert renderer.toggle_tool_row("call-1") is False
+    assert renderer.tool_rows["call-1"].expanded is False
+
+
+def test_tool_rows_keep_error_and_cancelled_states_attributable() -> None:
+    from rich.console import Console
+
+    from mia_agent.runtime_events import RunErrorEvent
+    from mia_cli.renderers.rich_stream import RichStreamRenderer
+
+    console = Console(record=True, force_terminal=False, no_color=True, highlight=False)
+    renderer = RichStreamRenderer(console=console, plain_mode=True)
+    renderer.on_event(TurnStartEvent(turn_index=1, user_prompt="run tools"))
+    renderer.on_event(
+        ToolCallEvent(call_id="failed", tool_name="write_file", arguments={"path": "a.txt"})
+    )
+    renderer.on_event(
+        ToolResultEvent(
+            call_id="failed",
+            tool_name="write_file",
+            output="permission denied",
+            is_error=True,
+        )
+    )
+    renderer.on_event(
+        ToolCallEvent(call_id="cancelled", tool_name="bash", arguments={"command": "sleep 10"})
+    )
+    renderer.on_event(
+        RunErrorEvent(stage="execution", error="user stopped", cancelled=True, code="cancelled")
+    )
+
+    assert renderer.tool_rows["failed"].state == "error"
+    assert renderer.tool_rows["cancelled"].state == "cancelled"
+    output = console.export_text()
+    assert "[tool error] write_file" in output
+    assert "[tool cancelled] bash" in output
+    assert "[tool completed] bash" not in output
+
+
 def test_cli_run_agent_loop_uses_run_request_and_closeable_stream() -> None:
     import asyncio
 
@@ -273,7 +371,8 @@ def test_plain_mode_emits_semantic_status_labels_for_success_and_error() -> None
     assert "[running] bash" in output
     assert "[error] bash" in output
     assert "[error] Agent error: failed to complete step" in output
-    assert "[ok] Turn completed" in output
+    assert "[error] Turn failed (error)" in output
+    assert "[ok] Turn completed" not in output
 
     # Must contain no ANSI escape sequences
     assert "\x1b[" not in output

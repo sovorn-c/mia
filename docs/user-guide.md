@@ -184,12 +184,15 @@ uv run mia
 | **REPL** | `Esc` or `/help` | Help & command discovery |
 | **REPL** | `Ctrl+L` or `/model` | Switch active model selector |
 | **REPL** | `Ctrl+P` or `/model next` | Cycle scoped models |
+| **REPL** | `Ctrl+Q` or `/queue <text>` | Queue one explicit follow-up during a Run; `/queue` is the portable fallback |
 | **REPL** | `Ctrl+O` or `/inspect` | Inspect turn audit log |
 | **REPL** | `Ctrl+T` or `/thinking` | Toggle model reasoning trace |
 | **REPL** | `Esc Esc` or `/tree` | Session tree navigator |
 | **REPL** | `/quit`, `/exit`, or `Ctrl+D` | Exit REPL cleanly |
-| **Tool Approval** | `y` | Approve Tool execution |
-| **Tool Approval** | `n` or `Esc` | Reject Tool execution |
+| **Tool Approval** | `y` in the approval focus | Approve Tool execution; draft characters cannot authorize |
+| **Tool Approval** | `n` or `Esc` in the approval focus | Reject or cancel Tool execution |
+
+`Enter` while a Run is active only preserves an ordinary draft. Use `Ctrl+Q` or `/queue <text>` for an explicit single follow-up. A queued follow-up runs only after a successful Run; cancellation or failure restores it to the draft.
 
 ---
 
@@ -217,9 +220,11 @@ Plain mode can be activated in three ways:
 - **No ANSI escape sequences:** Output is strictly ASCII/UTF-8 readable text without terminal control characters.
 - **Motion safety:** All animated braille spinners, cycling dot animations, and live screen redraws (`rich.live.Live`) are completely suppressed.
 - **Static semantic status labels:** Progress and terminal outcomes are explicitly labeled:
-  - `[running] <tool_name> <arguments>` — Tool execution started.
-  - `[ok] <tool_name> <summary> (<time>ms)` — Tool completed successfully.
-  - `[error] <tool_name> (<time>ms)` — Tool failed with an error.
+  - `[tool pending] [running] <tool_name> <summary>` — Tool execution started.
+  - `[tool completed] [ok] <tool_name> <summary> (<time>ms)` — Tool completed successfully.
+  - `[tool error] [error] <tool_name> <summary>` — Tool failed with an error.
+  - `[tool cancelled] [cancelled] <tool_name> <summary>` — Tool did not complete.
+  - `[tool expanded] <call_id>` — A bounded, secret-redacted retained result is visible.
   - `[cancelled] Turn halted by user (Ctrl+C).` — Turn interrupted.
   - `[attention] Approval required: ...` — Security approval needed.
   - `[ok] Turn completed in <time>s, [<steps>] | $<cost>` — Terminal turn summary.

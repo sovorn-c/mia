@@ -1,4 +1,4 @@
-# specs/release-plan.yaml — v0.6.0 production release index with e13 inline REPL experience
+# specs/release-plan.yaml — v0.6.0 production release index with queued next-release e14 blueprint
 version: "0.6.0"
 target_release: v0.6.0-agent-core
 release:
@@ -292,10 +292,30 @@ epics:
       score: 3.6
     bcps: 13
 
+  - id: e14
+    slug: agent-workspace-interaction
+    title: Agent Workspace Interaction
+    status: passing
+    target_release: v0.7.0-agent-workspace
+    capsule_dir: specs/epics/e14-agent-workspace-interaction
+    scope: specs/product/SCOPE_E14_LATEST.yaml
+    outcome: Users can observe and control one foreground Agent Run in a truthful inline workspace with visible transcript blocks, compact Tool activity, async approval, resilient focus, searchable controls, semantic styling, and explicit sequential follow-ups.
+    boundaries:
+      includes: Visible transcript, lifecycle status, compact expandable Tool rows, async approval, searchable selectors, adaptive footer, command discovery, safe output, draft/focus restoration, and explicit follow-up queue.
+      excludes: In-flight steering, concurrent or background Runs, full-screen frontends, new Core event families, partial Tool progress, attachments/images, custom Tool renderers, Plugin widgets, and user theme files.
+    depends_on: [e13, e07, e10, e12]
+    wsjf:
+      business_value: 9
+      time_criticality: 6
+      risk_reduction: 8
+      job_size: 8
+      score: 2.875
+    bcps: 21
+
 bugs:
-  total: 1
+  total: 3
   fixed: 1
   deferred: 0
   wontfix: 0
-  open: 0
+  open: 2
   registry: specs/bugs/registry.yaml

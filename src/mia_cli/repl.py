@@ -7,6 +7,7 @@ import contextlib
 import getpass
 import os
 import subprocess
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -20,18 +21,17 @@ from rich.text import Text
 from mia_agent.agent_runner import AgentRunner
 from mia_agent.agents import AgentManager
 from mia_agent.auth.config import (
-    ENV_API_KEY_MAP,
     ConfigManager,
     MiaConfig,
     discover_provider_models,
     validate_api_key,
 )
-from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.auth.openai_auth import OpenAIOAuthManager
 from mia_agent.events import StepEndEvent, TurnCompleteEvent
 from mia_agent.harness import AgentHarness
 from mia_agent.runtime_events import PluginDiagnosticEvent, RunErrorEvent
 from mia_agent.runtime_models import AgentRuntime, RunRequest
+from mia_agent.session.compactor import estimate_chat_messages_tokens
 from mia_agent.session.entries import LeafEntry, MessageEntry, SessionInfoEntry
 from mia_agent.session.jsonl import JsonlSessionStore
 from mia_agent.session.tree import SessionTree
@@ -48,6 +48,16 @@ from mia_middleware.access import ApprovalRequest
 
 SLASH_COMMANDS = [command for command, _ in COMMAND_HINTS]
 COMMAND_DESCRIPTIONS: dict[str, str] = dict(COMMAND_HINTS)
+_MAX_CLI_DISPLAY_CHARS = 4000
+
+
+def _safe_cli_text(value: object) -> str:
+    """Bound dynamic CLI text and replace terminal controls with spaces."""
+    text = "".join(" " if unicodedata.category(char) == "Cc" else char for char in str(value))
+    if len(text) <= _MAX_CLI_DISPLAY_CHARS:
+        return text
+    return text[: _MAX_CLI_DISPLAY_CHARS - 1] + "…"
+
 
 COMMAND_ALIASES: dict[str, str] = {
     "/?": "/help",
@@ -75,6 +85,8 @@ COMMAND_AVAILABILITY: dict[str, str] = {
     "/model": "Idle only",
     "/scoped-models": "Idle only",
     "/agent": "Idle only",
+    "/tool": "Always",
+    "/queue": "Busy only",
     "/diff": "Always",
     "/cost": "Always",
     "/compact": "Idle only",
@@ -136,6 +148,19 @@ PROVIDER_CATALOG: dict[str, dict[str, Any]] = {
         "base_url": "http://localhost:11434/v1",
         "models": [],
     },
+    "8": {
+        "id": "openai-codex",
+        "name": "OpenAI Codex subscription (OAuth)",
+        "base_url": "https://chatgpt.com/backend-api",
+        "models": [
+            "gpt-5.5",
+            "gpt-5.4",
+            "gpt-5.4-mini",
+            "gpt-5.3-codex",
+            "gpt-5.3-codex-spark",
+            "gpt-5.2",
+        ],
+    },
 }
 
 
@@ -157,7 +182,7 @@ class MiaREPL:
         self.console = Console()
         self.cwd = cwd or Path.cwd()
         self.config_mgr = ConfigManager()
-        self.cred_store = FileCredentialStore()
+        self.cred_store = self.config_mgr.credential_store
         self.agent_mgr = agent_manager or AgentManager()
         self.agent_id = agent or self.agent_mgr.default_agent().agent_id
         self.custom_provider = custom_provider
@@ -172,14 +197,15 @@ class MiaREPL:
         )
         if initial_model and not custom_provider:
             inferred_prov = self.config_mgr.infer_provider(initial_model)
-            has_key = self.cred_store.get_api_key(inferred_prov) or os.environ.get(
-                f"{inferred_prov.upper()}_API_KEY"
+            has_key = self.cred_store.get_api_key(inferred_prov) or self.cred_store.get_oauth(
+                inferred_prov
             )
             if not has_key:
                 initial_model = None
 
         self.model_name: str | None = initial_model
         self.available_model_sources: dict[str, str] = {}
+        self._model_sources_refreshed = False
         self.scoped_models: list[str] = list(self.config_mgr.config.scoped_models)
         if session_id and (Path(session_id).name != session_id or session_id in {".", ".."}):
             raise ValueError("Invalid session ID")
@@ -193,6 +219,7 @@ class MiaREPL:
         self._approval_callback = self._request_tool_approval
         self._active_prompt_task: asyncio.Task[str] | None = None
         self._active_turn_task: asyncio.Task[None] | None = None
+        self.queued_follow_up: str | None = None
 
         self.stream_renderer = RichStreamRenderer(
             console=self.console, show_thinking_trace=self.show_thinking_trace
@@ -206,6 +233,7 @@ class MiaREPL:
             input=prompt_input,
             output=prompt_output,
         )
+        self.prompt_session.on_queue_callback = self.queue_follow_up
         self._init_harness()
 
     def _get_status_toolbar(self) -> Any:
@@ -213,15 +241,25 @@ class MiaREPL:
         window_tokens = None
         if self.agent_runtime and self.agent_runtime.effective_settings:
             window_tokens = self.agent_runtime.effective_settings.context_window
+        provider_name = (
+            "custom" if self.custom_provider else self.config_mgr.config.default_provider
+        )
+        if not provider_name and self.model_name:
+            provider_name = self.config_mgr.infer_provider(self.model_name)
+        current_context_tokens = (
+            estimate_chat_messages_tokens(self.harness.messages) if self.harness else None
+        )
         return format_status_toolbar(
             workspace_name=self.cwd.name or str(self.cwd),
             model_name=self.model_name or "none",
+            provider_name=provider_name or None,
             tokens=self.total_tokens,
             window_tokens=window_tokens,
             thinking_enabled=self.show_thinking_trace,
             agent_id=self.agent_id,
             session_id=self.session_id,
-            run_state=getattr(self, "_run_state", "idle"),
+            current_context_tokens=current_context_tokens,
+            run_state=self.stream_renderer.phase,
             width=self.console.width,
         )
 
@@ -246,46 +284,54 @@ class MiaREPL:
         )
         self.harness = self.agent_runtime.harness
 
-    def _request_tool_approval(self, request: ApprovalRequest) -> bool:
-        """Ask the interactive frontend for one sanitized side-effect decision with truthful non-color cues."""
+    def _print_approval_request(self, request: ApprovalRequest) -> None:
+        """Render only the sanitized, attributable approval summary."""
+        tool_name = _safe_cli_text(request.tool_name)
+        agent_id = _safe_cli_text(request.agent_id or self.agent_id)
+        self.console.print(
+            f"[approval-required] Approve {request.effect} Tool {tool_name} for Agent {agent_id}?",
+            markup=False,
+        )
+
+    async def _request_tool_approval(self, request: ApprovalRequest) -> bool:
+        """Read approval through a separate prompt-toolkit buffer and fail closed on every error."""
         saved_draft = self.prompt_session.get_draft()
+        self.prompt_session.approval_active = True
+        self.stream_renderer.set_tool_approval(request.tool_name)
+        self._run_state = "approval"
         app = getattr(self.prompt_session.session, "app", None)
         if app and getattr(app, "is_running", False):
             app.exit(result="")
-
-        if self.stream_renderer.plain_mode:
-            self.console.print(
-                f"[approval-required] Approve {request.effect} Tool {request.tool_name} "
-                f"for Agent {request.agent_id or self.agent_id}?",
-                markup=False,
-            )
-        else:
-            self.console.print(
-                f"[yellow]⚠️ [approval-required] Approve {request.effect} Tool [bold]{request.tool_name}[/bold] "
-                f"for Agent {request.agent_id or self.agent_id}?[/yellow]"
-            )
+        self._print_approval_request(request)
         try:
-            return input("Approve? [y/N] ").strip().lower() in {"y", "yes"}
-        except (EOFError, KeyboardInterrupt):
+            answer = await self.prompt_session.read_approval_async()
+            return answer.strip().lower() in {"y", "yes"}
+        except (asyncio.CancelledError, EOFError, KeyboardInterrupt, OSError):
+            return False
+        except Exception:
             return False
         finally:
             self.prompt_session.restore_draft(saved_draft)
+            self.prompt_session.approval_active = False
+            if self.stream_renderer.phase == "approval":
+                self.stream_renderer.phase = "tool"
+            self._run_state = self.stream_renderer.phase
 
     def interactive_login(self, provider_hint: str | None = None) -> None:
         """Step 1: Choose Authentication Method (API Key or OpenAI Auth)."""
         if provider_hint:
             clean_hint = provider_hint.strip().lower()
-            selected_provider = clean_hint
+            is_oauth = clean_hint in {"oauth", "openai-codex"}
+            selected_provider = "openai-codex" if clean_hint == "oauth" else clean_hint
             preset = next(
                 (
                     p
                     for p in PROVIDER_CATALOG.values()
-                    if clean_hint in (p["id"], p["id"].split("-")[0])
+                    if selected_provider in (p["id"], p["id"].split("-")[0])
                 ),
                 None,
             )
             base_url = preset["base_url"] if preset else "https://opencode.ai/zen/go/v1"
-            is_oauth = False
         else:
             auth_methods = [
                 (
@@ -306,9 +352,11 @@ class MiaREPL:
 
             if method == "oauth":
                 is_oauth = True
-                selected_provider = "openai"
-                preset = next((p for p in PROVIDER_CATALOG.values() if p["id"] == "openai"), None)
-                base_url = preset["base_url"] if preset else "https://api.openai.com/v1"
+                selected_provider = "openai-codex"
+                preset = next(
+                    (p for p in PROVIDER_CATALOG.values() if p["id"] == "openai-codex"), None
+                )
+                base_url = preset["base_url"] if preset else "https://chatgpt.com/backend-api"
             else:
                 is_oauth = False
                 provider_options = [
@@ -346,10 +394,10 @@ class MiaREPL:
             self.console.print("[dim]Opening browser. If prompted, approve Mia access.[/dim]")
 
             try:
-                prompt_str = "Enter OpenAI OAuth / Session Token (or press Enter to open browser): "
+                prompt_str = "Enter OpenAI Codex access token (or press Enter to open browser): "
                 manual_token = input(prompt_str).strip()
                 if manual_token:
-                    ok, msg = oauth_mgr.save_direct_token(manual_token)
+                    ok, msg = oauth_mgr.save_codex_access_token(manual_token)
                     if not ok:
                         self.console.print(f"\n[bold red]✗ Validation failed:[/bold red] {msg}\n")
                         return
@@ -434,6 +482,7 @@ class MiaREPL:
             }
         )
         self.config_mgr.save_config(updated_cfg)
+        self._refresh_provider_catalog(provider_id)
         self._init_harness()
 
     def handle_logout(self, target_provider: str | None = None) -> None:
@@ -492,22 +541,29 @@ class MiaREPL:
             )
 
     def _provider_api_key(self, provider_id: str) -> str | None:
-        stored = self.cred_store.get_api_key(provider_id)
-        if stored:
-            return stored
-        env_names = ENV_API_KEY_MAP.get(provider_id, [f"{provider_id.upper()}_API_KEY"])
-        return next((os.environ[name] for name in env_names if os.environ.get(name)), None)
+        return self.cred_store.get_api_key(provider_id)
+
+    def _provider_is_connected(self, provider_id: str) -> bool:
+        if self._provider_api_key(provider_id):
+            return True
+        oauth = self.cred_store.get_oauth(provider_id)
+        return bool(oauth and (oauth.access or oauth.refresh))
 
     def _connected_providers(self) -> list[str]:
-        connected = self.cred_store.list_stored_providers()
+        known = {entry["id"] for entry in PROVIDER_CATALOG.values()}
+        connected = [
+            provider
+            for provider in self.cred_store.list_stored_providers()
+            if provider in known and self._provider_is_connected(provider)
+        ]
         for provider in (entry["id"] for entry in PROVIDER_CATALOG.values()):
-            if provider not in connected and self._provider_api_key(provider):
+            if provider not in connected and self._provider_is_connected(provider):
                 connected.append(provider)
         config = self.config_mgr.config
         if (
             config.default_provider == "custom"
-            and "custom" not in connected
             and config.base_urls.get("custom")
+            and "custom" not in connected
         ):
             connected.append("custom")
         return connected
@@ -528,41 +584,100 @@ class MiaREPL:
         provider, model = model_id.split("::", 1)
         return f"{provider}: {model}"
 
-    def _discover_connected_models(self) -> dict[str, str]:
-        """Discover models from connected providers for the scoped-model list."""
+    def _prune_disconnected_scope(self) -> None:
+        """Hide and persist providers that were disconnected after the last refresh."""
+        if not self._model_sources_refreshed:
+            return
+        connected = set(self._connected_providers())
+        sources = {
+            model_id: provider
+            for model_id, provider in self.available_model_sources.items()
+            if provider in connected
+        }
+        scope = [model_id for model_id in self.scoped_models if model_id in sources]
+        if sources != self.available_model_sources or scope != self.scoped_models:
+            self.available_model_sources = sources
+            self.scoped_models = scope
+            self._save_scoped_models()
+
+    def _load_persisted_model_sources(self) -> dict[str, str]:
+        """Load connected models from the local catalog without probing providers."""
+        previous_scope = list(self.scoped_models)
         providers = self._connected_providers()
+        catalog = self.config_mgr.config.model_catalog
+        sources = {
+            f"{provider}::{model}": provider
+            for provider in providers
+            for model in catalog.get(provider, [])
+        }
+        self._model_sources_refreshed = True
+        self.available_model_sources = sources
+        self.scoped_models = [model_id for model_id in self.scoped_models if model_id in sources]
+        if self.scoped_models != previous_scope:
+            self._save_scoped_models()
+        return sources
+
+    def _refresh_provider_catalog(self, provider_id: str) -> list[str]:
+        """Fetch one connected provider's models and persist them under ~/.mia."""
+        config = self.config_mgr.config
+        oauth = self.cred_store.get_oauth(provider_id)
+        models = discover_provider_models(
+            provider_id,
+            api_key=self._provider_api_key(provider_id),
+            base_url=config.base_urls.get(provider_id),
+            oauth_access_token=oauth.access if oauth else None,
+            account_id=oauth.account_id if oauth else None,
+        )
+        catalog = {**config.model_catalog, provider_id: list(dict.fromkeys(models))}
+        self.config_mgr.save_config(config.model_copy(update={"model_catalog": catalog}))
+        return catalog[provider_id]
+
+    def _discover_connected_models(self) -> dict[str, str]:
+        """Load stored catalogs and reconcile them with connected providers."""
+        previous_scope = list(self.scoped_models)
+        providers = self._connected_providers()
+        config = self.config_mgr.config
         if not providers:
+            self._model_sources_refreshed = True
             self.available_model_sources = {}
             self.scoped_models = []
+            if previous_scope:
+                self._save_scoped_models()
             return {}
 
         sources: dict[str, str] = {}
-        config = self.config_mgr.config
+        catalog = dict(config.model_catalog)
         for provider in providers:
-            models = discover_provider_models(
-                provider,
-                api_key=self._provider_api_key(provider),
-                base_url=config.base_urls.get(provider),
-            )
-            if (
-                provider == config.default_provider
-                and self.model_name
-                and self.model_name not in models
-            ):
-                models = [self.model_name, *models]
+            if provider not in catalog:
+                catalog[provider] = self._refresh_provider_catalog(provider)
+            models = list(catalog.get(provider, []))
+            catalog[provider] = list(dict.fromkeys(models))
             for model in models:
                 sources[f"{provider}::{model}"] = provider
 
+        if catalog != config.model_catalog:
+            self.config_mgr.save_config(config.model_copy(update={"model_catalog": catalog}))
+        self._model_sources_refreshed = True
         self.available_model_sources = sources
         self.scoped_models = [model_id for model_id in self.scoped_models if model_id in sources]
+        if self.scoped_models != previous_scope:
+            self._save_scoped_models()
         return sources
 
     def cycle_scoped_model(self) -> None:
         """Select the next scoped model, wrapping at the end."""
+        self._prune_disconnected_scope()
         if not self.scoped_models:
             self.console.print(
                 "[yellow]No scoped models. Run /scoped-models to discover connected models.[/yellow]\n"
             )
+            return
+        if not self.available_model_sources or any(
+            model_id not in self.available_model_sources for model_id in self.scoped_models
+        ):
+            self._discover_connected_models()
+        if not self.scoped_models:
+            self.console.print("[yellow]No connected scoped models remain.[/yellow]\n")
             return
         active_id = f"{self.config_mgr.config.default_provider}::{self.model_name}"
         current = self.scoped_models.index(active_id) if active_id in self.scoped_models else -1
@@ -573,10 +688,48 @@ class MiaREPL:
         self._init_harness()
         self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
 
-    def interactive_model_picker(self) -> None:
-        """Select the active model from the discovered scoped-model list."""
+    def interactive_agent_picker(self) -> None:
+        """Select an Agent from the local searchable Agent list without network activity."""
         saved_draft = self.prompt_session.get_draft()
         try:
+            agents = self.agent_mgr.list_agents()
+            options = [
+                (agent.agent_id, agent.display_name, f"Agent {agent.agent_id}") for agent in agents
+            ]
+            default_idx = next(
+                (index for index, option in enumerate(options) if option[0] == self.agent_id),
+                0,
+            )
+            selected = interactive_select("🤖 Switch Agent", options, default_idx=default_idx)
+            if not selected or selected == self.agent_id:
+                return
+            agent = self.agent_mgr.get_agent(selected)
+            self.agent_id = agent.agent_id
+            self._approval_callback = self._request_tool_approval
+            self._init_harness()
+            self.console.print(f"[bold green]✓ Switched Agent to {agent.agent_id}[/bold green]\n")
+        finally:
+            self.prompt_session.restore_draft(saved_draft)
+
+    def interactive_command_picker(self) -> None:
+        """Select a canonical slash command from a local searchable list."""
+        saved_draft = self.prompt_session.get_draft()
+        try:
+            options = [
+                (command, command, description)
+                for command, description in COMMAND_DESCRIPTIONS.items()
+            ]
+            selected = interactive_select("⌘ Command", options, default_idx=0)
+            if selected:
+                self.handle_slash_command(selected)
+        finally:
+            self.prompt_session.restore_draft(saved_draft)
+
+    def interactive_model_picker(self) -> None:
+        """Select the active model from the persisted scoped-model list."""
+        saved_draft = self.prompt_session.get_draft()
+        try:
+            self._load_persisted_model_sources()
             if not self.scoped_models:
                 self.console.print(
                     "[yellow]No scoped models. Run /scoped-models to discover connected models first.[/yellow]\n"
@@ -921,6 +1074,7 @@ class MiaREPL:
             actions_table.add_row("Switch Agent", "/agent <id>", "Idle only")
             actions_table.add_row("Switch model", "Ctrl+L or /model", "Idle only")
             actions_table.add_row("Cycle scoped models", "Ctrl+P or /model next", "Idle only")
+            actions_table.add_row("Queue one follow-up", "Ctrl+Q or /queue <text>", "Busy only")
             actions_table.add_row("Inspect audit details", "Ctrl+O or /inspect", "Always")
             actions_table.add_row("Session tree navigator", "Esc Esc or /tree", "Idle only")
             actions_table.add_row("Quit / Exit", "/quit or /exit", "Always")
@@ -946,6 +1100,43 @@ class MiaREPL:
             "[dim]Tip: Type any partial command or press [bold white]Tab[/bold white] to autocomplete.[/dim]\n"
         )
 
+    def queue_follow_up(self, prompt: str | None = None) -> bool:
+        """Move one explicit follow-up into the single busy-run queue slot."""
+        if not self.prompt_session.is_busy:
+            self.console.print("[queue unavailable] A follow-up can only be queued during a Run.\n")
+            return False
+        if self.queued_follow_up is not None:
+            self.console.print(
+                "[queue occupied] A follow-up is already queued; cancel the Run to restore it.\n"
+            )
+            return False
+        candidate = prompt if prompt is not None else self.prompt_session.get_draft()
+        if prompt is None and candidate.strip().lower().startswith("/queue"):
+            candidate = ""
+        if not candidate or not candidate.strip():
+            self.console.print("[queue empty] Add a follow-up draft before queueing.\n")
+            return False
+        self.queued_follow_up = candidate
+        self.prompt_session.set_draft("")
+        self.console.print("[queued] One follow-up will run after a successful settlement.\n")
+        return True
+
+    def _restore_queued_follow_up(self) -> None:
+        """Restore an unsuccessful Run's queued follow-up exactly once."""
+        if self.queued_follow_up is None:
+            return
+        queued = self.queued_follow_up
+        self.queued_follow_up = None
+        self.prompt_session.restore_draft(queued)
+        self.console.print(
+            "[queue restored] Follow-up returned to the draft after Run failure/cancel.\n"
+        )
+
+    def _take_queued_follow_up(self) -> str | None:
+        queued = self.queued_follow_up
+        self.queued_follow_up = None
+        return queued
+
     async def execute_turn(self, prompt: str) -> None:
         """Run single prompt turn with minimalist stream rendering."""
         # Start elapsed timing and working animation immediately upon submission
@@ -959,6 +1150,8 @@ class MiaREPL:
                 )
                 self.interactive_login()
                 if not self.harness:
+                    self.stream_renderer.phase = "cancelled"
+                    self._run_state = "cancelled"
                     self.console.print(
                         "[yellow]Turn cancelled. Please configure a model with /login to start coding.[/yellow]\n"
                     )
@@ -969,8 +1162,9 @@ class MiaREPL:
         assert self.harness is not None
         assert self.agent_runtime is not None
 
-        self._run_state = "running"
+        self._run_state = "thinking"
         self.prompt_session.is_busy = True
+        successful_settlement = False
         try:
             self.stream_renderer.show_thinking_trace = self.show_thinking_trace
             request = RunRequest(
@@ -991,30 +1185,48 @@ class MiaREPL:
                     event = envelope.event
                     if isinstance(event, RunErrorEvent):
                         self.stream_renderer.on_event(event)
+                        self._run_state = self.stream_renderer.phase
                         continue
                     if isinstance(event, PluginDiagnosticEvent):
                         continue
                     self.stream_renderer.on_event(event)
+                    self._run_state = self.stream_renderer.phase
                     if isinstance(event, StepEndEvent):
                         self.total_tokens += event.input_tokens + event.output_tokens
                     elif isinstance(event, TurnCompleteEvent):
                         self.total_cost_usd += event.total_cost_usd
+                        successful_settlement = self.stream_renderer.phase == "success"
+            if successful_settlement:
+                follow_up = self._take_queued_follow_up()
+                if follow_up is not None:
+                    await self.execute_turn(follow_up)
+            else:
+                self._restore_queued_follow_up()
             if self.agent_runner.last_runtime is not None:
                 self.agent_runtime = self.agent_runner.last_runtime
                 self.harness = self.agent_runtime.harness
 
         except asyncio.CancelledError:
+            self.stream_renderer.phase = "cancelled"
+            self._run_state = "cancelled"
+            self._restore_queued_follow_up()
             self.stream_renderer._stop_status()
             if self.stream_renderer.plain_mode:
                 self.console.print("[cancelled] Turn halted by user (Ctrl+C).", markup=False)
             else:
                 self.console.print("\n[yellow]⚠️  Turn halted by user (Ctrl+C).[/yellow]\n")
         except Exception as exc:
+            self.stream_renderer.phase = "failure"
+            self._run_state = "failure"
+            self._restore_queued_follow_up()
             self.stream_renderer._stop_status()
+            safe_error = _safe_cli_text(exc)
             if self.stream_renderer.plain_mode:
-                self.console.print(f"[error] Error during execution: {exc}", markup=False)
+                self.console.print(f"[error] Error during execution: {safe_error}", markup=False)
             else:
-                self.console.print(f"\n[bold red]Error during execution:[/bold red] {exc}\n")
+                self.console.print(
+                    Text(f"\nError during execution: {safe_error}\n", style="bold red")
+                )
         finally:
             self.prompt_session.is_busy = False
             self._run_state = "idle"
@@ -1048,11 +1260,28 @@ class MiaREPL:
             return True
 
         if cmd in ("/", "/?", "/help"):
-            self.print_command_menu()
+            if args.lower() in {"pick", "select", "search"}:
+                self.interactive_command_picker()
+            else:
+                self.print_command_menu()
             return True
 
         elif cmd in ("/login", "/auth"):
             self.interactive_login(args)
+            return True
+
+        elif cmd == "/tool":
+            if not args:
+                self.console.print("[tool unavailable] Usage: /tool <call-id>\n")
+            elif self.stream_renderer.toggle_tool_row(args) is None:
+                self.console.print(
+                    f"[tool unavailable] No retained Tool row for {_safe_cli_text(args)}.\n",
+                    markup=False,
+                )
+            return True
+
+        elif cmd == "/queue":
+            self.queue_follow_up(args or None)
             return True
 
         elif cmd in ("/logout", "/signout", "/disconnect"):
@@ -1069,7 +1298,9 @@ class MiaREPL:
             self.print_banner()
 
         elif cmd == "/agent":
-            if not args:
+            if args.lower() in {"pick", "select"}:
+                self.interactive_agent_picker()
+            elif not args:
                 active = self.agent_mgr.get_agent(self.agent_id)
                 available = ", ".join(agent.agent_id for agent in self.agent_mgr.list_agents())
                 self.console.print(
@@ -1110,7 +1341,7 @@ class MiaREPL:
                 )
                 return True
 
-            if args.lower() == "all" or not self.scoped_models:
+            if args.lower() == "all":
                 self.scoped_models = list(model_sources)
             elif args:
                 requested = [model.strip() for model in args.split(",") if model.strip()]
@@ -1300,16 +1531,37 @@ class MiaREPL:
 
                 try:
                     while not turn_task.done():
+                        if (
+                            self._active_prompt_task is None
+                            and not self.prompt_session.approval_active
+                        ):
+                            self._active_prompt_task = asyncio.create_task(
+                                self.prompt_session.read_prompt_async("› ")
+                            )
+                        wait_tasks: list[asyncio.Task[Any]] = [turn_task]
+                        if self._active_prompt_task is not None:
+                            wait_tasks.append(self._active_prompt_task)
                         done, _ = await asyncio.wait(
-                            [turn_task, self._active_prompt_task],
+                            wait_tasks,
                             return_when=asyncio.FIRST_COMPLETED,
                         )
                         if self._active_prompt_task in done and not turn_task.done():
-                            exc = self._active_prompt_task.exception()
-                            if exc is not None and isinstance(exc, (EOFError, KeyboardInterrupt)):
-                                turn_task.cancel()
-                                raise exc
-                            if self.prompt_session.is_busy:
+                            prompt_task = self._active_prompt_task
+                            self._active_prompt_task = None
+                            if not prompt_task.cancelled():
+                                exc = prompt_task.exception()
+                                if exc is not None and isinstance(
+                                    exc, (EOFError, KeyboardInterrupt)
+                                ):
+                                    turn_task.cancel()
+                                    raise exc
+                                prompt_result = prompt_task.result()
+                                if prompt_result.startswith("/queue"):
+                                    self.handle_slash_command(prompt_result)
+                            if (
+                                self.prompt_session.is_busy
+                                and not self.prompt_session.approval_active
+                            ):
                                 self._active_prompt_task = asyncio.create_task(
                                     self.prompt_session.read_prompt_async("› ")
                                 )

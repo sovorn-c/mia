@@ -21,6 +21,7 @@ from mia_agent.session.jsonl import JsonlSessionStore
 from mia_agent.session.tree import SessionTree
 from mia_ai.providers.anthropic import AnthropicProvider
 from mia_ai.providers.base import LLMProvider
+from mia_ai.providers.openai_codex import OpenAICodexProvider
 from mia_ai.providers.openai_compatible import OpenAICompatibleProvider
 from mia_middleware.access import (
     AccessPolicyMiddleware,
@@ -288,6 +289,11 @@ class AgentRuntimeFactory:
             )
             if provider_name == "anthropic":
                 provider = AnthropicProvider(api_key=api_key, base_url=base_url)
+            elif provider_name == "openai-codex":
+                provider = OpenAICodexProvider(
+                    credential_store=self.config_manager.credential_store,
+                    base_url=base_url or "https://chatgpt.com/backend-api",
+                )
             else:
                 provider = OpenAICompatibleProvider(api_key=api_key, base_url=base_url)
         else:
@@ -375,6 +381,8 @@ class AgentRuntimeFactory:
             },
         )
         collected_disposers: list[Callable[[], Awaitable[None] | None]] = []
+        if hasattr(provider, "aclose") and callable(provider.aclose):
+            collected_disposers.append(_attributed_disposer(provider.aclose, "provider"))
         for tool in tools:
             pid = getattr(tool, "plugin_id", "plugin")
             if hasattr(tool, "dispose") and callable(tool.dispose):
