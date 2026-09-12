@@ -104,6 +104,23 @@ async def test_compose_during_busy_run_blocks_enter_and_does_not_queue() -> None
         assert await prompt_task == "draft during run"
 
 
+def test_ctrl_q_queues_busy_draft_through_explicit_callback() -> None:
+    from unittest.mock import MagicMock
+
+    session = LivePromptSession()
+    session.is_busy = True
+    session.on_queue_callback = MagicMock(return_value=True)
+    binding = session.bindings.get_bindings_for_keys(("c-q",))[-1]
+    buffer = MagicMock()
+    buffer.text = "queued draft"
+
+    binding.handler(MagicMock(current_buffer=buffer))
+
+    assert session.draft_text == "queued draft"
+    session.on_queue_callback.assert_called_once_with()
+    buffer.reset.assert_called_once_with()
+
+
 def test_draft_preserved_across_cancellation() -> None:
     """SC-e13s02-P0-02: Cancelling an active run retains the draft."""
     from unittest.mock import MagicMock

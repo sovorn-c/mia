@@ -49,6 +49,19 @@ def test_slash_completer_and_menu() -> None:
     assert len(completions_empty) == 0
 
 
+def test_follow_up_queue_is_explicit_single_slot_and_preserves_text(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120, force_terminal=False, no_color=True)
+    repl.prompt_session.is_busy = True
+    repl.prompt_session.set_draft("follow-up exactly")
+
+    assert repl.queue_follow_up() is True
+    assert repl.queued_follow_up == "follow-up exactly"
+    assert repl.prompt_session.get_draft() == ""
+    assert repl.queue_follow_up("replacement") is False
+    assert repl.queued_follow_up == "follow-up exactly"
+
+
 def test_command_discovery_has_one_truthful_canonical_list() -> None:
     from mia_cli.repl import COMMAND_ALIASES, COMMAND_DESCRIPTIONS, SLASH_COMMANDS
 
@@ -110,6 +123,70 @@ def test_adaptive_toolbar_labels_provider_usage_and_context() -> None:
     assert "gpt-5" in narrow.value
     assert "[tool]" in narrow.value
     assert "Current context" not in narrow.value
+
+
+@pytest.mark.asyncio
+async def test_follow_up_auto_runs_only_after_success_and_restores_on_failure(
+    tmp_path: Path,
+) -> None:
+    from mia_agent.events import TurnCompleteEvent, TurnStartEvent
+    from mia_agent.runtime_events import AgentEventEnvelope, RunErrorEvent
+
+    successful_requests: list[str] = []
+    active_runs = 0
+    max_active_runs = 0
+
+    async def successful_run(request: object, **kwargs: object):
+        nonlocal active_runs, max_active_runs
+        successful_requests.append(request.prompt_text)  # type: ignore[attr-defined]
+        active_runs += 1
+        max_active_runs = max(max_active_runs, active_runs)
+        try:
+            yield AgentEventEnvelope(
+                run_id="run",
+                task_id="root",
+                agent_id="mia",
+                session_id="session",
+                event=TurnStartEvent(user_prompt=request.prompt_text),  # type: ignore[attr-defined]
+            )
+            yield AgentEventEnvelope(
+                run_id="run",
+                task_id="root",
+                agent_id="mia",
+                session_id="session",
+                event=TurnCompleteEvent(total_steps=1, stop_reason="stop"),
+            )
+        finally:
+            active_runs -= 1
+
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.agent_runner.run = successful_run  # type: ignore[method-assign]
+    repl.prompt_session.is_busy = True
+    repl.prompt_session.set_draft("follow-up")
+    assert repl.queue_follow_up() is True
+    await repl.execute_turn("first")
+
+    assert successful_requests == ["first", "follow-up"]
+    assert max_active_runs == 1
+    assert repl.queued_follow_up is None
+
+    async def failed_run(*args: object, **kwargs: object):
+        yield AgentEventEnvelope(
+            run_id="run",
+            task_id="root",
+            agent_id="mia",
+            session_id="session",
+            event=RunErrorEvent(stage="agent", error="failed", code="agent_error"),
+        )
+
+    repl.agent_runner.run = failed_run  # type: ignore[method-assign]
+    repl.prompt_session.is_busy = True
+    repl.prompt_session.set_draft("restore me")
+    assert repl.queue_follow_up() is True
+    await repl.execute_turn("second")
+
+    assert repl.queued_follow_up is None
+    assert repl.prompt_session.get_draft() == "restore me"
 
 
 def test_format_status_toolbar() -> None:
@@ -1114,6 +1191,17 @@ def test_essential_repl_commands_and_quit_contract(tmp_path: Path) -> None:
     with patch.object(repl.stream_renderer, "render_audit_log") as mock_render:
         assert repl.handle_slash_command("/inspect") is True
         mock_render.assert_called_once()
+
+
+def test_queue_help_documents_portable_fallback(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+
+    repl.handle_slash_command("/help")
+    output = repl.console.export_text()
+    assert "/queue" in output
+    assert "Ctrl+Q" in output
+    assert "Enter" in output
 
 
 def test_help_discovery_exposes_essential_keyboard_and_command_alternatives(
