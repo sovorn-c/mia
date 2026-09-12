@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import time
+from dataclasses import dataclass
 from typing import Any, Literal
 
 import rich.spinner
@@ -27,11 +28,26 @@ from mia_agent.events import (
     TurnStartEvent,
 )
 from mia_agent.runtime_events import RunErrorEvent
+from mia_middleware.access import sanitize_arguments
 
 RunPhase = Literal[
     "idle", "thinking", "responding", "tool", "approval", "success", "failure", "cancelled"
 ]
 _MAX_DISPLAY_CHARS = 4000
+ToolRowState = Literal["pending", "completed", "error", "cancelled"]
+
+
+@dataclass
+class ToolRow:
+    """Ephemeral, sanitized display state for one attributable Tool call."""
+
+    call_id: str
+    tool_name: str
+    summary: str
+    state: ToolRowState = "pending"
+    arguments: str = ""
+    result: str = ""
+    expanded: bool = False
 
 
 def _safe_display_text(value: Any) -> str:
@@ -40,6 +56,17 @@ def _safe_display_text(value: Any) -> str:
     if len(text) <= _MAX_DISPLAY_CHARS:
         return text
     return text[: _MAX_DISPLAY_CHARS - 1] + "…"
+
+
+def _safe_value_text(value: Any) -> str:
+    """Serialize sanitized Tool data for bounded terminal display."""
+    try:
+        safe_value = sanitize_arguments(value)
+        if isinstance(safe_value, str):
+            return _safe_display_text(safe_value)
+        return _safe_display_text(json.dumps(safe_value, ensure_ascii=False, default=str))
+    except Exception:
+        return "[REDACTED]"
 
 
 def resolve_plain_mode(
@@ -150,6 +177,7 @@ class RichStreamRenderer:
         self._status_widget: AnimatedWorkingStatus | None = None
         self.phase: RunPhase = "idle"
         self._user_prompt_rendered = False
+        self.tool_rows: dict[str, ToolRow] = {}
 
     def start_turn(self) -> None:
         """Called immediately upon user submission (Enter) to start elapsed timing and animation."""
@@ -159,6 +187,7 @@ class RichStreamRenderer:
         self._user_prompt_rendered = False
         self.thinking_buffer.clear()
         self.turn_audit_log.clear()
+        self.tool_rows.clear()
         self._end_streams()
         self.console.print()
         self._start_status("Thinking")
@@ -191,6 +220,41 @@ class RichStreamRenderer:
             self._active_status.stop()
             self._active_status = None
             self._status_widget = None
+
+    def toggle_tool_row(self, call_id: str) -> bool:
+        """Expand or collapse one retained Tool result and return its new state."""
+        row = self.tool_rows.get(call_id)
+        if row is None:
+            return False
+        row.expanded = not row.expanded
+        state = "expanded" if row.expanded else "collapsed"
+        self.console.print(f"[tool {state}] {row.call_id} {row.tool_name}", markup=False)
+        if row.expanded:
+            self.console.print(f"  ↳ {row.result or '[no retained result]'}", markup=False)
+        return row.expanded
+
+    def _tool_summary(self, event: ToolCallEvent) -> str:
+        safe_arguments = sanitize_arguments(event.arguments)
+        if event.tool_name in {"read_file", "write_file", "edit_file"}:
+            summary = f"{event.tool_name} {safe_arguments.get('path', '')}"
+        elif event.tool_name == "bash":
+            command = str(safe_arguments.get("command", ""))
+            summary = f"bash: {command}"
+        else:
+            summary = event.tool_name
+        return _safe_display_text(summary)
+
+    def _print_tool_row(self, row: ToolRow, duration_ms: float | None = None) -> None:
+        duration = f" ({duration_ms:.1f}ms)" if duration_ms is not None else ""
+        self.console.print(
+            f"[tool {row.state}] {row.tool_name} {row.summary}{duration}", markup=False
+        )
+
+    def _cancel_pending_tool_rows(self, state: ToolRowState) -> None:
+        for row in self.tool_rows.values():
+            if row.state == "pending":
+                row.state = state
+                self._print_tool_row(row)
 
     def on_event(self, event: AgentEvent | RunErrorEvent) -> None:
         """Handle a single AgentEvent and print minimalist output."""
@@ -257,79 +321,44 @@ class RichStreamRenderer:
             self.phase = "tool"
             self._stop_status()
             self._end_streams()
-            args = event.arguments
-            if event.tool_name == "read_file":
-                tool_summary = f"read_file {args.get('path', '')}"
-            elif event.tool_name == "write_file":
-                tool_summary = f"write_file {args.get('path', '')}"
-            elif event.tool_name == "edit_file":
-                tool_summary = f"edit_file {args.get('path', '')}"
-            elif event.tool_name == "bash":
-                cmd = str(args.get("command", ""))
-                tool_summary = f"bash: {cmd[:45]}..." if len(cmd) > 48 else f"bash: {cmd}"
-            else:
-                tool_summary = event.tool_name
-
-            if self.plain_mode:
-                self.console.print(f"[running] {tool_summary}", markup=False)
-            else:
-                self._start_status(
-                    f"Running {tool_summary}",
-                    style="bold #38BDF8",
-                )
+            row = ToolRow(
+                call_id=event.call_id,
+                tool_name=_safe_display_text(event.tool_name),
+                summary=self._tool_summary(event),
+                arguments=_safe_value_text(event.arguments),
+            )
+            self.tool_rows[event.call_id] = row
+            self._print_tool_row(row)
             self.turn_audit_log.append(
                 {
-                    "tool_name": event.tool_name,
-                    "arguments": event.arguments,
-                    "status": "running",
+                    "call_id": event.call_id,
+                    "tool_name": row.tool_name,
+                    "arguments": sanitize_arguments(event.arguments),
+                    "status": "pending",
                 }
             )
 
         elif isinstance(event, ToolResultEvent):
             self._stop_status()
             self._end_streams()
-            dur_str = f"({event.duration_ms:.1f}ms)"
-            output_str = str(event.output)
+            row = self.tool_rows.get(event.call_id)
+            if row is None:
+                row = ToolRow(
+                    call_id=event.call_id,
+                    tool_name=_safe_display_text(event.tool_name),
+                    summary=_safe_display_text(event.tool_name),
+                )
+                self.tool_rows[event.call_id] = row
+            row.state = "error" if event.is_error else "completed"
+            row.result = _safe_value_text(event.output)
+            self._print_tool_row(row, event.duration_ms)
 
-            # Extract compact result summary
-            if event.tool_name == "read_file":
-                lines_count = len(output_str.splitlines())
-                result_desc = f"✓ Read {lines_count} lines"
-            elif event.tool_name in ("write_file", "edit_file"):
-                result_desc = "✓ Applied file changes"
-            elif event.tool_name == "bash":
-                result_desc = "✓ Command finished"
-            else:
-                result_desc = "✓ Succeeded"
-
-            if self.plain_mode:
-                if event.is_error:
-                    self.console.print(f"[error] {event.tool_name} {dur_str}", markup=False)
-                    if output_str.strip():
-                        self.console.print(f"  ↳ {output_str[:250]}", markup=False)
-                else:
-                    clean_desc = result_desc.replace("✓ ", "")
-                    self.console.print(
-                        f"[ok] {event.tool_name} {clean_desc} {dur_str}", markup=False
-                    )
-            else:
-                if event.is_error:
-                    self.console.print(
-                        f"[bold red]✗ {event.tool_name}[/bold red] [dim]{dur_str}[/dim]"
-                    )
-                    self.console.print(f"  [dim red]↳ {output_str[:250]}[/dim red]")
-                else:
-                    self.console.print(
-                        f"[bold green]✓[/bold green] [bold white]{event.tool_name}[/bold white] [dim green]{result_desc}[/dim green] [dim]{dur_str}[/dim]"
-                    )
-
-            # Update audit log entry
             if self.turn_audit_log:
-                self.turn_audit_log[-1]["status"] = "failed" if event.is_error else "succeeded"
+                self.turn_audit_log[-1]["status"] = row.state
                 self.turn_audit_log[-1]["duration_ms"] = event.duration_ms
-                self.turn_audit_log[-1]["output"] = output_str
+                self.turn_audit_log[-1]["output"] = row.result
 
-            # Resume thinking status with live elapsed timer for subsequent steps
+            self.phase = "thinking"
             self._start_status("Thinking")
 
         elif isinstance(event, StepEndEvent):
@@ -346,6 +375,7 @@ class RichStreamRenderer:
 
         elif isinstance(event, RunErrorEvent):
             self.phase = "cancelled" if event.cancelled else "failure"
+            self._cancel_pending_tool_rows("cancelled" if event.cancelled else "error")
             self._stop_status()
             self._end_streams()
             if event.cancelled:
