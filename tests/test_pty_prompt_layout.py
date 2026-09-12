@@ -116,7 +116,7 @@ def test_ctrl_q_queues_busy_draft_through_explicit_callback() -> None:
 
     binding.handler(MagicMock(current_buffer=buffer))
 
-    assert session.draft_text == "queued draft"
+    assert session.draft_text == ""
     session.on_queue_callback.assert_called_once_with()
     buffer.reset.assert_called_once_with()
 
