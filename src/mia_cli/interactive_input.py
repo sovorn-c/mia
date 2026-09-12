@@ -216,6 +216,7 @@ class LivePromptSession:
         self.completer = SlashCompleter()
         self._last_escape_time = 0.0
         self.is_busy: bool = False
+        self.approval_active: bool = False
         self.draft_text: str = ""
         self.on_cancel_callback: Callable[[], None] | None = None
         self.bindings = self._create_keybindings()
@@ -228,6 +229,11 @@ class LivePromptSession:
             input=input,
             output=output,
             reserve_space_for_menu=8,
+        )
+        self.approval_session: PromptSession[str] = PromptSession(
+            style=MIA_STYLE,
+            input=input,
+            output=output,
         )
         self._install_completion_menu_anchor()
 
@@ -451,6 +457,18 @@ class LivePromptSession:
             return ""
         except EOFError:
             raise
+
+    async def read_approval_async(self, prompt_prefix: str = "Approve? [y/N] ") -> str:
+        """Read approval in a separate prompt-toolkit focus, never from the draft buffer."""
+        if not sys.stdin.isatty() and not getattr(self.approval_session, "_input", None):
+            return ""
+        try:
+            return await self.approval_session.prompt_async(
+                [("class:prompt", prompt_prefix)],
+                default="",
+            )
+        except (asyncio.CancelledError, EOFError, KeyboardInterrupt, OSError):
+            return ""
 
     def read_prompt(
         self,

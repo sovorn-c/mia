@@ -34,7 +34,7 @@ RunPhase = Literal[
     "idle", "thinking", "responding", "tool", "approval", "success", "failure", "cancelled"
 ]
 _MAX_DISPLAY_CHARS = 4000
-ToolRowState = Literal["pending", "completed", "error", "cancelled"]
+ToolRowState = Literal["pending", "approval", "completed", "error", "cancelled"]
 
 
 @dataclass
@@ -221,6 +221,16 @@ class RichStreamRenderer:
             self._active_status = None
             self._status_widget = None
 
+    def set_tool_approval(self, tool_name: str) -> None:
+        """Mark the latest matching pending Tool row as awaiting explicit approval."""
+        for row in reversed(list(self.tool_rows.values())):
+            if row.tool_name == tool_name and row.state == "pending":
+                row.state = "approval"
+                self.phase = "approval"
+                self._print_tool_row(row)
+                return
+        self.phase = "approval"
+
     def toggle_tool_row(self, call_id: str) -> bool:
         """Expand or collapse one retained Tool result and return its new state."""
         row = self.tool_rows.get(call_id)
@@ -252,7 +262,7 @@ class RichStreamRenderer:
 
     def _cancel_pending_tool_rows(self, state: ToolRowState) -> None:
         for row in self.tool_rows.values():
-            if row.state == "pending":
+            if row.state in {"pending", "approval"}:
                 row.state = state
                 self._print_tool_row(row)
 

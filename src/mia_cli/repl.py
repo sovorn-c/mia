@@ -7,6 +7,7 @@ import contextlib
 import getpass
 import os
 import subprocess
+from collections.abc import Awaitable
 from pathlib import Path
 from typing import Any
 
@@ -258,30 +259,59 @@ class MiaREPL:
         )
         self.harness = self.agent_runtime.harness
 
-    def _request_tool_approval(self, request: ApprovalRequest) -> bool:
-        """Ask the interactive frontend for one sanitized side-effect decision with truthful non-color cues."""
-        saved_draft = self.prompt_session.get_draft()
-        app = getattr(self.prompt_session.session, "app", None)
-        if app and getattr(app, "is_running", False):
-            app.exit(result="")
+    def _request_tool_approval(self, request: ApprovalRequest) -> bool | Awaitable[bool]:
+        """Return an async approval decision in the interactive loop, with a test-era sync fallback."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return self._request_tool_approval_sync_compat(request)
+        return self._request_tool_approval_async(request)
 
-        if self.stream_renderer.plain_mode:
-            self.console.print(
-                f"[approval-required] Approve {request.effect} Tool {request.tool_name} "
-                f"for Agent {request.agent_id or self.agent_id}?",
-                markup=False,
-            )
-        else:
-            self.console.print(
-                f"[yellow]⚠️ [approval-required] Approve {request.effect} Tool [bold]{request.tool_name}[/bold] "
-                f"for Agent {request.agent_id or self.agent_id}?[/yellow]"
-            )
+    def _print_approval_request(self, request: ApprovalRequest) -> None:
+        """Render only the sanitized, attributable approval summary."""
+        self.console.print(
+            f"[approval-required] Approve {request.effect} Tool {request.tool_name} "
+            f"for Agent {request.agent_id or self.agent_id}?",
+            markup=False,
+        )
+
+    def _request_tool_approval_sync_compat(self, request: ApprovalRequest) -> bool:
+        """Keep direct synchronous callback callers fail-closed without affecting the async path."""
+        saved_draft = self.prompt_session.get_draft()
+        self.stream_renderer.set_tool_approval(request.tool_name)
+        self._run_state = "approval"
+        self._print_approval_request(request)
         try:
             return input("Approve? [y/N] ").strip().lower() in {"y", "yes"}
-        except (EOFError, KeyboardInterrupt):
+        except (EOFError, KeyboardInterrupt, OSError):
             return False
         finally:
             self.prompt_session.restore_draft(saved_draft)
+            self._run_state = "idle"
+
+    async def _request_tool_approval_async(self, request: ApprovalRequest) -> bool:
+        """Read approval through a separate prompt-toolkit buffer and fail closed on every error."""
+        saved_draft = self.prompt_session.get_draft()
+        self.prompt_session.approval_active = True
+        self.stream_renderer.set_tool_approval(request.tool_name)
+        self._run_state = "approval"
+        app = getattr(self.prompt_session.session, "app", None)
+        if app and getattr(app, "is_running", False):
+            app.exit(result="")
+        self._print_approval_request(request)
+        try:
+            answer = await self.prompt_session.read_approval_async()
+            return answer.strip().lower() in {"y", "yes"}
+        except (asyncio.CancelledError, EOFError, KeyboardInterrupt, OSError):
+            return False
+        except Exception:
+            return False
+        finally:
+            self.prompt_session.restore_draft(saved_draft)
+            self.prompt_session.approval_active = False
+            if self.stream_renderer.phase == "approval":
+                self.stream_renderer.phase = "tool"
+            self._run_state = self.stream_renderer.phase
 
     def interactive_login(self, provider_hint: str | None = None) -> None:
         """Step 1: Choose Authentication Method (API Key or OpenAI Auth)."""
