@@ -43,14 +43,20 @@ htmlcov/
 .env
 
 # Local agent cockpit
+specs/
 CLAUDE.md
 AGENTS.md
 CONVENTIONS.md
+.cursor/
+.cursorrules
+.cursorignore
+.codex/
+.pi/
+graphify-out/
+
+# Legacy local agent filename variants
 claude.md
 agents.md
-.codex/
 .codex
-.pi/
 .pi
-graphify-out/
 
