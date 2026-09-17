@@ -1287,7 +1287,7 @@ async def test_repl_uses_run_request_and_closeable_stream(tmp_path: Path) -> Non
         finally:
             closed = True
 
-    repl = MiaREPL(cwd=tmp_path)
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
     repl.agent_runner.run = mock_run  # type: ignore[method-assign]
     await repl.execute_turn("Test prompt")
     assert len(received_requests) == 1
@@ -1519,7 +1519,7 @@ async def test_stream_and_tool_grouping_readable_in_scrollback_without_duplicate
                 event=ev,
             )
 
-    repl = MiaREPL(cwd=tmp_path)
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
     repl.console = Console(record=True, width=120)
     repl.stream_renderer.console = repl.console
     repl.agent_runner.run = mock_run  # type: ignore[method-assign]
@@ -1555,7 +1555,7 @@ async def test_terminal_truth_preserves_error_and_cancellation_outcomes(
             ),
         )
 
-    repl_fail = MiaREPL(cwd=tmp_path)
+    repl_fail = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
     rec_console_fail = Console(
         record=True, width=120, force_terminal=False, no_color=True, highlight=False
     )
@@ -1580,7 +1580,7 @@ async def test_terminal_truth_preserves_error_and_cancellation_outcomes(
             ),
         )
 
-    repl_cancel = MiaREPL(cwd=tmp_path)
+    repl_cancel = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
     rec_console_cancel = Console(
         record=True, width=120, force_terminal=False, no_color=True, highlight=False
     )

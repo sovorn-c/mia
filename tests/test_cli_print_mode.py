@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -23,6 +24,14 @@ from mia_cli.main import app
 from mia_cli.renderers.rich_stream import AnimatedWorkingStatus, RichStreamRenderer
 
 runner = CliRunner()
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def cli_result_text(result: object) -> str:
+    """Return CLI output without terminal styling or stream-splitting differences."""
+    stdout = getattr(result, "stdout", "")
+    stderr = getattr(result, "stderr", "")
+    return _ANSI_ESCAPE.sub("", stdout + stderr)
 
 
 def test_working_status_uses_whole_seconds() -> None:
@@ -74,14 +83,15 @@ def test_top_level_session_rejects_path_without_traceback() -> None:
     result = runner.invoke(app, ["--session", "../outside"])
 
     assert result.exit_code == 2
-    assert "Invalid value for --session" in result.output
-    assert "Traceback" not in result.output
+    output = cli_result_text(result)
+    assert "Invalid value for --session" in output
+    assert "Traceback" not in output
 
 
 def test_cli_run_exposes_agent_selection() -> None:
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
-    assert "--agent" in result.stdout
+    assert "--agent" in cli_result_text(result)
 
 
 def test_cli_agent_lifecycle(tmp_path: Path) -> None:
@@ -321,7 +331,7 @@ def test_presentation_mode_selection_contract() -> None:
 def test_cli_run_help_exposes_plain_option() -> None:
     result = runner.invoke(app, ["run", "--help"])
     assert result.exit_code == 0
-    assert "--plain" in result.stdout
+    assert "--plain" in cli_result_text(result)
 
 
 def test_renderer_threads_plain_mode_and_suppresses_live_status() -> None:
