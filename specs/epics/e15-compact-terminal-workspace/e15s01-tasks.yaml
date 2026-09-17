@@ -1,0 +1,41 @@
+story_id: e15s01
+title: Sparse Semantic Terminal Workspace
+status: passing
+bcps: 5
+tasks:
+  - id: 1
+    description: Add failing regression assertions for sparse startup, terminal-default styling, compact footer labels, and non-decorative working/Tool/approval output
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py tests/test_pty_prompt_layout.py -q
+    risk: P1
+    security: low
+    status: passing
+    allure:
+      severity: high
+      categories: [e15, cli-repl, visual-contract]
+  - id: 2
+    description: Replace the boxed startup banner and forced prompt/toolbar palette with a sparse brand line and terminal-native semantic styles while preserving escaping and narrow-width behavior
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py tests/test_pty_prompt_layout.py -q
+    risk: P1
+    security: low
+    status: passing
+    allure:
+      severity: high
+      categories: [e15, cli-repl, terminal-ui]
+  - id: 3
+    description: Simplify working, streamed response, approval, lifecycle, audit, and Tool rows without changing event truth, bounded sanitization, expansion, or plain-mode behavior
+    verify: uv run --offline pytest tests/test_cli_repl.py tests/test_cli_print_mode.py tests/test_pty_prompt_layout.py -q
+    risk: P1
+    security: medium
+    status: passing
+    allure:
+      severity: high
+      categories: [e15, cli-repl, safety, terminal-ui]
+  - id: 4
+    description: Verify the e15 capsule, focused checks, and complete offline quality gate; record evidence only after commands pass
+    verify: uv run --offline python scripts/check-spec-consistency.py && uv run --offline ruff check . && uv run --offline mypy src && uv run --offline pytest && uv build --offline
+    risk: P1
+    security: medium
+    status: passing
+    allure:
+      severity: high
+      categories: [e15, verification, release-gate]
