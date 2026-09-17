@@ -11,6 +11,7 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
+from prompt_toolkit.patch_stdout import patch_stdout
 from rich.console import Console
 from rich.markup import escape
 from rich.panel import Panel
@@ -24,6 +25,7 @@ from mia_agent.auth.config import (
     ConfigManager,
     MiaConfig,
     discover_provider_models,
+    discovered_model_metadata,
     validate_api_key,
 )
 from mia_agent.auth.openai_auth import OpenAIOAuthManager
@@ -72,7 +74,6 @@ COMMAND_ALIASES: dict[str, str] = {
     "/history": "/sessions",
     "/branch": "/tree",
     "/logs": "/inspect",
-    "/trace": "/thinking",
     "/bootstrap": "/init",
     "/cls": "/clear",
     "/exit": "/quit",
@@ -209,12 +210,14 @@ class MiaREPL:
         self.scoped_models: list[str] = list(self.config_mgr.config.scoped_models)
         if session_id and (Path(session_id).name != session_id or session_id in {".", ".."}):
             raise ValueError("Invalid session ID")
+        self._session_requested = session_id is not None
         self.session_id = session_id or f"session_{os.urandom(4).hex()}"
         self.agent_runtime: AgentRuntime | None = None
         self.harness: AgentHarness | None = None
         self.total_cost_usd = 0.0
         self.total_tokens = 0
         self.show_thinking_trace = False
+        self.reasoning_level: str | None = None
         self._run_state = "idle"
         self._approval_callback = self._request_tool_approval
         self._active_prompt_task: asyncio.Task[str] | None = None
@@ -222,7 +225,9 @@ class MiaREPL:
         self.queued_follow_up: str | None = None
 
         self.stream_renderer = RichStreamRenderer(
-            console=self.console, show_thinking_trace=self.show_thinking_trace
+            console=self.console,
+            show_thinking_trace=self.show_thinking_trace,
+            live_status=False,
         )
         self._history_file = Path.home() / ".mia" / "history"
 
@@ -230,10 +235,12 @@ class MiaREPL:
         self.prompt_session = LivePromptSession(
             history_file=self._history_file,
             toolbar_callback=self._get_status_toolbar,
+            prompt_status_callback=self.stream_renderer.prompt_status,
             input=prompt_input,
             output=prompt_output,
         )
         self.prompt_session.on_queue_callback = self.queue_follow_up
+        self.prompt_session.on_reasoning_cycle_callback = lambda: self._set_reasoning_level("next")
         self._init_harness()
 
     def _get_status_toolbar(self) -> Any:
@@ -246,6 +253,8 @@ class MiaREPL:
         )
         if not provider_name and self.model_name:
             provider_name = self.config_mgr.infer_provider(self.model_name)
+        if window_tokens is None and self.model_name and provider_name:
+            window_tokens = self.config_mgr.model_context_window(provider_name, self.model_name)
         current_context_tokens = (
             estimate_chat_messages_tokens(self.harness.messages) if self.harness else None
         )
@@ -256,6 +265,7 @@ class MiaREPL:
             tokens=self.total_tokens,
             window_tokens=window_tokens,
             thinking_enabled=self.show_thinking_trace,
+            reasoning_level=self.reasoning_level,
             agent_id=self.agent_id,
             session_id=self.session_id,
             current_context_tokens=current_context_tokens,
@@ -273,23 +283,78 @@ class MiaREPL:
         agent = self.agent_mgr.get_agent(self.agent_id)
         if not self.model_name and not agent.model and not self.custom_provider:
             self.harness = None
+            self.reasoning_level = None
             return
+        selected_model = self.model_name or agent.model or ""
+        selected_provider = (
+            "custom"
+            if self.custom_provider
+            else (
+                agent.provider
+                or self.config_mgr.config.default_provider
+                or self.config_mgr.infer_provider(selected_model)
+            )
+        )
+        self._sync_reasoning_level(selected_provider, selected_model)
         self.agent_runtime = self.agent_runner.prepare_runtime(
             agent_id=agent.agent_id,
             provider=self.custom_provider,
             model_override=self.model_name,
             session_id=self.session_id,
             cwd=self.cwd,
+            reasoning_level=self.reasoning_level or "off",
             approval_callback=self._approval_callback,
         )
         self.harness = self.agent_runtime.harness
 
+    def _sync_reasoning_level(self, provider: str, model: str) -> None:
+        levels = self.config_mgr.model_thinking_levels(provider, model)
+        if self.reasoning_level in levels:
+            return
+        default = self.config_mgr.model_thinking_default(provider, model)
+        self.reasoning_level = default if default in levels else levels[0]
+
+    def _set_reasoning_level(self, value: str | None = None) -> None:
+        provider = (
+            "custom"
+            if self.custom_provider
+            else (
+                self.config_mgr.config.default_provider
+                or (self.config_mgr.infer_provider(self.model_name) if self.model_name else "")
+            )
+        )
+        runtime_settings = self.agent_runtime.effective_settings if self.agent_runtime else None
+        model = self.model_name or (runtime_settings.model if runtime_settings else "")
+        levels = self.config_mgr.model_thinking_levels(provider, model)
+        if value is not None and value != "next":
+            if value not in levels:
+                available = ", ".join(levels)
+                self.console.print(
+                    f"[warning] Unknown reasoning level '{_safe_cli_text(value)}'. "
+                    f"Available: {available}.[/warning]",
+                    markup=False,
+                )
+                return
+            self.reasoning_level = value
+        else:
+            current = self.reasoning_level if self.reasoning_level in levels else levels[0]
+            self.reasoning_level = levels[(levels.index(current) + 1) % len(levels)]
+        state = self.reasoning_level or "off"
+        self.console.print(f"Thinking level: {state}", markup=False)
+        if self.agent_runtime is not None:
+            self.agent_runtime.harness.reasoning_level = self.reasoning_level
+            self.agent_runtime.harness.provider.extra_config["reasoning_level"] = (
+                self.reasoning_level
+            )
+        self.prompt_session.refresh()
+
     def _print_approval_request(self, request: ApprovalRequest) -> None:
-        """Render only the sanitized, attributable approval summary."""
+        """Render a concise, sanitized approval line with a text state cue."""
         tool_name = _safe_cli_text(request.tool_name)
         agent_id = _safe_cli_text(request.agent_id or self.agent_id)
+        effect = _safe_cli_text(request.effect)
         self.console.print(
-            f"[approval-required] Approve {request.effect} Tool {tool_name} for Agent {agent_id}?",
+            f"[approval] {effect} {tool_name} · Agent {agent_id} · allow?",
             markup=False,
         )
 
@@ -629,7 +694,16 @@ class MiaREPL:
             account_id=oauth.account_id if oauth else None,
         )
         catalog = {**config.model_catalog, provider_id: list(dict.fromkeys(models))}
-        self.config_mgr.save_config(config.model_copy(update={"model_catalog": catalog}))
+        metadata = {
+            **config.model_metadata,
+            provider_id: {
+                **config.model_metadata.get(provider_id, {}),
+                **discovered_model_metadata(provider_id),
+            },
+        }
+        self.config_mgr.save_config(
+            config.model_copy(update={"model_catalog": catalog, "model_metadata": metadata})
+        )
         return catalog[provider_id]
 
     def _discover_connected_models(self) -> dict[str, str]:
@@ -669,7 +743,8 @@ class MiaREPL:
         self._prune_disconnected_scope()
         if not self.scoped_models:
             self.console.print(
-                "[yellow]No scoped models. Run /scoped-models to discover connected models.[/yellow]\n"
+                "[warning] No scoped models. Run /scoped-models to discover connected models.\n",
+                markup=False,
             )
             return
         if not self.available_model_sources or any(
@@ -677,7 +752,7 @@ class MiaREPL:
         ):
             self._discover_connected_models()
         if not self.scoped_models:
-            self.console.print("[yellow]No connected scoped models remain.[/yellow]\n")
+            self.console.print("[warning] No connected scoped models remain.\n", markup=False)
             return
         active_id = f"{self.config_mgr.config.default_provider}::{self.model_name}"
         current = self.scoped_models.index(active_id) if active_id in self.scoped_models else -1
@@ -686,7 +761,7 @@ class MiaREPL:
         self.model_name = selected_id.split("::", 1)[1]
         self._save_model_selection(provider_id, self.model_name)
         self._init_harness()
-        self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
+        self.console.print(f"[ok] Switched model to {self.model_name}\n", markup=False)
 
     def interactive_agent_picker(self) -> None:
         """Select an Agent from the local searchable Agent list without network activity."""
@@ -700,14 +775,14 @@ class MiaREPL:
                 (index for index, option in enumerate(options) if option[0] == self.agent_id),
                 0,
             )
-            selected = interactive_select("🤖 Switch Agent", options, default_idx=default_idx)
+            selected = interactive_select("Switch Agent", options, default_idx=default_idx)
             if not selected or selected == self.agent_id:
                 return
             agent = self.agent_mgr.get_agent(selected)
             self.agent_id = agent.agent_id
             self._approval_callback = self._request_tool_approval
             self._init_harness()
-            self.console.print(f"[bold green]✓ Switched Agent to {agent.agent_id}[/bold green]\n")
+            self.console.print(f"[bold]Switched Agent to {agent.agent_id}[/bold]\n")
         finally:
             self.prompt_session.restore_draft(saved_draft)
 
@@ -719,7 +794,7 @@ class MiaREPL:
                 (command, command, description)
                 for command, description in COMMAND_DESCRIPTIONS.items()
             ]
-            selected = interactive_select("⌘ Command", options, default_idx=0)
+            selected = interactive_select("Command", options, default_idx=0)
             if selected:
                 self.handle_slash_command(selected)
         finally:
@@ -732,7 +807,8 @@ class MiaREPL:
             self._load_persisted_model_sources()
             if not self.scoped_models:
                 self.console.print(
-                    "[yellow]No scoped models. Run /scoped-models to discover connected models first.[/yellow]\n"
+                    "[warning] No scoped models. Run /scoped-models to discover connected models first.\n",
+                    markup=False,
                 )
                 return
 
@@ -752,12 +828,13 @@ class MiaREPL:
 
             if not model_options:
                 self.console.print(
-                    "[yellow]No scoped models. Run /scoped-models to refresh the list.[/yellow]\n"
+                    "[warning] No scoped models. Run /scoped-models to refresh the list.\n",
+                    markup=False,
                 )
                 return
 
             selected = interactive_select(
-                "🤖 Switch Active Model", model_options, default_idx=default_idx
+                "Switch Active Model", model_options, default_idx=default_idx
             )
             if not selected:
                 return
@@ -766,7 +843,7 @@ class MiaREPL:
             self.model_name = selected.split("::", 1)[1]
             self._save_model_selection(provider_id, self.model_name)
             self._init_harness()
-            self.console.print(f"[bold green]✓ Switched model to {self.model_name}[/bold green]\n")
+            self.console.print(f"[bold]Switched model to {self.model_name}[/bold]\n")
         finally:
             self.prompt_session.restore_draft(saved_draft)
 
@@ -787,13 +864,31 @@ class MiaREPL:
         for message in messages:
             content = Text(str(message.content or ""))
             if message.role == "user":
-                self.console.print(Text("› ", style="bold #FF7A00") + content)
+                self.console.print(Text("› ", style="bold") + content)
             elif message.role == "assistant":
-                self.console.print(Text("🥕 mia › ", style="bold #FF7A00") + content)
+                self.console.print(Text("🥕 mia › ", style="bold") + content)
             elif message.role == "tool":
                 self.console.print(
                     Text(f"  {message.tool_name or 'tool'} › ", style="dim") + content
                 )
+
+    def _render_startup_history(self) -> None:
+        """Render an explicitly requested session before accepting new input."""
+        if not self._session_requested:
+            return
+
+        if self.harness is not None:
+            messages = list(self.harness.messages)
+        else:
+            session_file = self._session_file()
+            if not session_file.exists():
+                return
+            tree = SessionTree(JsonlSessionStore(session_file).load_entries())
+            messages = tree.extract_messages_from_path(tree.get_active_path())
+
+        if messages:
+            self._render_restored_messages(messages)
+            self.console.print()
 
     def _tree_options(
         self, entries: list[Any], active_ids: set[str]
@@ -860,7 +955,7 @@ class MiaREPL:
                     return
 
                 chosen = interactive_select(
-                    "🌿 Session Tree (↑/↓ choose checkpoint, Enter forks here)",
+                    "Session tree (↑/↓ choose checkpoint, Enter forks here)",
                     options,
                     default_idx=default_idx,
                 )
@@ -871,13 +966,13 @@ class MiaREPL:
                     return
 
                 messages = self.harness.navigate_to(chosen)
-                self.console.print(
-                    f"\n[bold green]✓ Branched from checkpoint {chosen[:8]}[/bold green]\n"
-                )
+                self.console.print(f"\n[ok] Branched from checkpoint {chosen[:8]}\n", markup=False)
                 self._render_restored_messages(messages)
                 self.console.print()
             except Exception as exc:
-                self.console.print(f"[red]Failed to navigate session tree: {exc}[/red]\n")
+                self.console.print(
+                    f"[error] Failed to navigate session tree: {exc}\n", markup=False
+                )
         finally:
             self.prompt_session.restore_draft(saved_draft)
 
@@ -924,7 +1019,7 @@ class MiaREPL:
                 return
 
             chosen = interactive_select(
-                "↩ Resume Session (↑/↓ choose, Enter resume, Ctrl+D/d delete)",
+                "Resume session (↑/↓ choose, Enter resume, Ctrl+D/d delete)",
                 options,
                 default_idx=0,
                 on_delete=self.delete_session,
@@ -937,136 +1032,62 @@ class MiaREPL:
     def resume_session(self, session_id: str) -> None:
         """Restore a saved session and its active branch into the live harness."""
         if not session_id or Path(session_id).name != session_id or session_id in {".", ".."}:
-            self.console.print("[yellow]Invalid session ID.[/yellow]\n")
+            self.console.print("[warning] Invalid session ID.\n", markup=False)
             return
         session_file = self._session_file(session_id)
         if not session_file.exists():
-            self.console.print(f"[yellow]Session '{session_id}' was not found.[/yellow]\n")
+            self.console.print(f"[warning] Session '{session_id}' was not found.\n", markup=False)
             return
+        previous_session_id = self.session_id
+        previous_runtime = self.agent_runtime
+        previous_harness = self.harness
+        previous_reasoning_level = self.reasoning_level
         try:
             entries = JsonlSessionStore(session_file).load_entries()
             tree = SessionTree(entries)
-            messages = tree.extract_messages_from_path(tree.get_active_path())
+            expected_messages = tree.extract_messages_from_path(tree.get_active_path())
             self.session_id = session_id
             self._init_harness()
+            if self.harness is None:
+                raise ValueError("No model is configured for the resumed session")
+            messages = self.harness.messages
+            if messages != expected_messages:
+                raise ValueError("restored session context did not match its active branch")
             self.console.print(
-                f"\n[bold green]✓ Resumed {session_id} ({len(messages)} messages)[/bold green]\n"
+                f"\n[ok] Resumed {session_id} ({len(messages)} messages)\n", markup=False
             )
             self._render_restored_messages(messages)
             self.console.print()
         except Exception as exc:
-            self.console.print(f"[red]Failed to resume session: {exc}[/red]\n")
+            self.session_id = previous_session_id
+            self.agent_runtime = previous_runtime
+            self.harness = previous_harness
+            self.reasoning_level = previous_reasoning_level
+            self.console.print(f"[error] Failed to resume session: {exc}\n", markup=False)
 
     def _print_session_resume_hint(self) -> None:
         self.console.print(f"[dim]Session ID: {escape(self.session_id)}[/dim]")
         self.console.print(f"[dim]Resume with: mia --session {escape(self.session_id)}[/dim]\n")
 
     def print_banner(self) -> None:
-        """Render clean, compact top status banner with full session telemetry."""
-        model_display = self.model_name if self.model_name else "(none - run /login)"
-        model_style = "bold #38BDF8" if self.model_name else "dim yellow"
-        ws_name = self.cwd.name or str(self.cwd)
-
-        # Context window computation (truthful, only if measured/configured)
-        window_tokens = None
-        if self.agent_runtime and self.agent_runtime.effective_settings:
-            window_tokens = self.agent_runtime.effective_settings.context_window
-
-        tokens_str = (
-            f"{self.total_tokens / 1000:.1f}k"
-            if self.total_tokens >= 1000
-            else str(self.total_tokens)
-        )
-        if window_tokens is not None and window_tokens > 0:
-            pct = (self.total_tokens / max(1, window_tokens)) * 100
-            pct_str = f"{pct:.1f}%" if self.total_tokens > 0 else "0%"
-            window_str = (
-                f"{window_tokens // 1000}k" if window_tokens >= 1000 else str(window_tokens)
-            )
-            token_display = f"{tokens_str}/{window_str} ({pct_str})"
-        else:
-            token_display = f"{tokens_str}"
-
-        run_state = getattr(self, "_run_state", "idle")
-        if self.stream_renderer.plain_mode:
-            self.console.print(
-                f"[Mia v0.6.0] Workspace: {ws_name} | Agent: {self.agent_id} | Model: {model_display} | "
-                f"Session: {self.session_id} | Tokens: {token_display} | State: [{run_state}]",
-                markup=False,
-            )
-            return
-
-        width = self.console.width
-        if width and width <= 60:
-            compact_text = Text.assemble(
-                ("📁 ", "dim #9CA3AF"),
-                (f"{ws_name} ", "bold white"),
-                ("│ 🤖 ", "dim #9CA3AF"),
-                (f"{self.agent_id} ", "bold cyan"),
-                ("│ 🧠 ", "dim #9CA3AF"),
-                (f"{model_display} ", model_style),
-                ("│ ", "dim #9CA3AF"),
-                (f"[{run_state}]", "bold #FF7A00"),
-            )
-            self.console.print(
-                Panel(
-                    compact_text,
-                    title="[bold #FF7A00]🥕 Mia v0.6.0[/bold #FF7A00]",
-                    border_style="#2D3342",
-                    padding=(0, 1),
-                )
-            )
-            return
-
-        thinking_text = "on" if self.show_thinking_trace else "off"
-        thinking_style = "bold #FF7A00" if self.show_thinking_trace else "dim #9CA3AF"
-
-        banner_content = Text.assemble(
-            ("📁 ", "dim #9CA3AF"),
-            (f"{ws_name}  ", "bold white"),
-            ("│  🤖 ", "dim #9CA3AF"),
-            (f"{self.agent_id}  ", "bold cyan"),
-            ("│  🧠 ", "dim #9CA3AF"),
-            (f"{model_display}  ", model_style),
-            ("│  🆔 ", "dim #9CA3AF"),
-            (f"{self.session_id[:12]}  ", "dim #9CA3AF"),
-            ("│  ⚡ ", "dim #9CA3AF"),
-            (f"{token_display}  ", "dim #9CA3AF"),
-            ("│  💭 ", "dim #9CA3AF"),
-            (f"{thinking_text}  ", thinking_style),
-            ("│  ", "dim #9CA3AF"),
-            (f"[{run_state}]  ", "bold #FF7A00"),
-            ("│  ^O ", "bold #FF7A00"),
-            ("audit  ", "dim #9CA3AF"),
-            ("│  ^T ", "bold #FF7A00"),
-            ("trace  ", "dim #9CA3AF"),
-            ("│  Esc Esc ", "bold #FF7A00"),
-            ("tree  ", "dim #9CA3AF"),
-            ("│  ", "dim #9CA3AF"),
-            ("/", "bold #FF7A00"),
-            (" help", "dim #9CA3AF"),
-        )
-        self.console.print(
-            Panel(
-                banner_content,
-                title="[bold #FF7A00]🥕 Mia v0.6.0[/bold #FF7A00]",
-                border_style="#2D3342",
-                padding=(0, 1),
-            )
-        )
+        """Render one quiet brand/workspace line; detailed state lives in the footer."""
+        workspace = _safe_cli_text(self.cwd.name or str(self.cwd))
+        agent = _safe_cli_text(self.agent_id)
+        model = _safe_cli_text(self.model_name or "no model")
+        self.console.print(Text(f"🥕 Mia · {workspace} · {agent} · {model}", style="dim"))
 
     def print_command_menu(self, filter_prefix: str | None = None) -> None:
         """Render canonical commands with descriptions and aliases."""
         if not filter_prefix:
             actions_table = Table(
                 title="Essential Actions & Keyboard Equivalents",
-                border_style="#2D3342",
+                border_style="dim",
                 show_header=True,
-                header_style="bold #FF7A00",
+                header_style="bold",
             )
-            actions_table.add_column("Action", style="white", width=26)
-            actions_table.add_column("Key / Command Equivalent", style="bold #FF7A00")
-            actions_table.add_column("Availability", style="dim cyan", width=14)
+            actions_table.add_column("Action", width=26)
+            actions_table.add_column("Key / Command equivalent", style="bold")
+            actions_table.add_column("Availability", style="dim", width=14)
             actions_table.add_row("Submit prompt", "Enter", "Idle only")
             actions_table.add_row("Insert newline", "Ctrl+J / Alt+Enter", "Always")
             actions_table.add_row("Clear prompt / Cancel", "Ctrl+C / Esc", "Always")
@@ -1082,14 +1103,14 @@ class MiaREPL:
             self.console.print()
 
         table = Table(
-            title=f"🥕 Mia {len(SLASH_COMMANDS)} Canonical Slash Commands",
-            border_style="#2D3342",
+            title=f"Mia {len(SLASH_COMMANDS)} Canonical Slash Commands",
+            border_style="dim",
             show_header=True,
-            header_style="bold #FF7A00",
+            header_style="bold",
         )
-        table.add_column("Command", style="bold #FF7A00", width=22)
-        table.add_column("Usage & Description", style="white")
-        table.add_column("Availability", style="dim cyan", width=14)
+        table.add_column("Command", style="bold", width=22)
+        table.add_column("Usage & description")
+        table.add_column("Availability", style="dim", width=14)
 
         for cmd, desc in COMMAND_DESCRIPTIONS.items():
             if not filter_prefix or cmd.startswith(filter_prefix):
@@ -1097,7 +1118,7 @@ class MiaREPL:
 
         self.console.print(table)
         self.console.print(
-            "[dim]Tip: Type any partial command or press [bold white]Tab[/bold white] to autocomplete.[/dim]\n"
+            "[dim]Tip: Type any partial command or press [bold]Tab[/bold] to autocomplete.[/dim]\n"
         )
 
     def queue_follow_up(self, prompt: str | None = None) -> bool:
@@ -1138,6 +1159,11 @@ class MiaREPL:
         return queued
 
     async def execute_turn(self, prompt: str) -> None:
+        """Run a turn without overwriting prompt-toolkit's active input line."""
+        with patch_stdout(raw=True):
+            await self._execute_turn(prompt)
+
+    async def _execute_turn(self, prompt: str) -> None:
         """Run single prompt turn with minimalist stream rendering."""
         # Start elapsed timing and working animation immediately upon submission
         self.stream_renderer.start_turn()
@@ -1146,14 +1172,16 @@ class MiaREPL:
             if not self.model_name:
                 self.stream_renderer._stop_status()
                 self.console.print(
-                    "[yellow]⚠️  No model configured. Launching login wizard first...[/yellow]\n"
+                    "[warning] No model configured. Launching login wizard first...\n",
+                    markup=False,
                 )
                 self.interactive_login()
                 if not self.harness:
                     self.stream_renderer.phase = "cancelled"
                     self._run_state = "cancelled"
                     self.console.print(
-                        "[yellow]Turn cancelled. Please configure a model with /login to start coding.[/yellow]\n"
+                        "[cancelled] Turn cancelled. Please configure a model with /login to start coding.\n",
+                        markup=False,
                     )
                     return
             else:
@@ -1164,6 +1192,7 @@ class MiaREPL:
 
         self._run_state = "thinking"
         self.prompt_session.is_busy = True
+        self.prompt_session.refresh()
         successful_settlement = False
         try:
             self.stream_renderer.show_thinking_trace = self.show_thinking_trace
@@ -1173,6 +1202,7 @@ class MiaREPL:
                 model_override=self.model_name,
                 session_id=self.session_id,
                 cwd=self.cwd,
+                reasoning_level=self.reasoning_level or "off",
             )
             async with contextlib.aclosing(
                 self.agent_runner.run(
@@ -1182,10 +1212,18 @@ class MiaREPL:
                 )
             ) as stream:
                 async for envelope in stream:
+                    active_runtime = self.agent_runner.last_runtime
+                    if (
+                        active_runtime is not None
+                        and active_runtime.identity.run_id == envelope.run_id
+                    ):
+                        self.agent_runtime = active_runtime
+                        self.harness = active_runtime.harness
                     event = envelope.event
                     if isinstance(event, RunErrorEvent):
                         self.stream_renderer.on_event(event)
                         self._run_state = self.stream_renderer.phase
+                        self.prompt_session.refresh()
                         continue
                     if isinstance(event, PluginDiagnosticEvent):
                         continue
@@ -1196,10 +1234,11 @@ class MiaREPL:
                     elif isinstance(event, TurnCompleteEvent):
                         self.total_cost_usd += event.total_cost_usd
                         successful_settlement = self.stream_renderer.phase == "success"
+                    self.prompt_session.refresh()
             if successful_settlement:
                 follow_up = self._take_queued_follow_up()
                 if follow_up is not None:
-                    await self.execute_turn(follow_up)
+                    await self._execute_turn(follow_up)
             else:
                 self._restore_queued_follow_up()
             if self.agent_runner.last_runtime is not None:
@@ -1214,7 +1253,7 @@ class MiaREPL:
             if self.stream_renderer.plain_mode:
                 self.console.print("[cancelled] Turn halted by user (Ctrl+C).", markup=False)
             else:
-                self.console.print("\n[yellow]⚠️  Turn halted by user (Ctrl+C).[/yellow]\n")
+                self.console.print("\n[cancelled] Turn halted by user (Ctrl+C).\n", markup=False)
         except Exception as exc:
             self.stream_renderer.phase = "failure"
             self._run_state = "failure"
@@ -1225,11 +1264,12 @@ class MiaREPL:
                 self.console.print(f"[error] Error during execution: {safe_error}", markup=False)
             else:
                 self.console.print(
-                    Text(f"\nError during execution: {safe_error}\n", style="bold red")
+                    Text(f"\n[error] Error during execution: {safe_error}\n", style="bold")
                 )
         finally:
             self.prompt_session.is_busy = False
             self._run_state = "idle"
+            self.prompt_session.refresh()
 
     def handle_slash_command(self, cmd_line: str) -> bool:
         """Handle slash commands with alias resolution and prefix matching."""
@@ -1256,7 +1296,9 @@ class MiaREPL:
             "/signout",
             "/disconnect",
         ):
-            self.console.print(f"[yellow]Cannot change {raw_cmd} while a Run is active.[/yellow]\n")
+            self.console.print(
+                f"[warning] Cannot change {raw_cmd} while a Run is active.\n", markup=False
+            )
             return True
 
         if cmd in ("/", "/?", "/help"):
@@ -1304,21 +1346,21 @@ class MiaREPL:
                 active = self.agent_mgr.get_agent(self.agent_id)
                 available = ", ".join(agent.agent_id for agent in self.agent_mgr.list_agents())
                 self.console.print(
-                    f"[bold #FF7A00]Current Agent:[/bold #FF7A00] "
-                    f"[bold cyan]{active.display_name} ({active.agent_id})[/bold cyan]"
+                    f"[bold]Current Agent:[/bold] "
+                    f"[bold]{active.display_name} ({active.agent_id})[/bold]"
                 )
                 self.console.print(f"[dim]Available Agents: {available}[/dim]\n")
             else:
                 try:
                     selected_agent = self.agent_mgr.get_agent(args)
                 except ValueError as exc:
-                    self.console.print(f"[yellow]{exc}[/yellow]\n")
+                    self.console.print(f"[error] {exc}\n", markup=False)
                 else:
                     self.agent_id = selected_agent.agent_id
                     self._approval_callback = self._request_tool_approval
                     self._init_harness()
                     self.console.print(
-                        f"[bold green]✓ Switched Agent to {selected_agent.agent_id}[/bold green]\n"
+                        f"[bold]Switched Agent to {selected_agent.agent_id}[/bold]\n"
                     )
         elif cmd in ("/model", "/llm"):
             if not args:
@@ -1328,16 +1370,14 @@ class MiaREPL:
             else:
                 self.model_name = args
                 self._init_harness()
-                self.console.print(
-                    f"[bold green]✓ Switched active model to {self.model_name}[/bold green]\n"
-                )
+                self.console.print(f"[bold]Switched active model to {self.model_name}[/bold]\n")
 
         elif cmd == "/scoped-models":
             model_sources = self._discover_connected_models()
             previous_scope = list(self.scoped_models)
             if not model_sources:
                 self.console.print(
-                    "[yellow]No connected providers or discoverable models.[/yellow]\n"
+                    "[warning] No connected providers or discoverable models.\n", markup=False
                 )
                 return True
 
@@ -1352,7 +1392,8 @@ class MiaREPL:
                 unknown = [model for model in requested if model not in model_sources]
                 if unknown:
                     self.console.print(
-                        f"[yellow]Unknown models: {', '.join(unknown)}. Run /scoped-models to refresh.[/yellow]\n"
+                        f"[warning] Unknown models: {', '.join(unknown)}. Run /scoped-models to refresh.\n",
+                        markup=False,
                     )
                     return True
                 self.scoped_models = requested
@@ -1369,9 +1410,7 @@ class MiaREPL:
             else:
                 self.scoped_models = selected
                 self._save_scoped_models()
-                self.console.print(
-                    f"[bold green]✓ Saved {len(selected)} scoped models.[/bold green]\n"
-                )
+                self.console.print(f"[ok] Saved {len(selected)} scoped models.\n", markup=False)
 
         elif cmd in ("/diff", "/changes"):
             try:
@@ -1384,42 +1423,47 @@ class MiaREPL:
                 )
                 if res.returncode != 0:
                     error = res.stderr.strip() or f"git diff exited with status {res.returncode}"
-                    self.console.print(f"[red]Git diff failed: {escape(error)}[/red]\n")
+                    self.console.print(
+                        f"[error] Git diff failed: {_safe_cli_text(error)}\n", markup=False
+                    )
                 else:
                     diff_text = res.stdout.strip()
                     if not diff_text:
                         self.console.print(
-                            "[bold green]✓ Working tree clean. No uncommitted diffs.[/bold green]\n"
+                            "[ok] Working tree clean. No uncommitted diffs.\n", markup=False
                         )
                     else:
-                        self.console.print("[bold #FF7A00]Current Git Diffs:[/bold #FF7A00]")
+                        self.console.print("[bold]Current Git Diffs:[/bold]")
                         self.console.print(
                             Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
                         )
                         self.console.print()
             except Exception as e:
-                self.console.print(f"[red]Failed to run git diff: {e}[/red]\n")
+                self.console.print(f"[error] Failed to run git diff: {e}\n", markup=False)
 
         elif cmd in ("/cost", "/stats", "/tokens"):
             self.console.print(
-                f"[bold #FF7A00]Session Metrics:[/bold #FF7A00] Tokens: {self.total_tokens:,} │ Cost: ${self.total_cost_usd:.4f}\n"
+                f"[bold]Session Metrics:[/bold] Tokens: {self.total_tokens:,} │ Cost: ${self.total_cost_usd:.4f}\n"
             )
 
         elif cmd in ("/compact", "/compress"):
             if self.harness is None:
                 self.console.print(
-                    "[yellow]No active context to compact; configure a model first.[/yellow]\n"
+                    "[warning] No active context to compact; configure a model first.\n",
+                    markup=False,
                 )
             else:
                 result = self.harness.compact_context()
                 if result is None:
                     self.console.print(
-                        "[yellow]Nothing to compact: no conversation history or compactor is configured.[/yellow]\n"
+                        "[warning] Nothing to compact: no conversation history or compactor is configured.\n",
+                        markup=False,
                     )
                 else:
                     self.console.print(
-                        "[bold green]✓ Context compacted: "
-                        f"{result.before_tokens:,} → {result.after_tokens:,} estimated tokens.[/bold green]\n"
+                        "[ok] Context compacted: "
+                        f"{result.before_tokens:,} → {result.after_tokens:,} estimated tokens.\n",
+                        markup=False,
                     )
 
         elif cmd in ("/sessions", "/history"):
@@ -1446,12 +1490,17 @@ class MiaREPL:
             finally:
                 self.prompt_session.restore_draft(saved_draft)
 
-        elif cmd in ("/thinking", "/trace"):
+        elif cmd == "/thinking":
+            if args:
+                self._set_reasoning_level(args.strip().lower())
+            else:
+                self.console.print(f"Thinking level: {self.reasoning_level or 'off'}", markup=False)
+
+        elif cmd == "/trace":
             self.show_thinking_trace = not self.show_thinking_trace
             state_str = "ENABLED" if self.show_thinking_trace else "DISABLED"
-            self.console.print(
-                f"[bold #FF7A00]💭 Model reasoning trace is now {state_str}.[/bold #FF7A00]\n"
-            )
+            self.console.print(f"[trace] Model reasoning trace: {state_str}.", markup=False)
+            self.prompt_session.refresh()
 
         elif cmd in ("/init", "/bootstrap"):
             has_git = (self.cwd / ".git").exists()
@@ -1460,11 +1509,11 @@ class MiaREPL:
             self.console.print(
                 Panel(
                     f"Repository Context Check:\n"
-                    f" - Git Repository: {'[green]Yes[/green]' if has_git else '[yellow]No[/yellow]'}\n"
-                    f" - AGENTS.md Guidelines: {'[green]Found[/green]' if has_agents else '[dim]None[/dim]'}\n"
-                    f" - README.md: {'[green]Found[/green]' if has_readme else '[dim]None[/dim]'}",
-                    title="[bold #FF7A00]Basic Repository Context[/bold #FF7A00]",
-                    border_style="#2D3342",
+                    f" - Git Repository: {'Yes' if has_git else 'No'}\n"
+                    f" - AGENTS.md Guidelines: {'Found' if has_agents else 'None'}\n"
+                    f" - README.md: {'Found' if has_readme else 'None'}",
+                    title="[bold]Basic Repository Context[/bold]",
+                    border_style="dim",
                 )
             )
 
@@ -1474,11 +1523,12 @@ class MiaREPL:
                 return self.handle_slash_command(f"{matched[0]} {args}".strip())
             elif matched:
                 self.console.print(
-                    f"[yellow]Ambiguous command '{raw_cmd}'. Matching commands:[/yellow]"
+                    f"[warning] Ambiguous command '{raw_cmd}'. Matching commands.\n",
+                    markup=False,
                 )
                 self.print_command_menu(filter_prefix=raw_cmd)
             else:
-                self.console.print(f"[yellow]Unknown command '{raw_cmd}'.[/yellow]")
+                self.console.print(f"[warning] Unknown command '{raw_cmd}'.", markup=False)
                 self.print_command_menu()
 
         return True
@@ -1491,10 +1541,11 @@ class MiaREPL:
     async def run_async(self) -> None:
         """Main async REPL loop with first-run onboarding verification."""
         self.print_banner()
+        self._render_startup_history()
 
         if not self.custom_provider and not self.model_name:
             self.console.print(
-                "[dim]💡 No AI provider authenticated yet. Type [bold #FF7A00]/login[/bold #FF7A00] to authenticate, or [bold #FF7A00]/help[/bold #FF7A00] for commands.[/dim]\n"
+                "[dim]No provider configured. Use /login to authenticate or /help for commands.[/dim]\n"
             )
         else:
             self.console.print()
@@ -1513,6 +1564,9 @@ class MiaREPL:
                     continue
 
                 if user_input.startswith("/"):
+                    # A completed slash command is UI input, not a draft to restore
+                    # when a selector (model, session, tree, etc.) opens.
+                    self.prompt_session.set_draft("")
                     should_continue = self.handle_slash_command(user_input)
                     if not should_continue:
                         break
@@ -1556,7 +1610,8 @@ class MiaREPL:
                                     turn_task.cancel()
                                     raise exc
                                 prompt_result = prompt_task.result()
-                                if prompt_result.startswith("/queue"):
+                                if prompt_result.startswith("/"):
+                                    self.prompt_session.set_draft("")
                                     self.handle_slash_command(prompt_result)
                             if (
                                 self.prompt_session.is_busy

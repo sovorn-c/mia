@@ -9,8 +9,13 @@ import httpx
 import pytest
 
 from mia_agent.auth.credentials import FileCredentialStore, OAuthCredential
-from mia_ai.providers.openai_codex import OpenAICodexProvider
-from mia_ai.types import ChatMessage, ToolDefinition
+from mia_ai.providers.openai_codex import OpenAICodexProvider, _build_payload
+from mia_ai.types import (
+    ChatMessage,
+    ToolDefinition,
+    anthropic_thinking_budget_for_level,
+    reasoning_effort_for_level,
+)
 
 
 def _jwt() -> str:
@@ -25,7 +30,7 @@ def _jwt() -> str:
 @pytest.mark.asyncio
 async def test_codex_provider_uses_responses_endpoint_and_streams_events(tmp_path: Path) -> None:
     requests: list[httpx.Request] = []
-    sse = b"""data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":2,\"output_tokens\":1,\"total_tokens\":3}}}\n\n"""
+    sse = b"""data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"hello\"}]}}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":2,\"output_tokens\":1,\"total_tokens\":3}}}\n\n"""
 
     async def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
@@ -69,6 +74,24 @@ async def test_codex_provider_uses_responses_endpoint_and_streams_events(tmp_pat
     assert chunks[0].delta == "hello"
     assert chunks[1].usage is not None
     assert chunks[1].usage.total_tokens == 3
+
+
+def test_general_reasoning_levels_map_to_provider_values() -> None:
+    assert reasoning_effort_for_level("minimal") == "minimal"
+    assert reasoning_effort_for_level("xhigh") == "high"
+    assert reasoning_effort_for_level("max", {"max": "xhigh"}) == "xhigh"
+    assert anthropic_thinking_budget_for_level("medium") == 8192
+
+
+def test_codex_payload_includes_selected_reasoning_effort() -> None:
+    payload = _build_payload(
+        "gpt-5.3-codex",
+        [ChatMessage(role="user", content="Hi")],
+        [],
+        "",
+        reasoning_level="high",
+    )
+    assert payload["reasoning"] == {"effort": "high", "summary": "auto"}
 
 
 @pytest.mark.asyncio

@@ -110,13 +110,13 @@ class CarrotBounceSpinner:
 
     @classmethod
     def get_frame(cls, elapsed_seconds: float) -> str:
-        idx = int(elapsed_seconds * 4) % len(cls.FRAMES)
+        idx = int(max(0.0, elapsed_seconds)) % len(cls.FRAMES)
         return cls.FRAMES[idx]
 
     @classmethod
     def render_frame(cls, elapsed_seconds: float = 0.0) -> str:
         frame = cls.get_frame(elapsed_seconds)
-        return f"{frame} Thinking ({elapsed_seconds:.1f}s)..."
+        return f"{frame} Thinking ({int(max(0.0, elapsed_seconds))}s)..."
 
 
 class AnimatedWorkingStatus:
@@ -126,7 +126,7 @@ class AnimatedWorkingStatus:
         self,
         action: str = "Thinking",
         turn_start_time: float = 0.0,
-        style: str = "bold #FF7A00",
+        style: str = "bold",
     ) -> None:
         self.action = action
         self.turn_start_time = turn_start_time
@@ -134,15 +134,14 @@ class AnimatedWorkingStatus:
         self.spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
         self.dot_frames = [".  ", ".. ", "...", "   "]
 
-    def update(self, action: str, style: str = "bold #FF7A00") -> None:
+    def update(self, action: str, style: str = "bold") -> None:
         self.action = action
         self.style = style
 
     def __rich__(self) -> Text:
-        now = time.time()
-        elapsed = max(0.0, now - self.turn_start_time)
-        spin_idx = int(elapsed * 10) % len(self.spinner_frames)
-        dot_idx = int(elapsed * 3) % len(self.dot_frames)
+        elapsed = max(0, int(time.time() - self.turn_start_time))
+        spin_idx = elapsed % len(self.spinner_frames)
+        dot_idx = elapsed % len(self.dot_frames)
         spin = self.spinner_frames[spin_idx]
         dots = self.dot_frames[dot_idx]
 
@@ -150,7 +149,7 @@ class AnimatedWorkingStatus:
             (f"{spin} ", self.style),
             (f"{self.action}", self.style),
             (f"{dots} ", self.style),
-            (f"({elapsed:.1f}s)", "dim #9CA3AF"),
+            (f"({elapsed}s)", "dim"),
         )
 
 
@@ -162,17 +161,21 @@ class RichStreamRenderer:
         console: Console | None = None,
         show_thinking_trace: bool = False,
         plain_mode: bool | None = None,
+        live_status: bool = True,
     ) -> None:
         self.console = console or Console()
         self.plain_mode = (
             plain_mode if plain_mode is not None else resolve_plain_mode(console=self.console)
         )
         self.show_thinking_trace = show_thinking_trace
+        self.live_status = live_status
         self._in_thought = False
         self._in_text = False
         self.turn_count = 0
         self.turn_start_time = 0.0
         self.thinking_buffer: list[str] = []
+        self._assistant_buffer: list[str] = []
+        self._defer_text = not live_status
         self.turn_audit_log: list[dict[str, Any]] = []
         self._active_status: Live | None = None
         self._status_widget: AnimatedWorkingStatus | None = None
@@ -186,41 +189,59 @@ class RichStreamRenderer:
         self.turn_start_time = time.time()
         self.phase = "thinking"
         self._user_prompt_rendered = False
+        self._end_streams()
         self.thinking_buffer.clear()
+        self._assistant_buffer.clear()
         self.turn_audit_log.clear()
         self.tool_rows.clear()
-        self._end_streams()
         self.console.print()
         self._start_status("Thinking")
 
-    def _start_status(self, action: str, style: str = "bold #FF7A00") -> None:
-        """Start or update live animated working status with dynamic cycling dots and live timer."""
+    def _start_status(self, action: str, style: str = "bold") -> None:
+        """Start or update the animated working status."""
         if self.plain_mode or not self.console.is_terminal:
             return
-        if self._active_status is None:
+        if self._status_widget is None:
             self._status_widget = AnimatedWorkingStatus(
                 action=action,
                 turn_start_time=self.turn_start_time,
                 style=style,
             )
-            self._active_status = Live(
-                self._status_widget,
-                console=self.console,
-                refresh_per_second=10,
-                transient=True,
-            )
-            self._active_status.start()
-        else:
-            if self._status_widget is not None:
-                self._status_widget.turn_start_time = self.turn_start_time
-                self._status_widget.update(action=action, style=style)
+            if self.live_status:
+                self._active_status = Live(
+                    self._status_widget,
+                    console=self.console,
+                    refresh_per_second=1,
+                    transient=True,
+                )
+                self._active_status.start()
+        elif self._status_widget is not None:
+            self._status_widget.turn_start_time = self.turn_start_time
+            self._status_widget.update(action=action, style=style)
+
+    def prompt_status(self) -> str | None:
+        """Return the current status text for a prompt prefix above the editor."""
+        if self._defer_text and self.phase == "responding" and self._assistant_buffer:
+            preview = " ".join(_safe_display_text("".join(self._assistant_buffer)).split())
+            if len(preview) > 240:
+                preview = preview[:239] + "…"
+            elapsed = max(0, int(time.time() - self.turn_start_time))
+            return f"🥕 mia › {preview} ({elapsed}s)"
+        if self._status_widget is None or self.phase not in {
+            "thinking",
+            "responding",
+            "tool",
+            "approval",
+        }:
+            return None
+        return self._status_widget.__rich__().plain
 
     def _stop_status(self) -> None:
         """Stop and clear active status spinner cleanly."""
         if self._active_status is not None:
             self._active_status.stop()
-            self._active_status = None
-            self._status_widget = None
+        self._active_status = None
+        self._status_widget = None
 
     def set_tool_approval(self, tool_name: str) -> None:
         """Mark the latest matching pending Tool row as awaiting explicit approval."""
@@ -241,7 +262,7 @@ class RichStreamRenderer:
         state = "expanded" if row.expanded else "collapsed"
         self.console.print(f"[tool {state}] {row.call_id} {row.tool_name}", markup=False)
         if row.expanded:
-            self.console.print(f"  ↳ {row.result or '[no retained result]'}", markup=False)
+            self.console.print(f"  output: {row.result or '[no retained result]'}", markup=False)
         return row.expanded
 
     def _tool_summary(self, event: ToolCallEvent) -> str:
@@ -257,15 +278,15 @@ class RichStreamRenderer:
 
     def _print_tool_row(self, row: ToolRow, duration_ms: float | None = None) -> None:
         duration = f" ({duration_ms:.1f}ms)" if duration_ms is not None else ""
-        legacy_role = {
-            "pending": " [running]",
-            "completed": " [ok]",
-            "error": " [error]",
-            "cancelled": " [cancelled]",
-            "approval": " [approval-required]",
+        state_label = {
+            "pending": "running",
+            "completed": "ok",
+            "error": "error",
+            "cancelled": "cancelled",
+            "approval": "approval",
         }[row.state]
         self.console.print(
-            f"[tool {row.state}] {row.tool_name} {row.summary}{duration}{legacy_role} {row.tool_name}",
+            f"[tool {row.state}] {row.summary} · {row.call_id} · {state_label}{duration}",
             markup=False,
         )
 
@@ -281,6 +302,7 @@ class RichStreamRenderer:
             self.phase = "thinking"
             if not self._user_prompt_rendered:
                 self.console.print(f"[user] {_safe_display_text(event.user_prompt)}", markup=False)
+                self.console.print()
                 self._user_prompt_rendered = True
             if self.turn_start_time <= 0:
                 self.turn_count += 1
@@ -306,35 +328,37 @@ class RichStreamRenderer:
                         if self.plain_mode:
                             self.console.print("Thinking: ", end="", markup=False)
                         else:
-                            self.console.print(
-                                Text("💭 Thinking: ", style="dim italic #FF7A00"), end=""
-                            )
+                            self.console.print(Text("thinking: ", style="dim italic"), end="")
                         self._in_thought = True
                     if self.plain_mode:
                         self.console.print(event.thought_delta, end="", markup=False)
                     else:
-                        self.console.print(
-                            Text(event.thought_delta, style="dim italic #9CA3AF"), end=""
-                        )
+                        self.console.print(Text(event.thought_delta, style="dim italic"), end="")
                 else:
                     self._start_status("Thinking")
 
             if event.delta_text:
                 self.phase = "responding"
-                self._stop_status()
                 if self._in_thought:
                     self.console.print("\n")
                     self._in_thought = False
-                if not self._in_text:
-                    if self.plain_mode:
-                        self.console.print("mia > ", end="", markup=False)
-                    else:
-                        self.console.print("[bold #FF7A00]🥕 mia ›[/bold #FF7A00] ", end="")
+                first_text = not self._in_text
                 self._in_text = True
-                if self.plain_mode:
-                    self.console.print(event.delta_text, end="", markup=False)
+                if self._defer_text:
+                    self._assistant_buffer.append(event.delta_text)
+                    self._start_status("Responding")
                 else:
-                    self.console.print(Text(event.delta_text), end="")
+                    self._stop_status()
+                    if self.plain_mode:
+                        prefix = "🥕 mia › " if first_text else ""
+                        self.console.print(prefix + event.delta_text, end="", markup=False)
+                    else:
+                        rendered_text = (
+                            Text.assemble(("🥕 mia › ", "bold"), (event.delta_text, ""))
+                            if first_text
+                            else Text(event.delta_text)
+                        )
+                        self.console.print(rendered_text, end="")
 
         elif isinstance(event, ToolCallEvent):
             self.phase = "tool"
@@ -348,10 +372,7 @@ class RichStreamRenderer:
             )
             self.tool_rows[event.call_id] = row
             self._print_tool_row(row)
-            self._start_status(
-                f"Running {row.summary}",
-                style="bold #38BDF8",
-            )
+            self._start_status(f"running {row.summary}", style="bold")
             self.turn_audit_log.append(
                 {
                     "call_id": event.call_id,
@@ -398,7 +419,7 @@ class RichStreamRenderer:
                 )
             else:
                 self.console.print(
-                    Text(f"✗ Agent error: {_safe_display_text(event.error)}", style="bold red")
+                    Text(f"[error] Agent error: {_safe_display_text(event.error)}", style="bold")
                 )
 
         elif isinstance(event, RunErrorEvent):
@@ -416,9 +437,9 @@ class RichStreamRenderer:
                 else:
                     self.console.print(
                         Text(
-                            f"⚠️  Run cancelled ({_safe_display_text(event.stage)}): "
+                            f"[cancelled] Run cancelled ({_safe_display_text(event.stage)}): "
                             f"{_safe_display_text(event.error)}",
-                            style="yellow",
+                            style="bold",
                         )
                     )
             else:
@@ -431,9 +452,9 @@ class RichStreamRenderer:
                 else:
                     self.console.print(
                         Text(
-                            f"✗ Run error ({_safe_display_text(event.stage)}): "
+                            f"[error] Run error ({_safe_display_text(event.stage)}): "
                             f"{_safe_display_text(event.error)}",
-                            style="bold red",
+                            style="bold",
                         )
                     )
 
@@ -446,22 +467,24 @@ class RichStreamRenderer:
             self._stop_status()
             self._end_streams()
             cost_str = f" | ${event.total_cost_usd:.4f}" if event.total_cost_usd > 0 else ""
-            elapsed = time.time() - self.turn_start_time if self.turn_start_time > 0 else 0.0
+            elapsed = (
+                max(0, int(time.time() - self.turn_start_time)) if self.turn_start_time > 0 else 0
+            )
             step_word = "1 step" if event.total_steps == 1 else f"{event.total_steps} steps"
             if successful:
-                outcome = f"Turn completed in {elapsed:.1f}s, [{step_word}]{cost_str}"
-                style = "dim green"
+                outcome = f"Turn completed in {elapsed}s, [{step_word}]{cost_str}"
+                style = "dim"
                 label = "ok"
             elif was_cancelled:
-                outcome = f"Turn cancelled in {elapsed:.1f}s, [{step_word}]"
-                style = "yellow"
+                outcome = f"Turn cancelled in {elapsed}s, [{step_word}]"
+                style = "bold"
                 label = "cancelled"
             else:
                 outcome = (
                     f"Turn failed ({_safe_display_text(event.stop_reason)}) in "
-                    f"{elapsed:.1f}s, [{step_word}]"
+                    f"{elapsed}s, [{step_word}]"
                 )
-                style = "bold red"
+                style = "bold"
                 label = "error"
             if self.plain_mode:
                 self.console.print(f"\n[{label}] {outcome}\n", markup=False)
@@ -474,21 +497,19 @@ class RichStreamRenderer:
             self.console.print("[dim]No tool executions in the latest turn.[/dim]\n")
             return
 
-        self.console.print(
-            "\n[bold #FF7A00]🔍 Turn Execution Audit Log & File Diffs[/bold #FF7A00]"
-        )
+        self.console.print("\n[bold]Turn execution audit log & file diffs[/bold]")
         self.console.print("[dim]─" * 68 + "[/dim]")
 
         for i, item in enumerate(self.turn_audit_log, start=1):
             tool = item["tool_name"]
             status = item.get("status", "unknown")
             dur = item.get("duration_ms", 0.0)
-            status_style = "bold green" if status in {"succeeded", "completed"} else "bold red"
+            status_style = "bold"
 
             audit_line = Text.assemble(
-                (f"Step #{i}: ", "bold cyan"),
+                (f"Step #{i}: ", "bold"),
                 (status.upper(), status_style),
-                (f" {tool} ", "bold white"),
+                (f" {tool} ", "bold"),
                 (f"({dur:.1f}ms)", "dim"),
             )
             self.console.print(audit_line)
@@ -505,8 +526,8 @@ class RichStreamRenderer:
                 self.console.print(
                     Panel(
                         diff_syntax,
-                        title="[bold #FF7A00]File Modification Diff[/bold #FF7A00]",
-                        border_style="#2D3342",
+                        title="[bold]File modification diff[/bold]",
+                        border_style="dim",
                     )
                 )
             elif output.strip():
@@ -519,7 +540,7 @@ class RichStreamRenderer:
                     Panel(
                         Text(disp),
                         title="[dim]Raw Tool Output[/dim]",
-                        border_style="#2D3342",
+                        border_style="dim",
                         padding=(0, 1),
                     )
                 )
@@ -531,5 +552,13 @@ class RichStreamRenderer:
             self.console.print("\n")
             self._in_thought = False
         if self._in_text:
-            self.console.print()
+            if self._defer_text:
+                text = "".join(self._assistant_buffer)
+                self._assistant_buffer.clear()
+                if self.plain_mode:
+                    self.console.print(f"🥕 mia › {text}", markup=False)
+                else:
+                    self.console.print(Text.assemble(("🥕 mia › ", "bold"), (text, "")))
+            else:
+                self.console.print()
             self._in_text = False

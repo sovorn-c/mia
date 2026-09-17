@@ -56,6 +56,68 @@ def test_file_credential_store_oauth_lifecycle(tmp_path: Path) -> None:
     assert retrieved.metadata == {"scope": "copilot"}
 
 
+def test_model_metadata_drives_context_and_reasoning_levels(tmp_path: Path) -> None:
+    manager = ConfigManager(config_path=tmp_path / "config.json")
+    manager.save_config(
+        manager.config.model_copy(
+            update={
+                "model_metadata": {
+                    "openai": {
+                        "gpt-test": {
+                            "context_window": 256_000,
+                            "reasoning": True,
+                            "thinking_levels": ["off", "low", "high"],
+                        }
+                    }
+                }
+            }
+        )
+    )
+    assert manager.model_context_window("openai", "gpt-test") == 256_000
+    assert manager.model_context_window("openai-codex", "gpt-5.6-luna") == 272_000
+    assert manager.model_thinking_levels("openai", "gpt-test") == ("off", "low", "high")
+    assert manager.model_thinking_levels("openai-codex", "gpt-5.6-luna") == (
+        "off",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+    )
+
+
+def test_model_thinking_level_map_filters_only_unsupported_extended_levels(
+    tmp_path: Path,
+) -> None:
+    manager = ConfigManager(config_path=tmp_path / "config.json")
+    manager.save_config(
+        manager.config.model_copy(
+            update={
+                "model_metadata": {
+                    "openai": {
+                        "gpt-mapped": {
+                            "reasoning": True,
+                            "thinking_levels": ["off", "high"],
+                            "thinking_level_map": {"minimal": "low", "xhigh": None},
+                        }
+                    }
+                }
+            }
+        )
+    )
+
+    assert manager.model_thinking_level_map("openai", "gpt-mapped") == {
+        "minimal": "low",
+        "xhigh": None,
+    }
+    assert manager.model_thinking_levels("openai", "gpt-mapped") == (
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+    )
+
+
 def test_config_manager_resolution_hierarchy(tmp_path: Path) -> None:
     store_file = tmp_path / "credentials.json"
     config_file = tmp_path / "config.json"

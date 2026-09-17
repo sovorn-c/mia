@@ -174,15 +174,21 @@ class AgentRuntimeFactory:
             or config.default_model
             or ("" if has_custom_provider else "claude-3-5-sonnet")
         )
+        target_provider = (
+            agent.provider
+            or config.default_provider
+            or self.config_manager.infer_provider(target_model)
+        )
 
-        # 4. Context window precedence
+        # 4. Context window precedence: explicit Agent settings beat model metadata.
+        model_window = self.config_manager.model_context_window(target_provider, target_model)
         window_tokens = (
             context_window
             if context_window is not None
             else (
                 agent.context_window_tokens
                 if agent.context_window_tokens is not None
-                else config.context_window_tokens
+                else model_window or config.context_window_tokens
             )
         )
 
@@ -223,6 +229,7 @@ class AgentRuntimeFactory:
         cwd: Path | None = None,
         compaction_threshold: float | None = None,
         context_window: int | None = None,
+        reasoning_level: str | None = None,
         approval_callback: ApprovalCallback | None = None,
         full_access_confirmed: bool | None = None,
         access_policy_override: str | None = None,
@@ -287,17 +294,30 @@ class AgentRuntimeFactory:
             provider_name, model_name, api_key, base_url = self.config_manager.resolve_credentials(
                 model=target_model
             )
+            thinking_level_map = self.config_manager.model_thinking_level_map(
+                provider_name, model_name
+            )
             if provider_name == "anthropic":
-                provider = AnthropicProvider(api_key=api_key, base_url=base_url)
+                provider = AnthropicProvider(
+                    api_key=api_key, base_url=base_url, reasoning_level=reasoning_level
+                )
             elif provider_name == "openai-codex":
                 provider = OpenAICodexProvider(
                     credential_store=self.config_manager.credential_store,
                     base_url=base_url or "https://chatgpt.com/backend-api",
+                    reasoning_level=reasoning_level,
                 )
             else:
-                provider = OpenAICompatibleProvider(api_key=api_key, base_url=base_url)
+                provider = OpenAICompatibleProvider(
+                    api_key=api_key, base_url=base_url, reasoning_level=reasoning_level
+                )
+            provider.extra_config["thinking_level_map"] = thinking_level_map
         else:
             model_name = target_model
+            provider.extra_config["reasoning_level"] = reasoning_level
+            provider.extra_config["thinking_level_map"] = (
+                self.config_manager.model_thinking_level_map("custom", model_name)
+            )
 
         tools = self.agent_manager.filter_tools(agent, available_tools)
         active_delegation_service = delegation_service or self.delegation_service
@@ -373,6 +393,7 @@ class AgentRuntimeFactory:
                 compaction_threshold_ratio=settings.compaction_threshold,
             ),
             last_entry_id=last_entry_id,
+            reasoning_level=reasoning_level,
             tool_context_metadata={
                 "agent_id": agent.agent_id,
                 "run_id": identity.run_id,

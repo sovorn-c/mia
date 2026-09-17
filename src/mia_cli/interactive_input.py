@@ -45,7 +45,7 @@ COMMAND_HINTS: list[tuple[str, str]] = [
     ("/resume", "Resume or delete a saved session"),
     ("/tree", "Explore and fork the session tree (alias: /branch)"),
     ("/inspect", "Show post-turn audit details (alias: /logs)"),
-    ("/thinking", "Toggle model reasoning trace visibility (alias: /trace)"),
+    ("/thinking", "Set model reasoning level (Shift+Tab cycles; /trace shows trace)"),
     ("/init", "Check for basic repository context files (alias: /bootstrap)"),
     ("/clear", "Clear the terminal and redraw the banner (alias: /cls)"),
     ("/quit", "Save the session and exit (alias: /exit)"),
@@ -53,29 +53,31 @@ COMMAND_HINTS: list[tuple[str, str]] = [
 
 MIA_STYLE = Style.from_dict(
     {
-        "prompt": "bold #FF7A00",
-        "completion-menu": "bg:default #E5E7EB",
-        "completion-menu.completion": "bg:default #9CA3AF",
-        "completion-menu.completion.current": "bold bg:default #FF7A00",
-        "completion-menu.meta": "bg:default #6B7280 italic",
-        "completion-menu.meta.completion": "bg:default #6B7280 italic",
-        "completion-menu.meta.completion.current": "bold bg:default #FF7A00 italic",
-        "completion-menu.multi-column-meta": "bg:default #6B7280",
+        # Keep hierarchy semantic so the user's terminal theme owns the palette.
+        "prompt": "bold",
+        "working": "dim",
+        "completion-menu": "bg:default",
+        "completion-menu.completion": "bg:default",
+        "completion-menu.completion.current": "bold reverse",
+        "completion-menu.meta": "bg:default dim italic",
+        "completion-menu.meta.completion": "bg:default dim italic",
+        "completion-menu.meta.completion.current": "bold reverse italic",
+        "completion-menu.multi-column-meta": "bg:default dim",
         "scrollbar": "bg:default",
         "scrollbar.background": "bg:default",
-        "scrollbar.button": "bg:default #FF7A00",
-        "bottom-toolbar": "noreverse bg:default #9CA3AF",
-        "bottom-toolbar.text": "noreverse bg:default #9CA3AF",
-        "bottom-toolbar.accent": "bold bg:default #FF7A00",
-        "bottom-toolbar.dim": "bg:default #6B7280",
-        "selector-frame": "#2D3342",
-        "selector-title": "bold #FF7A00",
-        "selector-hint": "#6B7280",
-        "selector-search": "#E5E7EB",
-        "selector-item": "#E5E7EB",
-        "selector-selected": "bold #FF7A00",
-        "selector-muted": "#9CA3AF",
-        "selector-error": "#F87171",
+        "scrollbar.button": "bg:default reverse",
+        "bottom-toolbar": "noreverse bg:default",
+        "bottom-toolbar.text": "noreverse bg:default",
+        "bottom-toolbar.accent": "bold bg:default",
+        "bottom-toolbar.dim": "noreverse bg:default dim",
+        "selector-frame": "dim",
+        "selector-title": "bold",
+        "selector-hint": "dim",
+        "selector-search": "",
+        "selector-item": "",
+        "selector-selected": "bold reverse",
+        "selector-muted": "dim",
+        "selector-error": "bold",
     }
 )
 
@@ -153,6 +155,7 @@ def format_status_toolbar(
     window_tokens: int | None = None,
     thinking_enabled: bool = False,
     *,
+    reasoning_level: str | None = None,
     agent_id: str | None = None,
     provider_name: str | None = None,
     session_id: str | None = None,
@@ -160,7 +163,7 @@ def format_status_toolbar(
     run_state: str = "idle",
     width: int | None = None,
 ) -> HTML:
-    """Render clean status info line below the prompt, adjusted with zero background."""
+    """Render one compact, truthful footer line using terminal-native roles."""
     workspace_name = _safe_status_text(workspace_name)
     model_name = _safe_status_text(model_name)
     agent_id = _safe_status_text(agent_id) if agent_id else None
@@ -175,43 +178,46 @@ def format_status_toolbar(
         token_display = f"{tokens_str}/{window_str} ({pct_str})"
     else:
         token_display = tokens_str
-    lifetime_usage = f"Lifetime usage: {token_display}"
-    current_context = (
-        f"Current context: {current_context_tokens / 1000:.1f}k"
-        if current_context_tokens is not None and current_context_tokens >= 1000
-        else f"Current context: {current_context_tokens}"
-        if current_context_tokens is not None
-        else "Current context: unavailable"
-    )
+
+    context_display = None
+    if current_context_tokens is not None:
+        current = (
+            f"{current_context_tokens / 1000:.1f}k"
+            if current_context_tokens >= 1000
+            else str(current_context_tokens)
+        )
+        if window_tokens is not None and window_tokens > 0:
+            context_display = f"{current}/{window_tokens // 1000}k"
+        else:
+            context_display = current
 
     if width is not None and width < 60:
-        provider_part = f" │ {provider_name}" if provider_name else ""
-        return HTML(
-            f"<style fg='#9CA3AF'>Workspace: <b>{workspace_name}</b> │ "
-            f"Model: <b>{model_name}</b>{provider_part} │ "
-            f"Phase: <style fg='#FF7A00'>[{run_state}]</style></style>"
-        )
+        narrow_parts = [f"<b>{workspace_name}</b>", f"<b>{model_name}</b>"]
+        if context_display is not None:
+            narrow_parts.append(f"ctx {context_display}")
+        if run_state:
+            narrow_parts.append(f"state {run_state}")
+        return HTML(f"<dim>{' · '.join(narrow_parts)}</dim>")
 
-    thinking_badge = (
-        " <style fg='#FF7A00'>[💭 on]</style>"
-        if thinking_enabled
-        else " <style fg='#6B7280'>[💭 off]</style>"
-    )
-
-    agent_part = f"🤖 <b>{agent_id}</b> │ " if agent_id else ""
-    provider_part = f"Provider: <b>{provider_name}</b> │ " if provider_name else ""
-    session_part = f"🆔 <b>{session_id}</b> │ " if session_id else ""
-    state_badge = f" Phase: <style fg='#FF7A00'>[{run_state}]</style> │" if run_state else ""
-
-    return HTML(
-        f"<style fg='#9CA3AF'>  Workspace: <b>{workspace_name}</b> │ "
-        f"{agent_part}"
-        f"Model: <b>{model_name}</b> │ "
-        f"{provider_part}"
-        f"{session_part}"
-        f"{lifetime_usage} │ {current_context}{thinking_badge} │"
-        f"{state_badge} <b>/help</b></style>"
-    )
+    parts = [f"<b>{workspace_name}</b>"]
+    if agent_id:
+        parts.append(f"agent {agent_id}")
+    if provider_name:
+        parts.append(f"{provider_name}/{model_name}")
+    else:
+        parts.append(model_name)
+    if session_id:
+        parts.append(f"session {session_id}")
+    parts.append(f"usage {token_display}")
+    if context_display is not None:
+        parts.append(f"context {context_display}")
+    if reasoning_level:
+        parts.append(f"reasoning {_safe_status_text(reasoning_level)}")
+    elif thinking_enabled:
+        parts.append("thinking")
+    if run_state:
+        parts.append(f"state {run_state}")
+    return HTML(f"<dim>{' · '.join(parts)}</dim>")
 
 
 format_status_info = format_status_toolbar
@@ -224,11 +230,13 @@ class LivePromptSession:
         self,
         history_file: Path | None = None,
         toolbar_callback: Callable[[], AnyFormattedText] | None = None,
+        prompt_status_callback: Callable[[], str | None] | None = None,
         input: Any = None,
         output: Any = None,
     ) -> None:
         self.history_file = history_file or (Path.home() / ".mia" / "history")
         self.toolbar_callback = toolbar_callback
+        self.prompt_status_callback = prompt_status_callback
         self.history = SafeFileHistory(str(self.history_file))
         self.completer = SlashCompleter()
         self._last_escape_time = 0.0
@@ -237,6 +245,7 @@ class LivePromptSession:
         self.draft_text: str = ""
         self.on_cancel_callback: Callable[[], None] | None = None
         self.on_queue_callback: Callable[[], bool] | None = None
+        self.on_reasoning_cycle_callback: Callable[[], None] | None = None
         self.bindings = self._create_keybindings()
         self.session: PromptSession[str] = PromptSession(
             history=self.history,
@@ -247,6 +256,7 @@ class LivePromptSession:
             input=input,
             output=output,
             reserve_space_for_menu=8,
+            refresh_interval=1.0,
         )
         self.approval_session: PromptSession[str] = PromptSession(
             style=MIA_STYLE,
@@ -305,6 +315,13 @@ class LivePromptSession:
         target = text if text is not None else self.draft_text
         self.set_draft(target)
 
+    def refresh(self) -> None:
+        """Invalidate active prompt applications so the toolbar re-reads live state."""
+        for prompt_session in (self.session, self.approval_session):
+            with contextlib.suppress(Exception):
+                if prompt_session.app.is_running:
+                    prompt_session.app.invalidate()
+
     def _handle_escape(self, event: KeyPressEvent) -> None:
         """Apply Pi-style escape behavior to the current prompt buffer."""
         buffer = event.current_buffer
@@ -330,14 +347,16 @@ class LivePromptSession:
     def _create_keybindings(self) -> KeyBindings:
         kb = KeyBindings()
 
-        # Enter: Submit prompt when idle, block submission during an active Run without queueing
+        # Enter: submit prompts when idle; execute slash commands while a Run is active.
         @kb.add("enter")
         def _handle_enter(event: KeyPressEvent) -> None:
             if self.is_busy:
-                if event.current_buffer.text:
-                    self.draft_text = event.current_buffer.text
-                if event.current_buffer.text.strip().lower().startswith("/queue"):
+                text = event.current_buffer.text.strip()
+                if text.startswith("/"):
+                    self.draft_text = ""
                     event.current_buffer.validate_and_handle()
+                elif event.current_buffer.text:
+                    self.draft_text = event.current_buffer.text
                 return
             event.current_buffer.validate_and_handle()
 
@@ -424,21 +443,27 @@ class LivePromptSession:
             event.current_buffer.text = "/inspect"
             event.current_buffer.validate_and_handle()
 
-        # Shift+Tab is Pi's thinking shortcut. Ctrl+Tab is indistinguishable from Tab
-        # in standard terminal input, so binding it would break completion.
+        # Shift+Tab cycles the model reasoning level, like Pi. Ctrl+Tab is
+        # indistinguishable from Tab in standard terminal input.
         @kb.add("s-tab")
         def _thinking_cycle_shortcut(event: KeyPressEvent) -> None:
             if self.is_busy:
+                return
+            if self.on_reasoning_cycle_callback is not None:
+                self.on_reasoning_cycle_callback()
                 return
             if event.current_buffer.text and not event.current_buffer.text.startswith("/"):
                 self.draft_text = event.current_buffer.text
             event.current_buffer.text = "/thinking"
             event.current_buffer.validate_and_handle()
 
-        # Ctrl+T: Toggle thinking trace shortcut
+        # Ctrl+T: Keep the keyboard fallback aligned with Shift+Tab.
         @kb.add("c-t")
         def _thinking_shortcut(event: KeyPressEvent) -> None:
             if self.is_busy:
+                return
+            if self.on_reasoning_cycle_callback is not None:
+                self.on_reasoning_cycle_callback()
                 return
             if event.current_buffer.text and not event.current_buffer.text.startswith("/"):
                 self.draft_text = event.current_buffer.text
@@ -447,12 +472,21 @@ class LivePromptSession:
 
         return kb
 
+    def _formatted_prompt(self, prompt_prefix: str) -> AnyFormattedText:
+        """Keep the editable prompt below one dynamic working-status line."""
+        status = (
+            self.prompt_status_callback() if self.is_busy and self.prompt_status_callback else None
+        )
+        if status:
+            return [("class:working", f"{status}\n"), ("class:prompt", prompt_prefix)]
+        return [("class:prompt", prompt_prefix)]
+
     async def read_prompt_async(
         self,
         prompt_prefix: str = "› ",
         bottom_toolbar: Any = None,
     ) -> str:
-        """Async prompt user with floating slash completions, bracketed paste, and inline status info immediately below."""
+        """Prompt asynchronously while keeping the editable line below working status."""
         if not sys.stdin.isatty() and not getattr(self.session, "_input", None):
             try:
                 return input(prompt_prefix).strip()
@@ -461,12 +495,10 @@ class LivePromptSession:
             except EOFError:
                 raise
 
-        formatted_prompt: AnyFormattedText = [("class:prompt", prompt_prefix)]
-        active_toolbar = (
-            bottom_toolbar
-            if bottom_toolbar is not None
-            else (self.toolbar_callback() if self.toolbar_callback else None)
-        )
+        def formatted_prompt() -> AnyFormattedText:
+            return self._formatted_prompt(prompt_prefix)
+
+        active_toolbar = bottom_toolbar if bottom_toolbar is not None else self.toolbar_callback
 
         try:
             default_text = self.draft_text or ""
@@ -514,12 +546,10 @@ class LivePromptSession:
             except EOFError:
                 raise
 
-        formatted_prompt: AnyFormattedText = [("class:prompt", prompt_prefix)]
-        active_toolbar = (
-            bottom_toolbar
-            if bottom_toolbar is not None
-            else (self.toolbar_callback() if self.toolbar_callback else None)
-        )
+        def formatted_prompt() -> AnyFormattedText:
+            return self._formatted_prompt(prompt_prefix)
+
+        active_toolbar = bottom_toolbar if bottom_toolbar is not None else self.toolbar_callback
 
         try:
             default_text = self.draft_text or ""

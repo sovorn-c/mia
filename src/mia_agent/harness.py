@@ -58,6 +58,7 @@ class AgentHarness:
         session_store: JsonlSessionStore | None = None,
         compactor: ContextCompactor | None = None,
         last_entry_id: str | None = None,
+        reasoning_level: str | None = None,
         tool_context_metadata: dict[str, Any] | None = None,
     ) -> None:
         self.provider = provider
@@ -72,6 +73,8 @@ class AgentHarness:
         self.session_store = session_store
         self.compactor = compactor
         self._last_entry_id = last_entry_id
+        self.reasoning_level = reasoning_level
+        self.provider.extra_config["reasoning_level"] = reasoning_level
         self.tool_context_metadata = dict(tool_context_metadata or {})
         self._turn_counter = 0
         self._current_step = 0
@@ -226,6 +229,7 @@ class AgentHarness:
         step_index = 0
         total_cost = 0.0
 
+        self.provider.extra_config["reasoning_level"] = self.reasoning_level
         while step_index < self.max_steps_per_turn:
             step_index += 1
             self._current_step = step_index

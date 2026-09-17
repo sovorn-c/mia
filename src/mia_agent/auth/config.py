@@ -4,14 +4,49 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 from mia_agent.auth.credentials import FileCredentialStore
 from mia_agent.auth.openai_auth import OPENAI_CODEX_PROVIDER
+from mia_ai.types import THINKING_LEVELS
 
 PI_CATALOG_BASE_URL = "https://pi.dev/api/models/providers"
 PI_CATALOG_PROVIDER_IDS = {"gemini": "google"}
+
+# Fallbacks keep the footer useful before a provider catalog is refreshed.
+_MODEL_CONTEXT_WINDOWS = {
+    "gpt-4o": 128_000,
+    "gpt-4o-mini": 128_000,
+    "gpt-4.1": 1_047_576,
+    "gpt-4.1-mini": 1_047_576,
+    "gpt-5": 400_000,
+    "gpt-5.1": 400_000,
+    "gpt-5.2": 400_000,
+    "gpt-5.3-codex": 400_000,
+    "gpt-5.4": 272_000,
+    "gpt-5.4-mini": 400_000,
+    "gpt-5.5": 272_000,
+    "gpt-5.6": 1_050_000,
+    "gpt-5.6-luna": 272_000,
+    "o1": 200_000,
+    "o3": 200_000,
+    "o3-mini": 200_000,
+    "o4-mini": 200_000,
+    "mimo-v2.5": 128_000,
+    "qwen2.5-coder-32b-instruct": 32_768,
+    "deepseek-chat": 128_000,
+    "deepseek-reasoner": 128_000,
+    "deepseek-v3": 128_000,
+}
+_REASONING_MODEL_PREFIXES = ("o1", "o3", "o4", "gpt-5", "deepseek-reasoner", "deepseek-r1")
+_REASONING_MODEL_PARTS = ("claude-3-7", "claude-sonnet-4", "claude-opus-4", "mimo")
+_STATIC_MODEL_THINKING_LEVEL_MAPS = {
+    model: {"off": "none", "minimal": None, "xhigh": "xhigh"}
+    for model in ("gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna")
+}
+_DISCOVERED_MODEL_METADATA: dict[str, dict[str, dict[str, Any]]] = {}
 
 
 class MiaConfig(BaseModel):
@@ -21,6 +56,7 @@ class MiaConfig(BaseModel):
     default_model: str = ""
     scoped_models: list[str] = Field(default_factory=list)
     model_catalog: dict[str, list[str]] = Field(default_factory=dict)
+    model_metadata: dict[str, dict[str, dict[str, Any]]] = Field(default_factory=dict)
     base_urls: dict[str, str] = Field(default_factory=dict)
     max_steps_per_turn: int = 25
     temperature: float = 0.7
@@ -134,6 +170,41 @@ def validate_api_key(
         return False, f"Timeout: Provider {resolved_base_url} did not respond within 6s"
 
 
+def _catalog_model_metadata(item: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the bounded model fields Mia needs from Pi's catalog."""
+    metadata: dict[str, Any] = {}
+    context_window = item.get("contextWindow", item.get("context_window"))
+    if isinstance(context_window, int) and context_window > 0:
+        metadata["context_window"] = context_window
+    if isinstance(item.get("reasoning"), bool):
+        metadata["reasoning"] = item["reasoning"]
+    level_map_value = item.get("thinkingLevelMap", item.get("thinking_level_map"))
+    level_map = dict(level_map_value) if isinstance(level_map_value, dict) else {}
+    unsupported = item.get("unsupportedThinkingLevels", item.get("unsupported_thinking_levels", []))
+    if isinstance(unsupported, list):
+        for level in unsupported:
+            if level in THINKING_LEVELS:
+                level_map[level] = None
+    levels = item.get("thinkingLevels", item.get("thinking_levels"))
+    if not isinstance(levels, list):
+        levels = [level for level, value in level_map.items() if value is not None]
+    normalized = list(dict.fromkeys(level for level in levels if level in THINKING_LEVELS))
+    if normalized:
+        metadata["thinking_levels"] = normalized
+    if level_map:
+        normalized_map = {
+            level: value
+            for level, value in level_map.items()
+            if level in THINKING_LEVELS and (isinstance(value, str) or value is None)
+        }
+        if normalized_map:
+            metadata["thinking_level_map"] = normalized_map
+    default = item.get("thinkingDefault", item.get("thinking_default"))
+    if isinstance(default, str) and default in THINKING_LEVELS:
+        metadata["thinking_default"] = default
+    return metadata
+
+
 def _fetch_pi_catalog_models(provider_id: str) -> list[str] | None:
     """Read Pi's current curated, tool-capable catalog for one provider."""
     import httpx
@@ -153,6 +224,15 @@ def _fetch_pi_catalog_models(provider_id: str) -> list[str] | None:
             entries = list(entries.values())
         if not isinstance(entries, list):
             return None
+        metadata: dict[str, dict[str, Any]] = {}
+        for item in entries:
+            if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+                continue
+            model_metadata = _catalog_model_metadata(item)
+            if model_metadata:
+                metadata[item["id"]] = model_metadata
+        if metadata:
+            _DISCOVERED_MODEL_METADATA[provider_id] = metadata
         models = sorted(
             {
                 item["id"]
@@ -163,6 +243,14 @@ def _fetch_pi_catalog_models(provider_id: str) -> list[str] | None:
         return models or None
     except Exception:
         return None
+
+
+def discovered_model_metadata(provider_id: str) -> dict[str, dict[str, Any]]:
+    """Return metadata captured by the most recent Pi catalog refresh."""
+    return {
+        model: dict(metadata)
+        for model, metadata in _DISCOVERED_MODEL_METADATA.get(provider_id, {}).items()
+    }
 
 
 def discover_provider_models(
@@ -326,6 +414,88 @@ class ConfigManager:
     @property
     def config(self) -> MiaConfig:
         return self._config
+
+    def model_metadata(self, provider: str, model: str) -> dict[str, Any]:
+        """Return persisted metadata for one provider-qualified model."""
+        return dict(self._config.model_metadata.get(provider, {}).get(model, {}))
+
+    def model_context_window(self, provider: str, model: str) -> int | None:
+        """Resolve the selected model's context window before the global fallback."""
+        lowered = model.lower()
+        exact = _MODEL_CONTEXT_WINDOWS.get(lowered)
+        if exact is not None:
+            return exact
+        value = self.model_metadata(provider, model).get("context_window")
+        if isinstance(value, int) and value > 0:
+            return value
+        if lowered.startswith("gpt-5.6"):
+            return 1_050_000
+        if lowered.startswith("gpt-5.5"):
+            return 272_000
+        if lowered.startswith("gpt-5"):
+            return 400_000
+        if lowered.startswith("claude-"):
+            return 200_000
+        if lowered.startswith("gemini-"):
+            return 1_000_000
+        if lowered.startswith("deepseek-"):
+            return 128_000
+        return None
+
+    def model_thinking_level_map(self, provider: str, model: str) -> dict[str, str | None]:
+        """Return Pi's provider/model-specific reasoning translations."""
+        metadata = self.model_metadata(provider, model)
+        raw_map = metadata.get("thinking_level_map")
+        if not isinstance(raw_map, dict):
+            raw_map = _STATIC_MODEL_THINKING_LEVEL_MAPS.get(model.lower(), {})
+        if not isinstance(raw_map, dict):
+            return {}
+        return {
+            level: value
+            for level, value in raw_map.items()
+            if level in THINKING_LEVELS and (isinstance(value, str) or value is None)
+        }
+
+    def model_thinking_levels(self, provider: str, model: str) -> tuple[str, ...]:
+        """Return Pi-compatible reasoning levels supported by the selected model."""
+        metadata = self.model_metadata(provider, model)
+        if metadata.get("reasoning") is False:
+            return ("off",)
+        level_map = self.model_thinking_level_map(provider, model)
+        if level_map:
+            # Pi treats missing ordinary mappings as provider defaults; extended
+            # levels need explicit mappings because many APIs do not accept them.
+            supported = tuple(
+                level
+                for level in THINKING_LEVELS
+                if (
+                    level in level_map and level_map[level] is not None
+                    if level in {"xhigh", "max"}
+                    else level not in level_map or level_map[level] is not None
+                )
+            )
+            return supported or ("off",)
+        levels = metadata.get("thinking_levels")
+        if isinstance(levels, list):
+            normalized = tuple(level for level in levels if level in THINKING_LEVELS)
+            if normalized:
+                return normalized if "off" in normalized else ("off", *normalized)
+        if metadata.get("reasoning") is True:
+            return ("off", "minimal", "low", "medium", "high")
+        lowered = model.lower()
+        if lowered.startswith(_REASONING_MODEL_PREFIXES) or any(
+            part in lowered for part in _REASONING_MODEL_PARTS
+        ):
+            return ("off", "minimal", "low", "medium", "high")
+        return ("off",)
+
+    def model_thinking_default(self, provider: str, model: str) -> str:
+        """Return the selected model's default reasoning level."""
+        candidate = self.model_metadata(provider, model).get("thinking_default")
+        levels = self.model_thinking_levels(provider, model)
+        if isinstance(candidate, str) and candidate in levels:
+            return candidate
+        return "off" if "off" in levels else (levels[0] if levels else "off")
 
     def infer_provider(self, model: str) -> str:
         """Infer provider, preserving an explicitly selected default model route."""

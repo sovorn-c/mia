@@ -131,6 +131,7 @@ class AgentRunner:
         model_override: str | None = None,
         session_id: str = "default",
         cwd: Path | None = None,
+        reasoning_level: str | None = None,
         approval_callback: ApprovalCallback | None = None,
     ) -> AgentRuntime:
         """Prepare an Agent runtime for Session inspection before a prompt."""
@@ -146,6 +147,7 @@ class AgentRunner:
             provider=provider,
             model_override=model_override,
             cwd=cwd,
+            reasoning_level=reasoning_level,
             approval_callback=approval_callback,
         )
         self.last_runtime = runtime
@@ -416,6 +418,7 @@ class AgentRunner:
                 cwd=effective_cwd,
                 compaction_threshold=request.compaction_threshold,
                 context_window=request.context_window,
+                reasoning_level=request.reasoning_level,
                 approval_callback=approval_callback,
                 full_access_confirmed=request.full_access_confirmed,
                 activation=activation,
@@ -742,6 +745,7 @@ class AgentRunner:
                 cwd=cwd,
                 compaction_threshold=request.compaction_threshold,
                 context_window=request.context_window,
+                reasoning_level=request.reasoning_level,
                 approval_callback=approval_callback,
                 full_access_confirmed=request.full_access_confirmed,
             )
@@ -839,6 +843,7 @@ class AgentRunner:
                 cwd=cwd,
                 compaction_threshold=request.compaction_threshold,
                 context_window=request.context_window,
+                reasoning_level=request.reasoning_level,
                 approval_callback=approval_callback,
                 full_access_confirmed=request.full_access_confirmed,
             )

@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from prompt_toolkit.document import Document
 from prompt_toolkit.input import create_pipe_input
+from prompt_toolkit.keys import Keys
 from prompt_toolkit.output import DummyOutput
 from rich.console import Console
 
@@ -62,6 +63,38 @@ def test_follow_up_queue_is_explicit_single_slot_and_preserves_text(tmp_path: Pa
     assert repl.queued_follow_up == "follow-up exactly"
 
 
+def test_busy_enter_submits_slash_commands_and_drops_command_draft() -> None:
+    session = LivePromptSession(output=DummyOutput())
+    session.is_busy = True
+    buffer = MagicMock()
+    buffer.text = "/thinking"
+    event = MagicMock(current_buffer=buffer)
+    enter_binding = next(
+        binding for binding in session.bindings.bindings if binding.keys == (Keys.ControlM,)
+    )
+
+    enter_binding.handler(event)
+
+    assert session.draft_text == ""
+    buffer.validate_and_handle.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_completed_slash_command_does_not_restore_command_as_selector_draft(
+    tmp_path: Path,
+) -> None:
+    from rich.console import Console
+
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, force_terminal=False, no_color=True)
+    with patch.object(repl, "interactive_model_picker") as picker:
+        repl.prompt_session.read_prompt_async = AsyncMock(side_effect=["/model", "/quit"])
+        await repl.run_async()
+
+    picker.assert_called_once_with()
+    assert repl.prompt_session.get_draft() == ""
+
+
 def test_command_discovery_has_one_truthful_canonical_list() -> None:
     from mia_cli.repl import COMMAND_ALIASES, COMMAND_DESCRIPTIONS, SLASH_COMMANDS
 
@@ -74,6 +107,81 @@ def test_command_discovery_has_one_truthful_canonical_list() -> None:
     assert canonical == SLASH_COMMANDS
     assert canonical == list(COMMAND_DESCRIPTIONS)
     assert "/abort" not in COMMAND_ALIASES
+
+
+@pytest.mark.asyncio
+async def test_resume_restores_active_branch_into_live_harness(tmp_path: Path) -> None:
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    first_provider = MockProvider()
+    first_provider.queue_text_response("saved answer")
+    first = MiaREPL(
+        cwd=tmp_path,
+        custom_provider=first_provider,
+        agent_manager=manager,
+        session_id="saved",
+    )
+    await first.execute_turn("remember this")
+
+    entries = JsonlSessionStore(manager.get_session_path("mia", "saved")).load_entries()
+    assistant_entry = next(
+        entry
+        for entry in entries
+        if isinstance(entry, MessageEntry) and entry.message.role == "assistant"
+    )
+    assert first.harness is not None
+    first.harness.navigate_to(assistant_entry.id)
+    first_provider.queue_text_response("branched answer")
+    await first.execute_turn("continue from branch")
+
+    second = MiaREPL(
+        cwd=tmp_path,
+        custom_provider=MockProvider(),
+        agent_manager=manager,
+        session_id="current",
+    )
+    second.resume_session("saved")
+
+    assert second.session_id == "saved"
+    assert second.harness is not None
+    assert [(message.role, message.content) for message in second.harness.messages] == [
+        ("user", "remember this"),
+        ("assistant", "saved answer"),
+        ("user", "continue from branch"),
+        ("assistant", "branched answer"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_startup_session_renders_restored_history(tmp_path: Path) -> None:
+    from rich.console import Console
+
+    manager = AgentManager(agents_dir=tmp_path / "agents")
+    provider = MockProvider()
+    provider.queue_text_response("saved answer")
+    first = MiaREPL(
+        cwd=tmp_path,
+        custom_provider=provider,
+        agent_manager=manager,
+        session_id="saved",
+    )
+    await first.execute_turn("remember this")
+
+    resumed = MiaREPL(
+        cwd=tmp_path,
+        custom_provider=MockProvider(),
+        agent_manager=manager,
+        session_id="saved",
+    )
+    console = Console(record=True, force_terminal=False, no_color=True)
+    resumed.console = console
+    resumed.stream_renderer.console = console
+    resumed.prompt_session.read_prompt_async = AsyncMock(return_value="/quit")
+
+    await resumed.run_async()
+
+    output = console.export_text()
+    assert "› remember this" in output
+    assert "🥕 mia › saved answer" in output
 
 
 def test_tool_row_toggle_is_reachable_through_repl_command(tmp_path: Path) -> None:
@@ -124,7 +232,7 @@ def test_help_contract_describes_only_implemented_behavior(tmp_path: Path) -> No
 
     repl.handle_slash_command("/help")
     help_output = repl.console.export_text()
-    assert "19 Canonical Slash Commands" in help_output
+    assert "Mia 19 Canonical Slash Commands" in help_output
     assert "shortcuts" not in help_output
     assert "/stop" not in help_output
 
@@ -146,12 +254,10 @@ def test_adaptive_toolbar_labels_provider_usage_and_context() -> None:
         run_state="responding",
         width=120,
     )
-    assert "Provider" in full.value
-    assert "openai-codex" in full.value
-    assert "Lifetime usage" in full.value
-    assert "Current context" in full.value
-    assert "3.2k" in full.value
-    assert "[responding]" in full.value
+    assert "openai-codex/gpt-5" in full.value
+    assert "usage 12.5k/128k" in full.value
+    assert "context 3.2k" in full.value
+    assert "state responding" in full.value
 
     narrow = format_status_toolbar(
         workspace_name="mia",
@@ -164,8 +270,8 @@ def test_adaptive_toolbar_labels_provider_usage_and_context() -> None:
         width=50,
     )
     assert "gpt-5" in narrow.value
-    assert "[tool]" in narrow.value
-    assert "Current context" not in narrow.value
+    assert "state tool" in narrow.value
+    assert "context" not in narrow.value
 
 
 @pytest.mark.asyncio
@@ -242,22 +348,36 @@ def test_format_status_toolbar() -> None:
     )
     assert "mia" in toolbar_html.value
     assert "mimo-v2.5" in toolbar_html.value
-    assert "12.5k/128k" in toolbar_html.value
-    assert "💭 on" in toolbar_html.value
+    assert "usage 12.5k/128k" in toolbar_html.value
+    assert "thinking" in toolbar_html.value
 
     escaped = format_status_toolbar(workspace_name="<mia>", model_name="model&name")
     assert "&lt;mia&gt;" in escaped.value
     assert "model&amp;name" in escaped.value
 
 
+def test_banner_is_sparse_and_brand_marked_once(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120, no_color=True)
+
+    repl.print_banner()
+
+    output = repl.console.export_text()
+    assert output.count("🥕") == 1
+    assert "Session:" not in output
+    assert "Tokens:" not in output
+    assert "┏" not in output
+    assert repl.cwd.name in output
+
+
 def test_carrot_bounce_spinner() -> None:
     frame0 = CarrotBounceSpinner.render_frame(0.0)
     assert "🥕" in frame0
-    assert "Thinking (0.0s)..." in frame0
+    assert "Thinking (0s)..." in frame0
 
     frame1 = CarrotBounceSpinner.render_frame(1.5)
     assert "🥕" in frame1
-    assert "Thinking (1.5s)..." in frame1
+    assert "Thinking (1s)..." in frame1
 
 
 def test_model_and_thinking_keybindings_dispatch_pi_commands() -> None:
@@ -329,7 +449,7 @@ def test_searchable_agent_and_command_pickers_preserve_draft(tmp_path: Path) -> 
 
     with patch("mia_cli.repl.interactive_select", return_value="researcher") as select:
         repl.interactive_agent_picker()
-    assert select.call_args.args[0] == "🤖 Switch Agent"
+    assert select.call_args.args[0] == "Switch Agent"
     assert repl.agent_id == "researcher"
     assert repl.prompt_session.get_draft() == "keep this draft"
 
@@ -355,9 +475,24 @@ def test_repl_agent_command_selects_named_agent(tmp_path: Path) -> None:
     assert repl.agent_id == "researcher"
 
 
+def test_shift_tab_cycles_reasoning_without_toggling_trace(tmp_path: Path) -> None:
+    repl = MiaREPL(cwd=tmp_path, model="gpt-5", custom_provider=MockProvider())
+    repl.console = Console(record=True, width=120)
+    assert repl.reasoning_level == "off"
+    repl.prompt_session.on_reasoning_cycle_callback()
+    assert repl.reasoning_level == "minimal"
+    assert repl.show_thinking_trace is False
+    assert repl.handle_slash_command("/thinking high") is True
+    assert repl.reasoning_level == "high"
+    output = repl.console.export_text()
+    assert "Thinking level: high" in output
+    assert "levels:" not in output
+
+
 def test_repl_slash_commands_suite(tmp_path: Path) -> None:
     mock = MockProvider()
     repl = MiaREPL(cwd=tmp_path, custom_provider=mock)
+    repl.console = Console(record=True, width=120)
 
     assert repl.handle_slash_command("/") is True
     assert repl.handle_slash_command("/?") is True
@@ -372,8 +507,11 @@ def test_repl_slash_commands_suite(tmp_path: Path) -> None:
     assert repl.handle_slash_command("/tree") is True
     assert repl.handle_slash_command("/inspect") is True
     assert repl.handle_slash_command("/thinking") is True
+    assert repl.show_thinking_trace is False
+    assert "Thinking level: off" in repl.console.export_text()
+    assert repl.handle_slash_command("/trace") is True
     assert repl.show_thinking_trace is True
-    assert repl.handle_slash_command("/thinking") is True
+    assert repl.handle_slash_command("/trace") is True
     assert repl.show_thinking_trace is False
     assert repl.handle_slash_command("/stop") is True
     assert repl.handle_slash_command("/clear") is True
@@ -1069,6 +1207,30 @@ def test_rich_stream_status_transitions() -> None:
 
 
 @pytest.mark.asyncio
+async def test_execute_turn_routes_stream_output_around_active_prompt(tmp_path: Path) -> None:
+    from contextlib import nullcontext
+
+    from mia_agent.events import TurnCompleteEvent
+    from mia_agent.runtime_events import AgentEventEnvelope
+
+    repl = MiaREPL(cwd=tmp_path, custom_provider=MockProvider())
+
+    async def mock_run(*args: object, **kwargs: object):
+        yield AgentEventEnvelope(
+            run_id="r1",
+            task_id="root",
+            agent_id="mia",
+            session_id="s1",
+            event=TurnCompleteEvent(total_steps=1, total_cost_usd=0.0, stop_reason="stop"),
+        )
+
+    repl.agent_runner.run = mock_run  # type: ignore[method-assign]
+    with patch("mia_cli.repl.patch_stdout", return_value=nullcontext()) as stdout_patch:
+        await repl.execute_turn("keep the prompt line usable")
+    stdout_patch.assert_called_once_with(raw=True)
+
+
+@pytest.mark.asyncio
 async def test_repl_handles_cancellation_truthfully(tmp_path: Path) -> None:
     from mia_ai.providers.base import LLMProvider
     from mia_ai.types import ChatMessage, StreamChunk, ToolDefinition
@@ -1257,7 +1419,7 @@ def test_help_discovery_exposes_essential_keyboard_and_command_alternatives(
     output = repl.console.export_text()
 
     # Canonical command table is present
-    assert "19 Canonical Slash Commands" in output
+    assert "Mia 19 Canonical Slash Commands" in output
 
     # Essential keyboard actions and command equivalents are visible in text without color/icons
     assert "Essential Actions & Keyboard Equivalents" in output
@@ -1297,7 +1459,7 @@ def test_truthful_state_presentation_and_measured_metrics() -> None:
     assert "12.5k" in val
     assert "mia" in val
     assert "session_test123" in val
-    assert "[idle]" in val
+    assert "state idle" in val
 
     # 2. When window_tokens IS provided, capacity and percentage are shown
     tb_with_window = format_status_toolbar(
@@ -1311,9 +1473,9 @@ def test_truthful_state_presentation_and_measured_metrics() -> None:
         run_state="running",
     )
     val2 = tb_with_window.value
-    assert "12.5k/128k" in val2
+    assert "usage 12.5k/128k" in val2
     assert "9.8%" in val2
-    assert "[running]" in val2
+    assert "state running" in val2
 
 
 @pytest.mark.asyncio
@@ -1368,6 +1530,7 @@ async def test_stream_and_tool_grouping_readable_in_scrollback_without_duplicate
     assert "Thinking through task." in output
     assert "read_file" in output
     assert "Finished reading doc." in output
+    assert "🥕 mia ›" in output
     assert "Turn completed" in output
     # Ensure no duplicate message replay
     assert output.count("Finished reading doc.") == 1
@@ -1445,7 +1608,7 @@ async def test_terminal_truth_preserves_error_and_cancellation_outcomes(
     repl_fail.prompt_session.read_approval_async = AsyncMock(return_value="n")  # type: ignore[method-assign]
     await repl_fail._request_tool_approval(req)
     appr_output = rec_console_approval.export_text()
-    assert "[approval-required]" in appr_output
+    assert "[approval]" in appr_output
 
 
 def test_help_and_command_discovery_distinguishes_busy_availability(

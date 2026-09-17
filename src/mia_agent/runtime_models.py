@@ -71,6 +71,7 @@ class RunRequest(BaseModel):
     cwd: Path | None = None
     compaction_threshold: float | None = None
     context_window: int | None = None
+    reasoning_level: str = "off"
     full_access_confirmed: bool | None = None
 
     @field_validator("prompt_text")
@@ -115,6 +116,15 @@ class RunRequest(BaseModel):
     def validate_context_window(cls, value: int | None) -> int | None:
         if value is not None and value <= 0:
             raise ValueError("context_window must be a positive integer")
+        return value
+
+    @field_validator("reasoning_level")
+    @classmethod
+    def validate_reasoning_level(cls, value: str) -> str:
+        if value not in {"off", "minimal", "low", "medium", "high", "xhigh", "max"}:
+            raise ValueError(
+                "reasoning_level must be off, minimal, low, medium, high, xhigh, or max"
+            )
         return value
 
 

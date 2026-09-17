@@ -1,61 +1,50 @@
 workflow_mode: solo-git
 session:
-  active_flow: release
-  active_epic_id: null
-  active_story_id: null
+  active_flow: verify
+  active_epic_id: e15
+  active_story_id: e15s01
   target_version: 0.7.0
 handoff:
-  next_skill: survey-context
-  last_step_completed: e14 Agent Workspace Interaction integrated locally and finalized
+  next_skill: audit-code
+  last_step_completed: e15s01 implementation and complete offline verification
   summary: >-
-    e14 Agent Workspace Interaction passed build, three whole-epic review passes, and local release gates.
-    It is integrated on local main with all five stories done. No push, tag, publication, deployment, or
-    production release claim has been made; use release-check separately for production readiness.
+    e15s01 refines the completed e14 inline workspace presentation only: sparse startup, terminal-native semantic
+    styling, compact working/Tool/approval rows, and a truthful compact footer. Core execution, Sessions,
+    middleware, approval semantics, queue behavior, plain output, and prompt-toolkit ownership remain unchanged.
+    Focused and complete offline quality gates pass; release and commit remain separate decisions.
   required_reading:
-  - specs/product/SCOPE_E14_LATEST.yaml
-  - specs/epics/archive/e14-agent-workspace-interaction/epic.yaml
-  - specs/tech-architecture/e14-TEST_PLAN_LATEST.md
+  - specs/product/SCOPE_E15_LATEST.yaml
+  - specs/epics/e15-compact-terminal-workspace/epic.yaml
+  - specs/epics/e15-compact-terminal-workspace/e15s01-sparse-semantic-terminal-workspace.md
+  - specs/epics/e15-compact-terminal-workspace/e15s01-tasks.yaml
+  - specs/IMPACT_LATEST.md
   - specs/tech-architecture/REPL-UI-FUTURE-DIRECTIONS.md
   - specs/adr/0002-canonical-run-request-stream.md
-  plan_revision: 7ba51e19f3172273
+  plan_revision: e15-verified-working-tree
   plan_artifacts:
-  - specs/epics/archive/e14-agent-workspace-interaction/epic.yaml
-  - specs/epics/archive/e14-agent-workspace-interaction/e14s01-visible-transcript-and-truthful-run-lifecycle.md
-  - specs/epics/archive/e14-agent-workspace-interaction/e14s01-tasks.yaml
-  - specs/epics/archive/e14-agent-workspace-interaction/e14s02-compact-expandable-tool-rows-and-safe-tool-output.md
-  - specs/epics/archive/e14-agent-workspace-interaction/e14s02-tasks.yaml
-  - specs/epics/archive/e14-agent-workspace-interaction/e14s03-asynchronous-approval-with-distinct-focus.md
-  - specs/epics/archive/e14-agent-workspace-interaction/e14s03-tasks.yaml
-  - specs/epics/archive/e14-agent-workspace-interaction/e14s04-searchable-workspace-controls-and-adaptive-footer.md
-  - specs/epics/archive/e14-agent-workspace-interaction/e14s04-tasks.yaml
-  - specs/epics/archive/e14-agent-workspace-interaction/e14s05-explicit-follow-up-queue-and-resilient-workspace-fallbacks.md
-  - specs/epics/archive/e14-agent-workspace-interaction/e14s05-tasks.yaml
-  - specs/tech-architecture/e14-TEST_PLAN_LATEST.md
+  - specs/product/SCOPE_E15_LATEST.yaml
+  - specs/product/SCOPE_LATEST.yaml
+  - specs/epics/e15-compact-terminal-workspace/epic.yaml
+  - specs/epics/e15-compact-terminal-workspace/e15s01-sparse-semantic-terminal-workspace.md
+  - specs/epics/e15-compact-terminal-workspace/e15s01-tasks.yaml
+  - specs/IMPACT_LATEST.md
   plan_approval:
     status: approved
-    epic: e14
-    revision: 7ba51e19f3172273
-    git_head: 3f6256d
-    approved_at: '2026-09-12T02:08:21Z'
+    epic: e15
+    revision: e15-working-tree
+    git_head: 87e2e55
+    approved_at: '2026-09-12T00:00:00Z'
     approved_by: user
     artifacts:
-    - specs/epics/archive/e14-agent-workspace-interaction/epic.yaml
-    - specs/epics/archive/e14-agent-workspace-interaction/e14s01-visible-transcript-and-truthful-run-lifecycle.md
-    - specs/epics/archive/e14-agent-workspace-interaction/e14s01-tasks.yaml
-    - specs/epics/archive/e14-agent-workspace-interaction/e14s02-compact-expandable-tool-rows-and-safe-tool-output.md
-    - specs/epics/archive/e14-agent-workspace-interaction/e14s02-tasks.yaml
-    - specs/epics/archive/e14-agent-workspace-interaction/e14s03-asynchronous-approval-with-distinct-focus.md
-    - specs/epics/archive/e14-agent-workspace-interaction/e14s03-tasks.yaml
-    - specs/epics/archive/e14-agent-workspace-interaction/e14s04-searchable-workspace-controls-and-adaptive-footer.md
-    - specs/epics/archive/e14-agent-workspace-interaction/e14s04-tasks.yaml
-    - specs/epics/archive/e14-agent-workspace-interaction/e14s05-explicit-follow-up-queue-and-resilient-workspace-fallbacks.md
-    - specs/epics/archive/e14-agent-workspace-interaction/e14s05-tasks.yaml
-    - specs/tech-architecture/e14-TEST_PLAN_LATEST.md
-    - specs/product/SCOPE_E14_LATEST.yaml
+    - specs/product/SCOPE_E15_LATEST.yaml
+    - specs/epics/e15-compact-terminal-workspace/epic.yaml
+    - specs/epics/e15-compact-terminal-workspace/e15s01-sparse-semantic-terminal-workspace.md
+    - specs/epics/e15-compact-terminal-workspace/e15s01-tasks.yaml
+    - specs/IMPACT_LATEST.md
   open_decisions: []
 git:
-  branch: main
-  hash: 4189b2d
+  branch: feat/e15-compact-terminal-workspace
+  hash: 87e2e55
 environment:
   package_manager: uv 0.10.11
   python: 3.14.6

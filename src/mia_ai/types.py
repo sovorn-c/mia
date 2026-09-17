@@ -2,9 +2,52 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+ThinkingLevel = Literal["off", "minimal", "low", "medium", "high", "xhigh", "max"]
+THINKING_LEVELS: tuple[ThinkingLevel, ...] = (
+    "off",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+)
+
+
+def reasoning_effort_for_level(
+    level: str | None,
+    level_map: Mapping[str, str | None] | None = None,
+    *,
+    minimal: str = "minimal",
+    xhigh: str = "high",
+) -> str | None:
+    """Map Mia's general level to a provider's reasoning-effort value."""
+    normalized = level or "off"
+    if normalized == "off":
+        return None
+    if level_map and normalized in level_map:
+        return level_map[normalized]
+    return {"minimal": minimal, "xhigh": xhigh, "max": xhigh}.get(normalized, normalized)
+
+
+def anthropic_thinking_budget_for_level(level: str | None) -> int | None:
+    """Map a general reasoning level to Anthropic extended-thinking tokens."""
+    normalized = level or "off"
+    if normalized == "off":
+        return None
+    return {
+        "minimal": 1_024,
+        "low": 2_048,
+        "medium": 8_192,
+        "high": 16_384,
+        "xhigh": 16_384,
+        "max": 16_384,
+    }.get(normalized, 4_096)
 
 
 class ToolCall(BaseModel):

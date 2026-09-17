@@ -1,6 +1,6 @@
 # specs/execution-status.yaml — Generated status index; existing statuses remain authoritative
 version: 0.6.0
-updated_at: '2026-09-12T03:46:13Z'
+updated_at: '2026-09-15T02:21:12Z'
 gate_trace:
   verdict: WAIVED
   generated_at: '2026-09-03T08:22:40Z'
@@ -376,3 +376,16 @@ epics:
         tasks_passing: 4
         tasks_failing: 0
         completed_at: '2026-09-12T03:07:21Z'
+  e15:
+    title: Compact Terminal Workspace
+    status: passing
+    stories:
+      e15s01:
+        title: Sparse Semantic Terminal Workspace
+        status: passing
+        bcps: 5
+        risk: P1
+        tasks_total: 4
+        tasks_passing: 4
+        tasks_failing: 0
+        completed_at: '2026-09-15T02:45:05Z'

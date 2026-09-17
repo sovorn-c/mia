@@ -16,6 +16,7 @@ from mia_ai.types import (
     ToolCall,
     ToolCallDelta,
     ToolDefinition,
+    anthropic_thinking_budget_for_level,
 )
 
 
@@ -89,6 +90,20 @@ class AnthropicProvider(LLMProvider):
             "max_tokens": max_tokens or 4096,
             "temperature": temperature,
         }
+        reasoning_level = self.extra_config.get("reasoning_level")
+        level_map = self.extra_config.get("thinking_level_map")
+        unsupported = (
+            isinstance(level_map, dict)
+            and reasoning_level in level_map
+            and level_map[reasoning_level] is None
+        )
+        budget_tokens = (
+            None if unsupported else anthropic_thinking_budget_for_level(reasoning_level)
+        )
+        if budget_tokens is not None:
+            payload["thinking"] = {"type": "enabled", "budget_tokens": budget_tokens}
+            payload["max_tokens"] = max(payload["max_tokens"], budget_tokens + 1_024)
+            payload.pop("temperature")
         if system:
             payload["system"] = system
 

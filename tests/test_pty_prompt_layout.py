@@ -8,7 +8,17 @@ import pytest
 from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
 
-from mia_cli.interactive_input import LivePromptSession, format_status_toolbar
+from mia_cli.interactive_input import MIA_STYLE, LivePromptSession, format_status_toolbar
+
+
+def test_terminal_native_style_uses_semantic_attrs_without_forced_palette() -> None:
+    prompt = MIA_STYLE.get_attrs_for_style_str("class:prompt")
+    selected = MIA_STYLE.get_attrs_for_style_str("class:selector-selected")
+
+    assert prompt.color == ""
+    assert prompt.bold is True
+    assert selected.color == ""
+    assert selected.reverse is True
 
 
 def test_format_status_toolbar_output() -> None:
@@ -22,9 +32,24 @@ def test_format_status_toolbar_output() -> None:
     )
     assert "test_proj" in tb.value
     assert "mimo-v2.5" in tb.value
-    assert "1.2k/128k" in tb.value
-    assert "💭 on" in tb.value
-    assert "/help" in tb.value
+    assert "usage 1.2k/128k" in tb.value
+    assert "thinking" in tb.value
+    assert "state idle" in tb.value
+
+
+def test_toolbar_reports_live_context_and_reasoning_level() -> None:
+    toolbar = format_status_toolbar(
+        workspace_name="mia",
+        model_name="gpt-5.4",
+        tokens=3200,
+        window_tokens=272000,
+        current_context_tokens=2500,
+        reasoning_level="high",
+        width=100,
+    )
+    assert "usage 3.2k/272k" in toolbar.value
+    assert "context 2.5k/272k" in toolbar.value
+    assert "reasoning high" in toolbar.value
 
 
 def test_prompt_session_initialization() -> None:
@@ -33,6 +58,18 @@ def test_prompt_session_initialization() -> None:
     assert session.completer is not None
     assert session.session is not None
     assert session.session.reserve_space_for_menu == 8
+    assert session.session.refresh_interval == 1.0
+
+
+def test_working_status_is_rendered_above_editable_prompt() -> None:
+    session = LivePromptSession(prompt_status_callback=lambda: "⠋ Thinking (0s)...")
+    assert session._formatted_prompt("› ") == [("class:prompt", "› ")]
+
+    session.is_busy = True
+    assert session._formatted_prompt("› ") == [
+        ("class:working", "⠋ Thinking (0s)...\n"),
+        ("class:prompt", "› "),
+    ]
 
 
 @pytest.mark.asyncio
@@ -273,9 +310,9 @@ def test_narrow_terminal_toolbar_layout() -> None:
     )
     assert "test_proj" in tb.value
     assert "mimo-v2.5" in tb.value
-    assert "[idle]" in tb.value
-    # Non-essential shortcut hints omitted in narrow width to prevent wrapping
-    assert "/help" not in tb.value
+    assert "state idle" in tb.value
+    # Secondary metrics are omitted in narrow width to prevent wrapping
+    assert "usage" not in tb.value
 
 
 @pytest.mark.asyncio

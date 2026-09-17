@@ -16,6 +16,7 @@ from mia_ai.types import (
     ToolCall,
     ToolCallDelta,
     ToolDefinition,
+    reasoning_effort_for_level,
 )
 
 
@@ -77,6 +78,15 @@ class OpenAICompatibleProvider(LLMProvider):
             "stream_options": {"include_usage": True},
             "temperature": temperature,
         }
+        reasoning_level = self.extra_config.get("reasoning_level")
+        if reasoning_level and reasoning_level != "off":
+            effort = reasoning_effort_for_level(
+                reasoning_level,
+                self.extra_config.get("thinking_level_map"),
+            )
+            if effort:
+                payload.pop("temperature")
+                payload["reasoning_effort"] = effort
         if max_tokens:
             payload["max_tokens"] = max_tokens
 

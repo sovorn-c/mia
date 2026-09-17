@@ -1,229 +1,79 @@
-# specs/product/SCOPE_LATEST.yaml — complete production release scope
-initiative_id: release-v0.6.0
-initiative_name: Mia Agent Core Production Release
-status: approved
-target_release: v0.6.0-agent-core
+# Incremental feature scope for v0.7.0; e14 workspace behavior remains the functional baseline.
+initiative_id: release-v0.7.0-compact-terminal-workspace
+initiative_name: Mia Compact Terminal Workspace
+status: approved-blueprint
+target_release: v0.7.0-agent-workspace
 
 core_value: >-
-  Ship Mia as a trustworthy local Agent product that users can install, operate, diagnose, and recover
-  without ambiguity about identity, access, outcomes, or supported interfaces.
+  Users get a calm, terminal-native Agent workspace that keeps working state, Tool activity, approvals,
+  and useful context visible without decorative noise or forced colors.
+
 summary: >-
-  This scope covers the complete v0.6.0 release rather than one feature increment. It preserves the
-  functional Agent, Session, Tool, Plugin, Delegation, CLI, and REPL capabilities delivered by
-  e01-e06, then removes the unused full-screen Textual frontend and closes the runtime-integrity,
-  governed-extensibility, operational-visibility,
-  accessibility, documentation, and distribution gaps required for a production release.
+  Refine the e14 inline workspace visually. Remove the information-heavy startup banner, reduce emoji and
+  decorative headings to the carrot brand mark, replace forced 24-bit colors with terminal-native semantic
+  styles, and make the working, Tool, approval, and footer lines compact enough to remain readable during
+  normal terminal work.
 
-  The approved e13 increment adds a coherent inline REPL visual and interaction redesign, including
-  draft composition during a Run without concurrent submission or automatic queuing.
-
-  Production-ready means the supported local package has one truthful execution contract, permanent
-  safeguards, deterministic Agent-owned history, useful secret-free diagnostics, accessible terminal
-  fallbacks, reproducible release gates, install and recovery guidance, and verifiable distributable
-  artifacts. Mia remains a local application, not a hosted service or operating-system sandbox.
+  This is a CLI presentation change only. It preserves the existing AgentRunner execution path, typed event
+  lifecycle, Tool middleware, append-only Sessions, prompt-toolkit ownership, Rich/plain output, normal
+  scrollback, single-slot follow-up queue, and existing selector behavior.
 
 in_scope:
-  - id: release-functional-entry
-    maps_to: e01
-    name: Installable authentication and streaming entry experience
-    outcome: >-
-      A user can configure a supported provider and complete a useful streamed Agent interaction with
-      actionable authentication and connection failures.
-  - id: release-functional-repl
-    maps_to: e02
-    name: Reliable interactive terminal workflow
-    outcome: >-
-      Keyboard-driven prompting, model selection, context inspection, Session resume, cancellation, and
-      recovery remain coherent in the supported REPL.
-  - id: release-functional-collaboration
-    maps_to: e03
-    name: Bounded specialist execution
-    outcome: >-
-      Supported specialist sequencing completes through the canonical runtime with attributable results
-      and no separate public orchestration model.
-  - id: release-agent-trust
-    maps_to: e04
-    name: Durable Agent identity, access, data, and Delegation
-    outcome: >-
-      Named Agents own validated configuration and append-only Sessions; access and bounded Delegation
-      remain enforced without credential disclosure or capability escalation.
-  - id: release-extension
-    maps_to: e05
-    name: Guarded Plugin and Agent Template lifecycle
-    outcome: >-
-      A bundled Plugin and Template prove installation, per-Agent enablement, contribution validation,
-      attribution, isolation of private state, and normal Tool policy enforcement.
-  - id: release-canonical-surface
-    maps_to: e06
-    name: One Agent-native runtime and supported frontend/package surface
-    outcome: >-
-      CLI and REPL use one Agent execution path; obsolete public identities are absent; the unused
-      full-screen Textual frontend is removed from the supported package surface.
-  - id: release-runtime-integrity
-    maps_to: e07
-    name: Truthful and deterministic production Run contract
-    outcome: >-
-      Core finalizes every Run used through the supported consume/cancel/close contract exactly once. Normal consumption emits one attributed terminal
-      envelope; before finalization, external cancellation or awaited stream closure records cancellation
-      and reaches a cleanup completion-or-timeout decision for cooperative callbacks before returning
-      without promising an envelope. After finalization, late cancellation is deferred until the existing
-      terminal envelope is returned; awaited closure after delivery preserves the outcome.
-      Supported callers must consume, cancel, or await closure; bare stream abandonment is API misuse. Safeguards, Session ownership,
-      provider settings, and failures remain deterministic.
-  - id: release-governed-extension
-    maps_to: e08
-    name: Governed Core extension host
-    outcome: >-
-      Developers can add declared Agent capabilities through a small typed Plugin contract with
-      deterministic activation and Core-owned cleanup decisions, while the supported Plugin API cannot replace Core identity,
-      trust, access, Session, attribution, or outcome ownership. Trusted Python is explicitly not sandboxed.
-  - id: release-operations
-    maps_to: e09
-    name: Local observability, data integrity, and recovery
-    outcome: >-
-      Operators can inspect bounded, attributed, secret-free Run, Tool, and Plugin lifecycle diagnostics;
-      understand storage; back up and restore supported data; and recover from interrupted local work
-      without rewriting valid Session history or deleting Plugin data.
-  - id: release-accessibility-docs
-    maps_to: e10
-    name: Accessible terminal operation and complete user and Plugin documentation
-    outcome: >-
-      Core workflows are keyboard-operable, do not depend on color or animation alone, remain usable in
-      plain/non-interactive terminal output, and are documented for installation, Plugin trust/lifecycle,
-      configuration, troubleshooting, data management, accessibility, authoring, and known limits.
-  - id: release-distribution
-    maps_to: e11
-    name: Reproducible release, supply-chain, and deployment assurance
-    outcome: >-
-      Maintainers can produce, verify, install-smoke, publish, and if necessary withdraw or supersede the
-      Python distribution and Plugin API through an automated, documented gate with artifact provenance
-      and no secrets.
-  - id: cli-only-frontend
-    maps_to: e12
-    name: CLI/REPL-only interactive terminal surface
-    outcome: >-
-      Mia has one supported interactive terminal entry point through the inline CLI/REPL; the full-screen
-      Textual frontend, command, dependency, and stale current documentation are removed.
-
-  - id: inline-repl-experience
-    maps_to: e13
-    name: Coherent inline REPL visual and interaction experience
-    outcome: >-
-      Users can read responses and Tool activity, discover commands, navigate Sessions, understand
-      approval and Run states, and compose a draft during a Run without submitting or losing it.
-      The interface remains inline, scrollback-friendly, keyboard-operable, and usable in plain output.
+  - id: e15-sparse-startup
+    maps_to: e15s01
+    name: Sparse startup presentation
+    outcome: Startup and clear show one quiet brand/workspace line rather than a boxed telemetry banner.
+  - id: e15-semantic-terminal-style
+    maps_to: e15s01
+    name: Terminal-native semantic styling
+    outcome: Interactive prompt, toolbar, selectors, working state, and streamed content use bold/dim/reverse semantic roles and terminal defaults instead of forced hex colors.
+  - id: e15-working-state
+    maps_to: e15s01
+    name: Compact working and Tool state
+    outcome: Thinking, responding, Tool, approval, success, failure, and cancellation states remain attributable through concise text labels and bounded rows.
+  - id: e15-footer
+    maps_to: e15s01
+    name: Useful compact footer
+    outcome: The bottom toolbar keeps workspace, Agent/model, usage/context, and lifecycle state with truthful narrow-width degradation.
 
 out_of_scope:
-  - id: oos-01
-    name: Hosted service, web application, or remote control plane
-    rationale: v0.6.0 is a local Agent product; hosting introduces a separate security and operations model.
-  - id: oos-02
-    name: Operating-system sandbox guarantees
-    rationale: Access policy and path confinement are supported, but OS isolation requires platform-specific work.
-  - id: oos-03
-    name: Remote telemetry, dashboards, tracing backends, or exporter ecosystem
-    rationale: Local bounded diagnostics satisfy this release; remote observability adds privacy and dependency risk.
-  - id: oos-04
-    name: General scheduler, background Run manager, queues, or autonomous swarm behavior
-    rationale: One foreground Run per Agent-owned Session is sufficient and avoids a second execution system.
-  - id: oos-05
-    name: Additional providers, Plugin contribution types, channels, or collaboration semantics
-    rationale: >-
-      v0.6.0 establishes one bounded extension spine only; commands, UI, providers, Core services,
-      background work, and other contribution types require separate demonstrated value.
-  - id: oos-06
-    name: Automatic migration, deletion, or rewriting of unsupported user files
-    rationale: Release work must not risk data loss; supported recovery remains explicit and non-destructive.
-  - id: oos-07
-    name: Full-screen or alternative frontend redesign
-    rationale: >-
-      The approved e13 addition brings inline REPL visual and interaction redesign into v0.6 scope;
-      full-screen Textual, web, and desktop interfaces remain excluded.
-  - id: oos-08
-    name: Unbounded extension distribution or Core replacement framework
-    rationale: >-
-      Remote catalogs, automatic package installation, unrestricted project-local code, hot reload,
-      generic events/services, Tool overrides, provider replacement, and sandbox claims add authority
-      or indirection beyond the governed v0.6.0 host.
-  - id: oos-09
-    name: Container or server deployment
-    rationale: The deployable artifact is a local Python distribution; service deployment is not applicable.
-  - id: oos-10
-    name: Story specifications and implementation task plans
-    rationale: Blueprinting stops at epic outcomes; `/bp-plan` owns story slicing and detailed planning.
-  - id: oos-11
-    name: Agent Workspace Interaction beyond e13
-    rationale: >-
-      The next-release e14 blueprint is tracked separately so v0.6.0 remains stable; see
-      `specs/product/SCOPE_E14_LATEST.yaml` and `specs/epics/archive/e14-agent-workspace-interaction/`.
+  - id: e15-oos-compositor
+    name: Persistent coordinated compositor or live Tool cards
+    rationale: The current request is a visual cleanup; differential rebuilding, overlays, and live cards remain deferred until the existing inline owner cannot present them reliably.
+  - id: e15-oos-core
+    name: New Mia Core event families or execution semantics
+    rationale: Existing typed events already express the displayed states; presentation must not infer or invent new Core facts.
+  - id: e15-oos-pi
+    name: Pi dependency, source compatibility, or extension API adoption
+    rationale: Pi remains read-only prior art and adds no value as a runtime dependency for this refinement.
+  - id: e15-oos-themes
+    name: User-loadable theme files or a theme configuration system
+    rationale: Terminal defaults and semantic roles solve the immediate forced-color problem without a new abstraction.
+  - id: e15-oos-queue
+    name: Queue cardinality or follow-up behavior changes
+    rationale: e14's single-slot follow-up contract is complete and must remain unchanged.
 
 constraints:
-  - Keep Agent as the single durable configured identity and preserve stable e01-e06 story IDs.
-  - Keep AgentRunner, AgentRuntimeFactory, and AgentHarness as the only prompt execution path.
-  - Keep AgentHarness headless and keep mia_agent independent from terminal UI frameworks.
-  - Keep provider, Tool, Agent-loop, and frontend integration asynchronous.
-  - Keep Sessions append-only and credentials outside Agent, Session, diagnostic, and package artifacts.
-  - Preserve read-only, approval-required, and explicitly confirmed full-access semantics.
-  - Keep every visible Tool inside permanent access, security, audit, and execution-control safeguards.
-  - Preserve supported CLI, REPL, Plugin, Template, Delegation, and provider behavior; do not reintroduce a full-screen Textual frontend.
-  - Keep static Plugin Skills/Templates inspectable outside Runs and runtime Plugin activation behind AgentRuntimeFactory, transactional and immutable per Run, with explicit trust and Core-owned cleanup deadlines.
-  - Use Pydantic at external, configuration, event, and persistence trust boundaries.
-  - Prefer the standard library and installed dependencies; add no runtime dependency without separate evidence.
-  - Support Python 3.12+ and complete all quality and release checks offline where applicable.
-  - Do not modify user data outside isolated test homes during planning, build, or release verification.
+  - Preserve AgentRunner → AgentRuntimeFactory → AgentHarness as the only prompt execution path.
+  - Keep AgentHarness independent from Rich, prompt-toolkit, Typer, and terminal output.
+  - Keep prompt-toolkit as the interactive input owner; do not run competing live renderers.
+  - Preserve normal scrollback, append-only Sessions, Tool middleware, approval focus, and Core-owned terminal truth.
+  - Preserve plain and non-interactive output and no-color accessibility.
+  - Add no runtime dependency and do not persist new UI state.
+  - Keep user-controlled, Tool, and approval text bounded and sanitized.
 
 success_criteria:
-  - The e13 inline REPL outcome and its observable criteria are satisfied before renewed v0.6 candidate verification.
-  - All in-scope outcomes map to exactly one primary epic in the release roadmap.
-  - A fresh supported Python environment can build, install, launch, and complete deterministic smoke workflows.
-  - CLI and REPL consume one validated closeable Run stream; every supported Run finalizes exactly once through an atomic idempotent finalizer, normal consumption emits one matching terminal envelope, pre-finalization cancellation/closure records cancellation, late cancellation after finalization returns the existing terminal envelope, and awaited closure after delivery preserves the outcome.
-  - Failed, rejected, cancelled, timed-out, and conflicting Runs cannot be reported as success.
-  - Agent configuration cannot disable permanent safeguards or silently ignore supported execution settings.
-  - Concurrent work cannot corrupt or nondeterministically select one Agent-owned Session lineage.
-  - Credentials and sensitive Tool arguments are absent from events, diagnostics, Sessions, build logs, and artifacts.
-  - A trusted installed Plugin can extend an Agent through the bounded public API without editing Mia Core.
-  - Plugin activation is deterministic, fail-closed, fully attributable, reversible for cooperative code, and unable through the supported API to remove or reorder Core safeguards.
-  - Agent Templates remain inspectable without Run activation; enabled static Skills enter the Agent's immutable Run snapshot.
-  - For cancellation-cooperative callbacks, Core reaches a Plugin observer/disposal completion-or-timeout decision before terminal-envelope emission; failures are attributed diagnostics and do not rewrite completed domain-work truth.
-  - When Core regains control at or after a cleanup deadline, it marks cleanup abandoned and blocks new activation of that Plugin until process restart. Event-loop-blocking code can delay that decision indefinitely; Mia requires process restart before that Plugin can activate again and does not claim to stop same-process code.
-  - Declarative Plugins execute no code; trusted-code Plugins require explicit trust, carry no sandbox claim, and may act outside the supported API with normal Python process authority.
-  - Local diagnostics cover attempted Tool actions, Plugin lifecycle failures, and terminal Run outcomes with bounded retention and clear failure behavior.
-  - Backup, restore, interrupted-write recovery, and unsupported/corrupt-data behavior are documented and verified.
-  - Essential workflows are keyboard-operable and understandable without color, animation, or a full-screen interface.
-  - User, operator, and Plugin author documentation covers installation, configuration, lifecycle, compatibility, trust boundaries, data locations, recovery, diagnostics, accessibility, troubleshooting, upgrade expectations, and known limitations.
-  - Automated checks cover formatting, lint, strict typing, tests, coverage, security-sensitive surfaces, YAML consistency, public/package surface, build, clean install, CLI/REPL smoke, and artifact integrity.
-  - The release process defines artifact provenance, publication authorization, failure handling, and withdrawal/supersession steps without exposing secrets.
-  - No unresolved critical or high security finding, failing required gate, unmapped approved scope item, or undocumented production exception remains at release approval.
+  - Interactive startup and /clear no longer render a boxed multi-field telemetry banner.
+  - The carrot is the only decorative brand icon; state meaning remains available through text labels.
+  - No affected interactive UI path forces hex colors; terminal defaults, bold, dim, and reverse carry hierarchy.
+  - Tool rows do not repeat the Tool name, remain attributable by call ID, and retain bounded expansion behavior.
+  - Approval, success, failure, and cancellation remain visually distinct without depending on color or emoji.
+  - The footer remains truthful, compact, escaped, and useful at normal and narrow widths.
+  - Existing e14 lifecycle, safety, approval, queue, plain-mode, and selector tests continue to pass.
 
 references:
-  - specs/product/VISION_LATEST.yaml
-  - specs/product/GLOSSARY_LATEST.yaml
-  - specs/UBIQUITOUS_LANGUAGE_LATEST.md
-  - specs/tech-architecture/tech-stack.md
-  - specs/tech-architecture/REFACTOR_LATEST.md
-  - specs/tech-architecture/DESIGN_PLAN_LATEST.md
-  - specs/adr/0001-prompt-scoped-orchestration-runs.md
-  - specs/adr/0002-canonical-run-request-stream.md
-  - specs/adr/0003-governed-core-extension-host.md
-  - specs/security/REVIEW.md
-  - specs/security/EXCEPTIONS.md
-  - specs/bugs/registry.yaml
-  - specs/release-plan.yaml
   - specs/product/SCOPE_E14_LATEST.yaml
+  - specs/epics/archive/e14-agent-workspace-interaction/epic.yaml
   - specs/tech-architecture/REPL-UI-FUTURE-DIRECTIONS.md
-
-prior_art: |
-  ## Prior Art
-
-  | Candidate | Source | Verdict | Notes |
-  | --- | --- | --- | --- |
-  | Canonical Agent runtime | `src/mia_agent/agent_runner.py`, `src/mia_agent/runtime_factory.py` | deepen | Preserve the one execution path and move terminal truth and Session admission behind its Interface. |
-  | Runtime and persistence contracts | `src/mia_agent/runtime_*.py`, `src/mia_agent/session/` | extend | Existing attributed events and append-only history remain the base; no second model is required. |
-  | Access and middleware | `src/mia_middleware/`; historical DSH reference in pre-purge `docs/initial_plan/REFERENCES.md` | deepen | Preserve the DeepSeek Harness onion/waterfall `pre-execute → execute → post-execute` pattern through the existing ToolPipeline; permanent safeguards and durable local diagnostics must become production behavior. |
-  | Plugin lifecycle and effects | `src/mia_agent/plugins.py`, Pi Extensions, DSH/Cordis lifecycle and service composition | deepen selectively | Use Pi-like registration ergonomics plus DSH dependency-ready activation, owned effects, rollback, and teardown; reject generic Core replacement and service/event containers. |
-  | Supported frontend | `src/mia_cli/` | adapt | CLI and REPL remain shallow Adapters to the selected Run Interface. |
-  | Deterministic test seam | `src/mia_ai/providers/mock.py`, `tests/` | adopt | MockProvider remains the offline verification seam. |
-  | Packaging | `pyproject.toml`, Hatchling, uv | adopt | The existing Python distribution model is the release and deployment target. |
-
-  No hosted platform, remote telemetry product, container runtime, new provider, remote Plugin catalog,
-  automatic Plugin package installer, or generic service framework is required for v0.6.0.
+  - specs/IMPACT_LATEST.md
+  - specs/adr/0002-canonical-run-request-stream.md

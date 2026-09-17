@@ -20,9 +20,17 @@ from mia_agent.events import (
     TurnStartEvent,
 )
 from mia_cli.main import app
-from mia_cli.renderers.rich_stream import RichStreamRenderer
+from mia_cli.renderers.rich_stream import AnimatedWorkingStatus, RichStreamRenderer
 
 runner = CliRunner()
+
+
+def test_working_status_uses_whole_seconds() -> None:
+    status = AnimatedWorkingStatus(turn_start_time=100.0)
+    with patch("mia_cli.renderers.rich_stream.time.time", return_value=100.9):
+        assert "(0s)" in status.__rich__().plain
+    with patch("mia_cli.renderers.rich_stream.time.time", return_value=101.9):
+        assert "(1s)" in status.__rich__().plain
 
 
 def test_cli_help() -> None:
@@ -152,8 +160,28 @@ def test_admitted_prompt_is_rendered_once_with_truthful_lifecycle() -> None:
 
     output = console.export_text()
     assert output.count("[user] admitted prompt") == 1
+    assert "[user] admitted prompt\n\n" in output
     assert renderer.phase == "success"
     assert "[ok] Turn completed" in output
+
+
+def test_prompt_renderer_commits_streamed_assistant_text_after_turn() -> None:
+    from rich.console import Console
+
+    console = Console(record=True, force_terminal=False, no_color=True, highlight=False)
+    renderer = RichStreamRenderer(console=console, plain_mode=True, live_status=False)
+
+    renderer.on_event(TurnStartEvent(turn_index=1, user_prompt="prompt"))
+    renderer.on_event(AssistantChunkEvent(delta_text="first "))
+    renderer.on_event(AssistantChunkEvent(delta_text="second"))
+    assert "first second" not in console.export_text()
+    assert "🥕 mia › first second" in renderer.prompt_status()
+
+    renderer.on_event(TurnCompleteEvent(total_steps=1, stop_reason="stop"))
+
+    output = console.export_text()
+    assert "🥕 mia › first second\n" in output
+    assert output.count("🥕 mia › first second") == 1
 
 
 def test_tool_rows_are_keyed_compact_and_expand_sanitized_results() -> None:
@@ -184,6 +212,7 @@ def test_tool_rows_are_keyed_compact_and_expand_sanitized_results() -> None:
     output = console.export_text()
     assert "[tool pending] bash" in output
     assert "[tool completed] bash" in output
+    assert all(line.count("bash") == 1 for line in output.splitlines() if "[tool " in line)
     assert "sk-live-secret" not in output
     assert "safe output" not in output
 
@@ -366,10 +395,10 @@ def test_plain_mode_emits_semantic_status_labels_for_success_and_error() -> None
     output = rec_console.export_text()
 
     # Plain output must contain explicit semantic labels
-    assert "[running] read_file" in output
-    assert "[ok] read_file" in output
-    assert "[running] bash" in output
-    assert "[error] bash" in output
+    assert "[tool pending] read_file" in output
+    assert "[tool completed] read_file" in output
+    assert "[tool pending] bash" in output
+    assert "[tool error] bash" in output
     assert "[error] Agent error: failed to complete step" in output
     assert "[error] Turn failed (error)" in output
     assert "[ok] Turn completed" not in output
@@ -397,22 +426,23 @@ def test_plain_mode_and_narrow_width_repl_banner(tmp_path: Path) -> None:
 
     from mia_cli.repl import MiaREPL
 
-    # 1. Plain mode banner has no ANSI escape codes and includes semantic state
+    # 1. Plain mode banner is one sparse brand/workspace line with no ANSI escapes.
     rec_console = Console(record=True, width=120)
     repl = MiaREPL(cwd=tmp_path)
     repl.console = rec_console
     repl.stream_renderer.plain_mode = True
     repl.print_banner()
     output = rec_console.export_text()
-    assert "[Mia v0.6.0]" in output
-    assert "State: [idle]" in output
+    assert "🥕 Mia" in output
+    assert "Workspace" not in output
+    assert "State:" not in output
     assert "\x1b[" not in output
 
-    # 2. Narrow width (<= 60) banner adapts gracefully without crashing
+    # 2. Narrow width (<= 60) remains compact and does not require a panel.
     narrow_console = Console(record=True, width=50)
     repl.console = narrow_console
     repl.stream_renderer.plain_mode = False
     repl.print_banner()
     narrow_output = narrow_console.export_text()
-    assert "mia" in narrow_output
-    assert "idle" in narrow_output
+    assert "🥕 Mia" in narrow_output
+    assert "╭" not in narrow_output

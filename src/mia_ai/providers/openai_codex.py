@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
 import httpx
@@ -24,6 +24,7 @@ from mia_ai.types import (
     ToolCall,
     ToolCallDelta,
     ToolDefinition,
+    reasoning_effort_for_level,
 )
 
 DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api"
@@ -39,8 +40,14 @@ class OpenAICodexProvider(LLMProvider):
         base_url: str = DEFAULT_CODEX_BASE_URL,
         timeout: float = 60.0,
         client: httpx.AsyncClient | None = None,
+        reasoning_level: str | None = None,
+        thinking_level_map: Mapping[str, str | None] | None = None,
     ) -> None:
-        super().__init__(base_url=base_url)
+        super().__init__(
+            base_url=base_url,
+            reasoning_level=reasoning_level,
+            thinking_level_map=dict(thinking_level_map or {}),
+        )
         self.credential_store = credential_store or FileCredentialStore()
         self.timeout = timeout
         self.client = client
@@ -64,7 +71,14 @@ class OpenAICodexProvider(LLMProvider):
         del temperature, max_tokens
         try:
             access_token, account_id = await self._resolve_credentials()
-            payload = _build_payload(model, messages, tools or [], system or "")
+            payload = _build_payload(
+                model,
+                messages,
+                tools or [],
+                system or "",
+                reasoning_level=self.extra_config.get("reasoning_level"),
+                thinking_level_map=self.extra_config.get("thinking_level_map"),
+            )
             headers = {
                 "Authorization": f"Bearer {access_token}",
                 "chatgpt-account-id": account_id,
@@ -121,6 +135,7 @@ async def _read_events(response: httpx.Response) -> AsyncIterator[StreamChunk]:
     tool_calls: dict[str, dict[str, Any]] = {}
     tool_indexes: dict[int, str] = {}
     usage = TokenUsage()
+    text_state = {"streamed": False}
     finished = False
 
     async for line in response.aiter_lines():
@@ -135,7 +150,9 @@ async def _read_events(response: httpx.Response) -> AsyncIterator[StreamChunk]:
             event = _parse_event("\n".join(buffers))
             buffers = []
             if event is not None:
-                async for chunk in _event_chunks(event, tool_calls, tool_indexes, usage):
+                async for chunk in _event_chunks(
+                    event, tool_calls, tool_indexes, usage, text_state=text_state
+                ):
                     if chunk.type == "finish":
                         finished = True
                     yield chunk
@@ -143,7 +160,9 @@ async def _read_events(response: httpx.Response) -> AsyncIterator[StreamChunk]:
     if buffers:
         event = _parse_event("\n".join(buffers))
         if event is not None:
-            async for chunk in _event_chunks(event, tool_calls, tool_indexes, usage):
+            async for chunk in _event_chunks(
+                event, tool_calls, tool_indexes, usage, text_state=text_state
+            ):
                 if chunk.type == "finish":
                     finished = True
                 yield chunk
@@ -156,6 +175,7 @@ async def _event_chunks(
     tool_calls: dict[str, dict[str, Any]],
     tool_indexes: dict[int, str],
     usage: TokenUsage,
+    text_state: dict[str, bool] | None = None,
 ) -> AsyncIterator[StreamChunk]:
     event_type = event.get("type")
     if event_type in {"error", "response.failed"}:
@@ -168,6 +188,8 @@ async def _event_chunks(
     if event_type == "response.output_text.delta":
         delta = event.get("delta")
         if isinstance(delta, str):
+            if text_state is not None:
+                text_state["streamed"] = True
             yield StreamChunk(type="text_delta", delta=delta)
         return
 
@@ -236,10 +258,8 @@ async def _event_chunks(
                 type="tool_call_end",
                 tool_call=ToolCall(id=call_id, name=current["name"], arguments=arguments),
             )
-        elif isinstance(item, dict) and item.get("type") == "message":
-            text = _text_from_message(item)
-            if text:
-                yield StreamChunk(type="text_delta", delta=text)
+        # The Responses API sends the completed message after its text deltas.
+        # Emit it only through the response fallback below when no deltas arrived.
         return
 
     if event_type in {"response.done", "response.completed", "response.incomplete"}:
@@ -256,11 +276,25 @@ async def _event_chunks(
             reason = response.get("status") or "stop"
         else:
             reason = "stop"
+        if isinstance(response, dict) and not (text_state or {}).get("streamed"):
+            output = response.get("output")
+            if isinstance(output, list):
+                for output_item in output:
+                    if isinstance(output_item, dict) and output_item.get("type") == "message":
+                        text = _text_from_message(output_item)
+                        if text:
+                            yield StreamChunk(type="text_delta", delta=text)
         yield StreamChunk(type="finish", finish_reason=str(reason), usage=usage)
 
 
 def _build_payload(
-    model: str, messages: list[ChatMessage], tools: list[ToolDefinition], system: str
+    model: str,
+    messages: list[ChatMessage],
+    tools: list[ToolDefinition],
+    system: str,
+    *,
+    reasoning_level: str | None = None,
+    thinking_level_map: Mapping[str, str | None] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": model,
@@ -273,6 +307,15 @@ def _build_payload(
         "tool_choice": "auto",
         "parallel_tool_calls": True,
     }
+    if reasoning_level and reasoning_level != "off":
+        effort = reasoning_effort_for_level(
+            reasoning_level,
+            thinking_level_map,
+            minimal="low",
+            xhigh="xhigh",
+        )
+        if effort:
+            payload["reasoning"] = {"effort": effort, "summary": "auto"}
     if tools:
         payload["tools"] = [
             {
