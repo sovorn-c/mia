@@ -1,0 +1,61 @@
+id: e15
+slug: compact-terminal-workspace
+title: Compact Terminal Workspace
+status: passing
+target_release: v0.7.0-agent-workspace
+total_bcps: 5
+risk: P1
+wsjf:
+  business_value: 7
+  time_criticality: 5
+  risk_reduction: 5
+  job_size: 3
+  score: 5.667
+placement: next-release
+scope: specs/product/SCOPE_E15_LATEST.yaml
+outcome: >-
+  Users can operate a calm, sleek inline Agent workspace with a sparse startup, terminal-native semantic
+  styling, compact working and Tool rows, and a useful truthful footer.
+boundaries:
+  includes:
+    - Sparse startup and clear presentation.
+    - Semantic terminal-default styling for prompt, toolbar, streamed content, Tool, approval, and lifecycle roles.
+    - Compact attributable Tool rows without duplicated names.
+    - Compact working, approval, success, failure, and cancellation text.
+    - Truthful footer content with narrow-width degradation.
+  excludes:
+    - Persistent coordinated compositor, live Tool cards, partial Tool progress, overlays, or focus stacks.
+    - New Mia Core events, execution semantics, concurrent Runs, or queue changes.
+    - Pi runtime dependencies, source compatibility, extension APIs, or user theme files.
+depends_on: [e14]
+planning_decisions:
+  - id: e15-render-owner
+    decision: Keep the existing prompt-toolkit plus Rich ownership model
+    rationale: The visual problem is hierarchy and styling, not a missing execution or renderer contract; adding a compositor would exceed the approved request.
+  - id: e15-terminal-style
+    decision: Use terminal defaults plus bold, dim, reverse, and text labels
+    rationale: These preserve user terminal themes and keep state meaning available in no-color output without maintaining a color palette.
+  - id: e15-brand-mark
+    decision: Keep one carrot brand mark and remove other decorative emoji
+    rationale: The carrot is Mia's requested identity cue; additional icons make the workspace noisy and vary in terminal width.
+stories:
+  - id: e15s01
+    title: Sparse Semantic Terminal Workspace
+    status: passing
+    bcps: 5
+    risk: P1
+    delta: MODIFIED
+    depends_on: []
+    spec_file: e15s01-sparse-semantic-terminal-workspace.md
+    tasks_file: e15s01-tasks.yaml
+    maps_to: [e15-sparse-startup, e15-semantic-terminal-style, e15-working-state, e15-footer]
+notes:
+  - e14 remains the functional baseline; this epic changes presentation only.
+  - Pi is read-only prior art, not a Mia dependency or compatibility promise.
+  - No new runtime dependency is proposed.
+references:
+  scope: specs/product/SCOPE_E15_LATEST.yaml
+  prior_scope: specs/product/SCOPE_E14_LATEST.yaml
+  design: specs/tech-architecture/REPL-UI-FUTURE-DIRECTIONS.md
+  impact: specs/IMPACT_LATEST.md
+  adr: specs/adr/0002-canonical-run-request-stream.md
